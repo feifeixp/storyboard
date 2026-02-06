@@ -2,6 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppStep, Shot, ReviewSuggestion, CharacterRef, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight } from './types';
 import { StepTracker } from './components/StepTracker';
+import Login from './components/Login';
+import { isLoggedIn, logout, getUserInfo } from './services/auth';
 // 使用 OpenRouter 统一 API（支持多模型切换）
 import {
   generateShotListStream,
@@ -131,6 +133,16 @@ const saveToStorage = (key: string, value: any) => {
 };
 
 const App: React.FC = () => {
+  // ═══════════════════════════════════════════════════════════════
+  // 🆕 用户认证检查
+  // ═══════════════════════════════════════════════════════════════
+  const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
+
+  // 如果未登录，显示登录页面
+  if (!loggedIn) {
+    return <Login />;
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // 🆕 项目管理状态
   // ═══════════════════════════════════════════════════════════════
@@ -2410,7 +2422,20 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen p-3 bg-gray-900 text-gray-100 font-inter">
       <header className="max-w-7xl mx-auto mb-4 flex justify-between items-center">
-        <div></div>
+        {/* 用户信息 */}
+        <div className="flex items-center gap-2">
+          {(() => {
+            const userInfo = getUserInfo();
+            return userInfo ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-md">
+                {userInfo.avatar && (
+                  <img src={userInfo.avatar} alt="avatar" className="w-6 h-6 rounded-full" />
+                )}
+                <span className="text-xs text-gray-300">{userInfo.nickname || userInfo.mobile || userInfo.email}</span>
+              </div>
+            ) : null;
+          })()}
+        </div>
         <h1 className="text-xl font-bold tracking-tight text-white">Director Studio</h1>
         <div className="flex items-center gap-2">
           <button
@@ -2441,6 +2466,13 @@ const App: React.FC = () => {
             title="清除所有缓存数据，重新开始"
           >
             🔄 重新开始
+          </button>
+          <button
+            onClick={logout}
+            className="px-3 py-1.5 bg-gray-800 text-yellow-400 border border-gray-700 rounded-md text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
+            title="退出登录"
+          >
+            🚪 退出
           </button>
         </div>
       </header>

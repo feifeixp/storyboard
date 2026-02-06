@@ -18,6 +18,79 @@
 
 ---
 
+## [2026-02-06 18:00] 📝 文档
+
+**修改内容**：添加 Cloudflare Pages 部署配置和 API Key 安全指南
+
+**影响范围**：
+- 文件/模块：
+  - 新增 `CLOUDFLARE_DEPLOYMENT_GUIDE.md` - Cloudflare 部署完整指南
+  - 新增 `wrangler.toml` - Cloudflare Pages 配置文件
+  - 新增 `cloudflare-worker-proxy.js` - API 代理 Worker 示例
+
+**修改原因**：
+- 解决 Cloudflare Pages 部署失败问题（Missing entry-point）
+- 提供完整的环境变量配置指南
+- 解决 API Key 暴露在前端的安全问题
+
+**预期效果**：
+- ✅ 修复 Cloudflare Pages 部署错误
+- ✅ 提供清晰的 API Key 配置步骤
+- ✅ 提供 API 代理方案保护 API Key
+- ✅ 包含安全最佳实践和常见问题解答
+
+**技术要点**：
+- **wrangler.toml**: 配置静态网站部署
+- **环境变量**: 在 Cloudflare Pages 控制台设置，而非代码中
+- **Worker 代理**: 使用 Cloudflare Workers 作为 API 中间层
+- **CORS 处理**: 只允许指定域名访问
+- **安全性**: API Key 存储在 Worker 环境变量中，不暴露给前端
+
+**相关文档**：
+- `CLOUDFLARE_DEPLOYMENT_GUIDE.md` - 完整部署指南
+- `cloudflare-worker-proxy.js` - Worker 代理示例代码
+
+---
+
+## [2026-02-06 17:30] ✨ 新功能
+
+**修改内容**：添加用户登录认证和OSS文件上传功能
+
+**影响范围**：
+- 文件/模块：
+  - 新增 `services/auth.ts` - 用户认证服务
+  - 新增 `services/oss.ts` - OSS上传服务
+  - 新增 `components/Login.tsx` - 登录页面组件
+  - 修改 `App.tsx` - 添加登录检查和用户信息显示
+  - 修改 `package.json` - 添加 ali-oss 依赖
+
+**修改原因**：
+- 需要用户认证后才能访问网站
+- 需要将生成的分镜结果上传到OSS云存储
+- 提高系统安全性和数据管理能力
+
+**预期效果**：
+- ✅ 用户必须登录后才能使用系统
+- ✅ 支持手机号和邮箱验证码登录
+- ✅ 支持邀请码功能
+- ✅ 用户信息显示在页面顶部
+- ✅ 提供退出登录功能
+- ✅ 支持将图片和视频上传到阿里云OSS
+- ✅ 使用STS临时凭证，安全性高
+
+**技术实现**：
+- 用户认证：基于 JWT Token，存储在 localStorage
+- 验证码登录：统一接口支持手机号和邮箱
+- OSS上传：使用 STS 临时访问凭证，权限仅限 PutObject
+- 令牌缓存：STS令牌自动缓存和刷新（提前5分钟）
+- Base64转换：支持将Base64图片转换为Blob后上传
+
+**相关文档**：
+- `OSS-STS令牌接口文档.md` - OSS接口文档
+- `用户认证接口文档.md` - 认证接口文档
+
+---
+
 ## [2025-02-06 16:30] 🧹 项目文件清理
 
 **修改内容**：删除无关文件，只保留核心项目文件
