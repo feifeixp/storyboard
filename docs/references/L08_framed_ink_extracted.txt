@@ -1,0 +1,33 @@
+﻿Reading DOCX file: C:\VS\visionary-storyboard-studio\锛堝凡鍘嬬缉锛塋12鍔ㄧ敾澶у笀璇?浜虹墿閫忚Framed Perspective, Volume 2 Technical Drawing for Shadows, Volume, and Characters (Marcos Mateu-Mestre).docx
+node : Error: [OperationalError: ENOENT: no such file or directory, 
+open 'C:\VS\visionary-storyboard-studio\锛堝凡鍘嬬缉锛塋12鍔ㄧ敾澶у笀璇?浜虹墿閫忚Fram
+ed Perspective, Volume 2 Technical Drawing for Shadows, Volume, and 
+Characters (Marcos Mateu-Mestre).docx'] {
+所在位置 行:1 字符: 1
++ node extract_docx.cjs "L08动画大师课：分镜头脚本设计《Framed ink》汉化众译版 (victorcl
+oux ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~
+    + CategoryInfo          : NotSpecified: (Error: [Operati...estr 
+   e).docx'] {:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+  cause: [Error: ENOENT: no such file or directory, open 'C:\VS\visi
+onary-storyboard-studio\锛堝凡鍘嬬缉锛塋12鍔ㄧ敾澶у笀璇?浜虹墿閫忚Framed Perspective, 
+Volume 2 Technical Drawing for Shadows, Volume, and Characters (Marc
+os Mateu-Mestre).docx'] {
+    errno: -4058,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: 'C:\\VS\\visionary-storyboard-studio\\锛堝凡鍘嬬缉锛塋12鍔ㄧ敾澶у笀璇?浜虹
+墿閫忚Framed Perspective, Volume 2 Technical Drawing for Shadows, Volu
+me, and Characters (Marcos Mateu-Mestre).docx'
+  },
+  isOperational: true,
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\VS\\visionary-storyboard-studio\\锛堝凡鍘嬬缉锛塋12鍔ㄧ敾澶у笀璇?浜虹墿閫
+忚Framed Perspective, Volume 2 Technical Drawing for Shadows, Volume
+, and Characters (Marcos Mateu-Mestre).docx'
+}

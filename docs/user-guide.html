@@ -1,0 +1,3202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分镜脚本生成规则手册</title>
+    <style>
+        /* ==================== CSS变量 ==================== */
+        :root {
+            /* 亮色主题 - 现代化配色 */
+            --bg-primary: #ffffff;
+            --bg-secondary: #f7f9fc;
+            --bg-sidebar: linear-gradient(180deg, #1a1f36 0%, #0f1419 100%);
+            --bg-code: #f5f7fa;
+            --bg-card: #ffffff;
+            --text-primary: #1a1f36;
+            --text-secondary: #6b7280;
+            --text-sidebar: #e5e7eb;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-light: #dbeafe;
+            --success: #10b981;
+            --success-light: #d1fae5;
+            --warning: #f59e0b;
+            --warning-light: #fef3c7;
+            --error: #ef4444;
+            --error-light: #fee2e2;
+            --border: #e5e7eb;
+            --border-light: #f3f4f6;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-accent: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --gradient-error: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+
+            /* 字体 */
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", sans-serif;
+            --font-family-code: "JetBrains Mono", Consolas, Monaco, "Courier New", monospace;
+
+            /* 字号 */
+            --font-size-h1: 2.5rem;
+            --font-size-h2: 2rem;
+            --font-size-h3: 1.5rem;
+            --font-size-h4: 1.25rem;
+            --font-size-body: 1rem;
+            --font-size-small: 0.875rem;
+            --font-size-xs: 0.75rem;
+
+            /* 间距 */
+            --spacing-xs: 0.5rem;
+            --spacing-sm: 1rem;
+            --spacing-md: 1.5rem;
+            --spacing-lg: 2rem;
+            --spacing-xl: 3rem;
+
+            /* 布局 */
+            --sidebar-width: 280px;
+            --content-max-width: 900px;
+            --toolbar-height: 40px;
+            --toolbar-expanded-height: 500px;
+
+            /* 动画 */
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+
+            /* 圆角 */
+            --radius-sm: 0.375rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+            --radius-xl: 1rem;
+            --radius-full: 9999px;
+        }
+
+        /* 暗色主题 - 优化配色 */
+        [data-theme="dark"] {
+            --bg-primary: #0f1419;
+            --bg-secondary: #1a1f36;
+            --bg-sidebar: linear-gradient(180deg, #0f1419 0%, #000000 100%);
+            --bg-code: #1e2433;
+            --bg-card: #1a1f36;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-sidebar: #e5e7eb;
+            --accent: #60a5fa;
+            --accent-hover: #3b82f6;
+            --accent-light: #1e3a8a;
+            --success: #34d399;
+            --success-light: #064e3b;
+            --warning: #fbbf24;
+            --warning-light: #78350f;
+            --error: #f87171;
+            --error-light: #7f1d1d;
+            --border: #374151;
+            --border-light: #1f2937;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+            --gradient-primary: linear-gradient(135deg, #4c51bf 0%, #6b46c1 100%);
+            --gradient-accent: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --gradient-error: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+        
+        /* ==================== 基础样式 ==================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-family);
+            font-size: var(--font-size-body);
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            transition: background-color var(--transition-base), color var(--transition-base);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: var(--radius-full);
+            transition: background var(--transition-fast);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+
+        /* ==================== 布局 ==================== */
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-sidebar);
+            color: var(--text-sidebar);
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            overflow-y: auto;
+            padding: var(--spacing-lg);
+            z-index: 100;
+            transition: transform var(--transition-base);
+            box-shadow: var(--shadow-xl);
+            backdrop-filter: blur(10px);
+        }
+        
+        .sidebar-header {
+            margin-bottom: var(--spacing-lg);
+            padding-bottom: var(--spacing-lg);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-header h1 {
+            font-size: var(--font-size-h3);
+            margin-bottom: var(--spacing-sm);
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+        }
+
+        .sidebar-header .version {
+            font-size: var(--font-size-small);
+            color: var(--text-secondary);
+            opacity: 0.8;
+        }
+
+        /* 搜索框 */
+        .search-box {
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: var(--spacing-sm) var(--spacing-md);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-lg);
+            font-size: var(--font-size-body);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-sidebar);
+            transition: all var(--transition-fast);
+            backdrop-filter: blur(10px);
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .search-box input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* 目录 */
+        .toc {
+            list-style: none;
+        }
+
+        .toc-item {
+            margin-bottom: var(--spacing-xs);
+        }
+
+        .toc-link {
+            display: flex;
+            align-items: center;
+            padding: var(--spacing-sm) var(--spacing-md);
+            color: var(--text-sidebar);
+            text-decoration: none;
+            border-radius: var(--radius-md);
+            transition: all var(--transition-fast);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc-link::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 3px;
+            background: var(--accent);
+            transform: scaleY(0);
+            transition: transform var(--transition-fast);
+        }
+
+        .toc-link:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(4px);
+        }
+
+        .toc-link:hover::before {
+            transform: scaleY(1);
+        }
+
+        .toc-link.active {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .toc-link.active::before {
+            transform: scaleY(1);
+        }
+
+        /* 主内容区 */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: var(--spacing-xl);
+            max-width: calc(var(--content-max-width) + var(--sidebar-width));
+            background: var(--bg-primary);
+        }
+
+        .content-wrapper {
+            max-width: var(--content-max-width);
+            animation: fadeIn var(--transition-slow);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 标题 */
+        h1, h2, h3, h4 {
+            margin-top: var(--spacing-lg);
+            margin-bottom: var(--spacing-md);
+            line-height: 1.3;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        h1 {
+            font-size: var(--font-size-h1);
+            background: var(--gradient-accent);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h2 {
+            font-size: var(--font-size-h2);
+            border-bottom: 2px solid var(--border);
+            padding-bottom: var(--spacing-sm);
+            position: relative;
+        }
+
+        h2::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 60px;
+            height: 2px;
+            background: var(--gradient-accent);
+        }
+
+        h3 { font-size: var(--font-size-h3); color: var(--accent); }
+        h4 { font-size: var(--font-size-h4); }
+
+        /* 段落 */
+        p {
+            margin-bottom: var(--spacing-md);
+            line-height: 1.8;
+        }
+
+        /* 表格 */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: var(--spacing-lg);
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        th, td {
+            padding: var(--spacing-md);
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--gradient-accent);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: var(--font-size-small);
+            letter-spacing: 0.5px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:nth-child(even) {
+            background: var(--bg-secondary);
+        }
+
+        tbody tr {
+            transition: all var(--transition-fast);
+        }
+
+        tbody tr:hover {
+            background: var(--accent-light);
+            transform: scale(1.01);
+        }
+
+        /* 代码块 */
+        code {
+            font-family: var(--font-family-code);
+            background: var(--bg-code);
+            padding: 3px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 0.9em;
+            color: var(--accent);
+            border: 1px solid var(--border-light);
+        }
+
+        pre {
+            background: var(--bg-code);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-lg);
+            overflow-x: auto;
+            margin-bottom: var(--spacing-lg);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: var(--text-primary);
+        }
+
+        /* 信息框 */
+        .info-box {
+            padding: var(--spacing-md) var(--spacing-lg);
+            border-radius: var(--radius-lg);
+            margin-bottom: var(--spacing-lg);
+            border-left: 4px solid;
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            transition: all var(--transition-fast);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .info-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.05;
+            pointer-events: none;
+        }
+
+        .info-box:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .info-box.tip {
+            background: var(--success-light);
+            border-color: var(--success);
+        }
+
+        .info-box.tip::before {
+            background: var(--gradient-success);
+        }
+
+        .info-box.warning {
+            background: var(--warning-light);
+            border-color: var(--warning);
+        }
+
+        .info-box.warning::before {
+            background: var(--gradient-warning);
+        }
+
+        .info-box.error {
+            background: var(--error-light);
+            border-color: var(--error);
+        }
+
+        .info-box.error::before {
+            background: var(--gradient-error);
+        }
+
+        .info-box.info {
+            background: var(--accent-light);
+            border-color: var(--accent);
+        }
+
+        .info-box.info::before {
+            background: var(--gradient-accent);
+        }
+
+        .info-box strong {
+            display: block;
+            margin-bottom: var(--spacing-sm);
+            font-size: var(--font-size-h4);
+        }
+
+        /* 按钮 */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-sm) var(--spacing-lg);
+            background: var(--gradient-accent);
+            color: white;
+            border: none;
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            font-size: var(--font-size-body);
+            font-weight: 600;
+            transition: all var(--transition-fast);
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width var(--transition-base), height var(--transition-base);
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 2px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+            border-color: var(--text-secondary);
+        }
+
+        .copy-btn {
+            padding: var(--spacing-xs) var(--spacing-sm);
+            font-size: var(--font-size-small);
+            background: var(--gradient-success);
+        }
+
+        .copy-btn.copied {
+            background: var(--success);
+            animation: pulse var(--transition-base);
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        /* ==================== 提示词优化助手 ==================== */
+        .prompt-optimizer {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-xl);
+            overflow: hidden;
+            transition: all var(--transition-base);
+        }
+
+        .prompt-optimizer:hover {
+            box-shadow: var(--shadow-xl), 0 0 0 1px var(--accent-light);
+        }
+
+        .prompt-optimizer.collapsed .optimizer-body {
+            display: none;
+        }
+
+        .prompt-optimizer.expanded .optimizer-body {
+            display: block;
+            animation: slideDown var(--transition-base);
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+            }
+            to {
+                opacity: 1;
+                max-height: 2000px;
+            }
+        }
+
+        .optimizer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-md) var(--spacing-lg);
+            background: var(--gradient-accent);
+            color: white;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            user-select: none;
+        }
+
+        .optimizer-header:hover {
+            filter: brightness(1.1);
+        }
+
+        .optimizer-header:active {
+            filter: brightness(0.9);
+        }
+
+        .optimizer-header h2 {
+            margin: 0;
+            font-size: var(--font-size-h3);
+            color: white;
+            border: none;
+            padding: 0;
+        }
+
+        .optimizer-header h2::after {
+            display: none;
+        }
+
+        .optimizer-controls {
+            display: flex;
+            gap: var(--spacing-sm);
+            align-items: center;
+        }
+
+        .optimizer-controls span {
+            font-size: var(--font-size-small);
+            opacity: 0.9;
+            transition: transform var(--transition-fast);
+        }
+
+        .prompt-optimizer.expanded .optimizer-controls span {
+            transform: rotate(180deg);
+        }
+
+        .optimizer-body {
+            padding: var(--spacing-lg);
+            background: var(--bg-secondary);
+        }
+
+        /* 标签页样式 */
+        .optimizer-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: var(--spacing-lg);
+            background: var(--bg-primary);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-xs);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: var(--font-size-body);
+            font-family: var(--font-family);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            border-radius: var(--radius-md);
+            position: relative;
+        }
+
+        .tab-btn::before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%) scaleX(0);
+            width: 80%;
+            height: 2px;
+            background: var(--gradient-accent);
+            transition: transform var(--transition-fast);
+        }
+
+        .tab-btn:hover {
+            color: var(--accent);
+            background: var(--accent-light);
+        }
+
+        .tab-btn.active {
+            color: white;
+            background: var(--gradient-accent);
+            font-weight: 600;
+            box-shadow: var(--shadow);
+        }
+
+        .tab-btn.active::before {
+            transform: translateX(-50%) scaleX(1);
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn var(--transition-base);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .video-type-select {
+            width: 100%;
+            padding: var(--spacing-sm) var(--spacing-md);
+            border: 2px solid var(--border);
+            border-radius: var(--radius-lg);
+            font-family: var(--font-family);
+            font-size: var(--font-size-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            margin-bottom: var(--spacing-sm);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .video-type-select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-light);
+        }
+
+        .optimizer-grid {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .optimizer-input h4 {
+            margin-top: 0;
+            margin-bottom: var(--spacing-sm);
+            color: var(--text-primary);
+            font-size: var(--font-size-body);
+            font-weight: 600;
+        }
+
+        .optimizer-input textarea {
+            width: 100%;
+            height: 200px;
+            padding: var(--spacing-md);
+            border: 2px solid var(--border);
+            border-radius: var(--radius-lg);
+            font-family: var(--font-family);
+            font-size: var(--font-size-body);
+            resize: vertical;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: all var(--transition-fast);
+            line-height: 1.6;
+        }
+
+        .optimizer-input textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-light);
+            background: var(--bg-card);
+        }
+
+        .optimizer-input textarea::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .optimizer-input .btn {
+            margin-right: var(--spacing-sm);
+            margin-top: var(--spacing-sm);
+        }
+
+        .optimizer-output {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+
+        .output-section {
+            background: var(--bg-card);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-lg);
+            border: 2px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: all var(--transition-fast);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .output-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--gradient-accent);
+            opacity: 0;
+            transition: opacity var(--transition-fast);
+        }
+
+        .output-section:hover {
+            border-color: var(--accent);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .output-section:hover::before {
+            opacity: 1;
+        }
+
+        .output-section h4 {
+            margin: 0 0 var(--spacing-md) 0;
+            font-size: var(--font-size-body);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-primary);
+        }
+
+        .output-section > div {
+            padding: var(--spacing-md);
+            background: var(--bg-code);
+            border-radius: var(--radius-md);
+            font-family: var(--font-family);
+            line-height: 1.8;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            color: var(--text-primary);
+        }
+
+        .optimizer-suggestions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-md);
+        }
+
+        @media (max-width: 768px) {
+            .optimizer-suggestions {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 主题切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            bottom: var(--spacing-lg);
+            right: var(--spacing-lg);
+            width: 56px;
+            height: 56px;
+            border-radius: var(--radius-full);
+            background: var(--gradient-accent);
+            border: none;
+            cursor: pointer;
+            box-shadow: var(--shadow-xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            transition: all var(--transition-fast);
+            z-index: 1000;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1) rotate(15deg);
+            box-shadow: var(--shadow-xl), 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+
+        .theme-toggle:active {
+            transform: scale(0.95);
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .generating {
+            position: relative;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .generating::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            border: 3px solid var(--accent-light);
+            border-radius: 50%;
+            border-top-color: var(--accent);
+            animation: spin 1s linear infinite;
+        }
+
+        /* 成功提示 */
+        .success-toast {
+            position: fixed;
+            top: var(--spacing-lg);
+            right: var(--spacing-lg);
+            background: var(--gradient-success);
+            color: white;
+            padding: var(--spacing-md) var(--spacing-lg);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            z-index: 2000;
+            animation: slideInRight var(--transition-base), fadeOut var(--transition-base) 2.5s;
+            pointer-events: none;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeOut {
+            0%, 80% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+
+        /* 复选框样式 */
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        label {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            cursor: pointer;
+            user-select: none;
+            transition: color var(--transition-fast);
+        }
+
+        label:hover {
+            color: var(--accent);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1024px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .optimizer-suggestions {
+                grid-template-columns: 1fr;
+            }
+
+            .theme-toggle {
+                bottom: var(--spacing-md);
+                right: var(--spacing-md);
+                width: 48px;
+                height: 48px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                padding: var(--spacing-md);
+            }
+
+            :root {
+                --font-size-h1: 2rem;
+                --font-size-h2: 1.5rem;
+                --font-size-h3: 1.25rem;
+            }
+
+            .optimizer-tabs {
+                flex-direction: column;
+            }
+
+            .tab-btn {
+                width: 100%;
+            }
+        }
+
+        /* 打印样式 */
+        @media print {
+            .sidebar,
+            .btn,
+            .theme-toggle {
+                display: none !important;
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .prompt-optimizer {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h1>📖 分镜脚本生成规则手册</h1>
+            <div class="version">版本 3.1 | 2024-12-29</div>
+        </div>
+
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 搜索规则、术语、示例...">
+        </div>
+
+        <nav class="toc" id="toc">
+            <ul>
+                <li class="toc-item"><a href="#prompt-optimizer" class="toc-link">🛠️ 提示词优化助手</a></li>
+                <li class="toc-item"><a href="#quick-start" class="toc-link">⚡ 快速开始</a></li>
+                <li class="toc-item"><a href="#core-principles" class="toc-link">🎯 核心原则</a></li>
+                <li class="toc-item"><a href="#prompt-formula" class="toc-link">📝 提示词公式</a></li>
+                <li class="toc-item"><a href="#common-errors" class="toc-link">⚠️ 常见错误</a></li>
+                <li class="toc-item"><a href="#terminology" class="toc-link">📖 术语映射表</a></li>
+                <li class="toc-item"><a href="#shot-size" class="toc-link">　• 景别术语</a></li>
+                <li class="toc-item"><a href="#angle-height" class="toc-link">　• 视角高度</a></li>
+                <li class="toc-item"><a href="#character-direction" class="toc-link">　• 人物朝向</a></li>
+                <li class="toc-item"><a href="#forbidden-terms" class="toc-link">　• 禁用术语</a></li>
+                <li class="toc-item"><a href="#advanced-rules" class="toc-link">🎓 高级规则</a></li>
+                <li class="toc-item"><a href="#angle-distribution" class="toc-link">　• 角度分布</a></li>
+                <li class="toc-item"><a href="#perspective" class="toc-link">　• 透视应用</a></li>
+                <li class="toc-item"><a href="#continuity" class="toc-link">　• 分镜连续性</a></li>
+                <li class="toc-item"><a href="#pov-guide" class="toc-link">　• POV镜头</a></li>
+                <li class="toc-item"><a href="#video-prompts" class="toc-link">🎬 视频提示词</a></li>
+                <li class="toc-item"><a href="#faq" class="toc-link">❓ 常见问题</a></li>
+            </ul>
+        </nav>
+
+        <div style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid rgba(255,255,255,0.1);">
+            <button class="btn" onclick="toggleTheme()" style="width: 100%;">
+                <span id="sidebarThemeIcon">🌙</span> 切换主题
+            </button>
+        </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="content-wrapper">
+            <!-- 提示词优化助手 -->
+            <section id="prompt-optimizer" class="prompt-optimizer expanded">
+                <div class="optimizer-header" onclick="toggleOptimizer()">
+                    <h2>🛠️ 提示词优化助手</h2>
+                    <div class="optimizer-controls">
+                        <span id="optimizerToggleIcon">▼ 收起</span>
+                    </div>
+                </div>
+
+                <div class="optimizer-body">
+                    <!-- 标签页切换 -->
+                    <div class="optimizer-tabs">
+                        <button class="tab-btn active" onclick="switchTab('image')">🖼️ 图像提示词</button>
+                        <button class="tab-btn" onclick="switchTab('video')">🎬 视频提示词</button>
+                    </div>
+
+                    <!-- 图像提示词助手 -->
+                    <div id="imageTab" class="tab-content active">
+                        <div class="optimizer-grid">
+                            <!-- 输入区域 -->
+                            <div class="optimizer-input">
+                                <h4>📝 输入你的画面描述</h4>
+                                <textarea id="imageInput" placeholder="例如：一个女孩站在教室窗边，阳光从左侧照入，温暖的午后光线..."></textarea>
+                                <button class="btn" onclick="optimizeImagePrompt()">✨ 优化提示词</button>
+                                <button class="btn btn-secondary" onclick="clearImageInput()">🗑️ 清空</button>
+                            </div>
+
+                            <!-- 输出区域 -->
+                            <div class="optimizer-output">
+                                <div class="output-section">
+                                    <h4>
+                                        ✨ 优化后的提示词
+                                        <button class="btn copy-btn" onclick="copyText('imageCnPrompt')">复制</button>
+                                    </h4>
+                                    <div id="imageCnPrompt" style="white-space: pre-wrap; font-family: var(--font-family); line-height: 1.8;">等待优化...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 建议区域 -->
+                        <div class="optimizer-suggestions">
+                            <div class="info-box tip" id="imageSuggestions">
+                                <strong>💡 技术建议</strong>
+                                <div id="imageSuggestionsList">等待分析...</div>
+                            </div>
+
+                            <div class="info-box error" id="imageViolations">
+                                <strong>⚠️ 违规检测</strong>
+                                <div id="imageViolationsList">等待检测...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 视频提示词助手 -->
+                    <div id="videoTab" class="tab-content">
+                        <div class="optimizer-grid">
+                            <!-- 输入区域 -->
+                            <div class="optimizer-input">
+                                <h4>📝 选择视频类型</h4>
+                                <select id="videoType" class="video-type-select" onchange="updateVideoPlaceholder()">
+                                    <option value="i2v">I2V（图生视频）</option>
+                                    <option value="keyframe">首尾帧生视频</option>
+                                </select>
+
+                                <h4 style="margin-top: var(--spacing-md);">📝 输入动作描述</h4>
+                                <textarea id="videoInput" placeholder="例如：仕女缓慢抬起右手，轻执茶杯，背景纱帘随微风轻微飘动..."></textarea>
+
+                                <div style="margin-top: var(--spacing-sm);">
+                                    <label>
+                                        <input type="checkbox" id="includeStyle" checked>
+                                        包含风格保持描述
+                                    </label>
+                                    <label style="margin-left: var(--spacing-md);">
+                                        <input type="checkbox" id="includeCamera" checked>
+                                        包含运镜描述
+                                    </label>
+                                </div>
+
+                                <button class="btn" onclick="optimizeVideoPrompt()">✨ 生成视频提示词</button>
+                                <button class="btn btn-secondary" onclick="clearVideoInput()">🗑️ 清空</button>
+                            </div>
+
+                            <!-- 输出区域 -->
+                            <div class="optimizer-output">
+                                <div class="output-section">
+                                    <h4>
+                                        📄 视频提示词
+                                        <button class="btn copy-btn" onclick="copyText('videoPrompt')">复制</button>
+                                    </h4>
+                                    <div id="videoPrompt" style="white-space: pre-wrap; font-family: var(--font-family);">等待生成...</div>
+                                </div>
+
+                                <div class="output-section">
+                                    <h4>
+                                        ⚠️ 负面提示词
+                                        <button class="btn copy-btn" onclick="copyText('videoNegativePrompt')">复制</button>
+                                    </h4>
+                                    <div id="videoNegativePrompt" style="white-space: pre-wrap; font-family: var(--font-family);">等待生成...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 建议区域 -->
+                        <div class="optimizer-suggestions">
+                            <div class="info-box tip" id="videoSuggestions">
+                                <strong>💡 技术建议</strong>
+                                <div id="videoSuggestionsList">等待分析...</div>
+                            </div>
+
+                            <div class="info-box warning" id="videoWarnings">
+                                <strong>⚠️ 能力边界提醒</strong>
+                                <div id="videoWarningsList">等待检测...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 快速开始 -->
+            <section id="quick-start">
+                <h1>⚡ 快速开始</h1>
+                <p>欢迎使用分镜脚本生成规则手册！本手册将帮助你快速掌握AI图像和视频生成的提示词规范。</p>
+
+                <div class="info-box tip">
+                    <strong>💡 使用建议</strong>
+                    <ul>
+                        <li>如果你是新手，请先使用上方的"提示词优化助手"快速生成符合规范的提示词</li>
+                        <li>如果你想深入学习，请阅读"核心原则"和"提示词公式"</li>
+                        <li>如果你需要查询术语，请使用"术语映射表"</li>
+                        <li>如果你遇到问题，请查看"常见问题"</li>
+                    </ul>
+                </div>
+
+                <div class="info-box warning">
+                    <strong>⚠️ 严格模式说明（2024-12-29更新）</strong>
+                    <p>提示词优化助手现已启用<strong>严格模式</strong>：</p>
+                    <ul>
+                        <li><strong>缺失检测</strong>：如果输入缺少景别或角度高度，工具会提示补充，而不是自动补全</li>
+                        <li><strong>设计理念</strong>：尊重用户意图，不擅自做主，帮助养成完整描述的习惯</li>
+                        <li><strong>必需项</strong>：景别（如：远景、全景、中景）+ 角度高度（如：轻微俯拍、轻微仰拍）</li>
+                        <li><strong>可选项</strong>：人物朝向（因为有些场景可能没有人物）</li>
+                    </ul>
+                    <p><strong>示例</strong>：</p>
+                    <ul>
+                        <li>❌ 输入："3/4后视图。相机拉远。整段管道内的符文电路同步脉动红蓝强光"</li>
+                        <li>⚠️ 提示："缺少景别和角度高度，请补充"</li>
+                        <li>✅ 正确："远景，轻微俯拍，3/4后视图。相机拉远。整段管道内的符文电路同步脉动红蓝强光"</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 核心原则 -->
+            <section id="core-principles">
+                <h2>🎯 核心原则（3条黄金法则）</h2>
+
+                <h3>1. 情绪驱动</h3>
+                <p>先分析情绪需求 → 再选角度组合（朝向+高度）</p>
+                <div class="info-box info">
+                    <strong>示例</strong><br>
+                    ❌ 错误：直接选择"正面+平视"<br>
+                    ✅ 正确：分析情绪（紧张、压迫）→ 选择"3/4正面+轻微仰拍"
+                </div>
+
+                <h3>2. 使用摄影术语</h3>
+                <p>AI图像生成模型训练数据主要是摄影作品，使用摄影术语而非电影分镜术语</p>
+                <div class="info-box warning">
+                    <strong>⚠️ 注意</strong><br>
+                    ❌ 禁止：3/4 front view, low angle, high angle<br>
+                    ✅ 推荐：人物轻微向右转, 从下方拍摄, 从上方拍摄
+                </div>
+
+                <h3>3. 自然语言描述</h3>
+                <p>不使用权重参数格式（如 <code>(extreme long shot:1.3)</code>）</p>
+                <div class="info-box error">
+                    <strong>❌ 错误示例</strong><br>
+                    <code>(extreme long shot:1.3), (eye level), (3/4 front view:1.2)</code>
+                </div>
+                <div class="info-box tip">
+                    <strong>✅ 正确示例</strong><br>
+                    <code>广角镜头拍摄，镜头水平视线，人物轻微向右转</code>
+                </div>
+            </section>
+
+            <!-- 提示词公式 -->
+            <section id="prompt-formula">
+                <h2>📝 提示词公式速查表</h2>
+
+                <h3>图像生成提示词公式</h3>
+                <pre><code>[景别]拍摄，镜头[角度高度]，[角度朝向]。
+[主体描述]。
+前景是[前景描述]。中景是[中景描述]。背景是[背景描述]。
+[光影描述]。</code></pre>
+
+                <h4>完整示例</h4>
+                <pre><code>中景拍摄，镜头与眼睛同高，人物轻微向右转。
+人物位于画面中央，表情自然微笑，双手自然下垂。
+前景是虚化的花朵。中景是人物半身轮廓。背景是虚化的公园景色，绿色调。
+柔和的自然光从左侧照射，在脸上形成渐变光影。</code></pre>
+
+                <h3>视频生成提示词公式</h3>
+                <pre><code>风格保持 + 主体动作（具象化+量化） + 运镜方式 + 光影变化（具象化） + 时长</code></pre>
+
+                <h4>完整示例</h4>
+                <pre><code>水墨风格保持不变，仕女缓慢抬起右手，轻执茶杯，
+镜头从人物侧面缓慢推进至手部特写，
+背景纱帘随微风轻微飘动，
+暖光从窗棂渗入，在人物衣袂上形成渐变光影，5秒。</code></pre>
+            </section>
+
+            <!-- 常见错误 -->
+            <section id="common-errors">
+                <h2>⚠️ 常见错误与修正</h2>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>错误类型</th>
+                            <th>❌ 错误示例</th>
+                            <th>✅ 正确示例</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>使用权重参数</td>
+                            <td><code>(extreme long shot:1.3)</code></td>
+                            <td>广角镜头拍摄</td>
+                            <td>使用自然语言而非权重参数</td>
+                        </tr>
+                        <tr>
+                            <td>使用电影分镜术语</td>
+                            <td>3/4 front view</td>
+                            <td>人物轻微向右转</td>
+                            <td>使用摄影术语而非电影分镜术语</td>
+                        </tr>
+                        <tr>
+                            <td>POV镜头错误描述</td>
+                            <td>从眼睛看出去</td>
+                            <td>主观视角</td>
+                            <td>避免提及"眼睛"，会被误解为画眼睛特写</td>
+                        </tr>
+                        <tr>
+                            <td>正面镜头过多</td>
+                            <td>连续5个正面镜头</td>
+                            <td>正面镜头≤7%（30个镜头最多2个）</td>
+                            <td>正面镜头缺乏空间感和动态感</td>
+                        </tr>
+                        <tr>
+                            <td>平视镜头过多</td>
+                            <td>所有镜头都是平视</td>
+                            <td>平视镜头10-15%，优先使用轻微仰拍/俯拍</td>
+                            <td>平视镜头缺乏情绪表达</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 术语映射表 -->
+            <section id="terminology">
+                <h2>📖 术语映射表</h2>
+                <p>以下是AI能理解的标准术语映射表，请使用"中文摄影术语"或"英文摄影术语"，避免使用"分镜术语"。</p>
+            </section>
+
+            <!-- 景别术语 -->
+            <section id="shot-size">
+                <h3>景别术语映射</h3>
+
+                <h4>基础景别（8种）</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>分镜术语</th>
+                            <th>中文摄影术语</th>
+                            <th>英文摄影术语</th>
+                            <th>主体:环境占比</th>
+                            <th>使用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>特远景(ELS)</td>
+                            <td>广角镜头 / 远景拉开</td>
+                            <td>extreme long shot / establishing shot</td>
+                            <td>1:9</td>
+                            <td>展示广阔环境</td>
+                        </tr>
+                        <tr>
+                            <td>远景(LS)</td>
+                            <td>远景 / 宽镜头</td>
+                            <td>long shot / wide shot</td>
+                            <td>3:7</td>
+                            <td>展示空间关系</td>
+                        </tr>
+                        <tr>
+                            <td>全景(FS)</td>
+                            <td>全景 / 全身镜头</td>
+                            <td>full shot</td>
+                            <td>5:5</td>
+                            <td>人物全身清晰可见</td>
+                        </tr>
+                        <tr>
+                            <td>中景(MS)</td>
+                            <td>中景</td>
+                            <td>medium shot</td>
+                            <td>7:3</td>
+                            <td>人物互动、对话</td>
+                        </tr>
+                        <tr>
+                            <td>近景(MCU)</td>
+                            <td>近景</td>
+                            <td>medium close-up</td>
+                            <td>8:2</td>
+                            <td>展示表情</td>
+                        </tr>
+                        <tr>
+                            <td>特写(CU)</td>
+                            <td>特写</td>
+                            <td>close-up</td>
+                            <td>9:1</td>
+                            <td>面部细节</td>
+                        </tr>
+                        <tr>
+                            <td>大特写(ECU)</td>
+                            <td>大特写 / 极近特写</td>
+                            <td>extreme close-up</td>
+                            <td>10:0</td>
+                            <td>眼睛、嘴唇等微观细节</td>
+                        </tr>
+                        <tr>
+                            <td>局部特写(DS)</td>
+                            <td>局部特写 / 细节镜头</td>
+                            <td>detail shot / insert shot</td>
+                            <td>10:0</td>
+                            <td>手、脚、物品等细节</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>特殊景别（3种）</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>分镜术语</th>
+                            <th>中文摄影术语</th>
+                            <th>英文摄影术语</th>
+                            <th>使用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>过肩镜头(OTS)</td>
+                            <td>过肩镜头</td>
+                            <td>over-the-shoulder shot</td>
+                            <td>对话场景</td>
+                        </tr>
+                        <tr>
+                            <td>双人镜头</td>
+                            <td>双人镜头</td>
+                            <td>two-shot</td>
+                            <td>对话、互动场景</td>
+                        </tr>
+                        <tr>
+                            <td>群像镜头</td>
+                            <td>群像镜头</td>
+                            <td>group shot</td>
+                            <td>团队、集体场景</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 视角高度 -->
+            <section id="angle-height">
+                <h3>视角高度术语映射</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>分镜术语</th>
+                            <th>中文摄影术语</th>
+                            <th>英文摄影术语</th>
+                            <th>使用频率</th>
+                            <th>情绪效果</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>鸟瞰</td>
+                            <td>航拍视角 / 垂直俯视</td>
+                            <td>aerial shot / directly from above</td>
+                            <td>少用</td>
+                            <td>渺小、全局视角</td>
+                        </tr>
+                        <tr>
+                            <td>极端俯拍</td>
+                            <td>从高处拍摄 / 极高角度</td>
+                            <td>from high above / extreme high-angle shot</td>
+                            <td>少用</td>
+                            <td>脆弱、压迫</td>
+                        </tr>
+                        <tr>
+                            <td>中度俯拍</td>
+                            <td>从上方拍摄 / 高角度</td>
+                            <td>from above / high-angle shot</td>
+                            <td>常用</td>
+                            <td>观察、审视</td>
+                        </tr>
+                        <tr>
+                            <td>轻微俯拍</td>
+                            <td>略微从上方拍摄</td>
+                            <td>from slightly above / mild high-angle shot</td>
+                            <td>常用</td>
+                            <td>温和、自然</td>
+                        </tr>
+                        <tr style="background-color: rgba(243, 156, 18, 0.1);">
+                            <td>平视</td>
+                            <td>镜头水平视线 / 镜头平视</td>
+                            <td>camera at eye level / eye-level shot</td>
+                            <td>⚠️ 仅用于无情绪镜头</td>
+                            <td>中性、平淡</td>
+                        </tr>
+                        <tr style="background-color: rgba(39, 174, 96, 0.1);">
+                            <td>轻微仰拍</td>
+                            <td>略微从下方拍摄</td>
+                            <td>from slightly below / mild low-angle shot</td>
+                            <td>✅ 默认选择</td>
+                            <td>自信、力量</td>
+                        </tr>
+                        <tr>
+                            <td>中度仰拍</td>
+                            <td>从下方拍摄 / 低角度</td>
+                            <td>from below / low-angle shot</td>
+                            <td>常用</td>
+                            <td>威严、强大</td>
+                        </tr>
+                        <tr>
+                            <td>极端仰拍</td>
+                            <td>从极低处拍摄 / 极低角度</td>
+                            <td>from far below / extreme low-angle shot</td>
+                            <td>少用</td>
+                            <td>压迫、震撼</td>
+                        </tr>
+                        <tr>
+                            <td>虫视</td>
+                            <td>贴近地面仰视 / 地面视角</td>
+                            <td>from ground level / worm's-eye view</td>
+                            <td>少用</td>
+                            <td>极度仰视、渺小</td>
+                        </tr>
+                        <tr>
+                            <td>荷兰角</td>
+                            <td>镜头倾斜拍摄（人物保持垂直）</td>
+                            <td>tilted camera / dutch angle</td>
+                            <td>少用</td>
+                            <td>不安、混乱</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 人物朝向 -->
+            <section id="character-direction">
+                <h3>人物朝向术语映射</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>分镜术语</th>
+                            <th>中文摄影术语</th>
+                            <th>英文摄影术语</th>
+                            <th>使用频率</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="background-color: rgba(243, 156, 18, 0.1);">
+                            <td>正面</td>
+                            <td>人物直视镜头 / 人物面向镜头</td>
+                            <td>looking forward / facing camera</td>
+                            <td>⚠️ 极少用</td>
+                        </tr>
+                        <tr>
+                            <td>微侧正面</td>
+                            <td>人物略微向左转 / 人物略微向右转</td>
+                            <td>looking slightly to the left/right</td>
+                            <td>常用</td>
+                        </tr>
+                        <tr style="background-color: rgba(39, 174, 96, 0.1);">
+                            <td>3/4正面</td>
+                            <td>人物轻微向右转 / 人物轻微向左转</td>
+                            <td>looking slightly to the right/left</td>
+                            <td>✅ 最常用</td>
+                        </tr>
+                        <tr>
+                            <td>1/3侧面</td>
+                            <td>人物侧身轮廓带部分正面</td>
+                            <td>mostly in profile, some front visible</td>
+                            <td>常用</td>
+                        </tr>
+                        <tr>
+                            <td>正侧面</td>
+                            <td>人物右侧面轮廓 / 人物左侧面轮廓</td>
+                            <td>in profile looking right/left</td>
+                            <td>常用</td>
+                        </tr>
+                        <tr>
+                            <td>1/3背面</td>
+                            <td>人物侧身轮廓带部分背面</td>
+                            <td>mostly in profile, some back visible</td>
+                            <td>常用</td>
+                        </tr>
+                        <tr>
+                            <td>3/4背面</td>
+                            <td>人物大部分背对镜头，可见少许侧面轮廓</td>
+                            <td>turned mostly away, slight side visible</td>
+                            <td>常用</td>
+                        </tr>
+                        <tr>
+                            <td>背面</td>
+                            <td>人物背对镜头</td>
+                            <td>back to camera</td>
+                            <td>常用</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 禁用术语 -->
+            <section id="forbidden-terms">
+                <h3>禁用术语与正确替换</h3>
+
+                <div class="info-box error">
+                    <strong>⚠️ 重要提醒</strong><br>
+                    以下术语AI无法理解或会误解，必须避免使用！
+                </div>
+
+                <h4>电影分镜术语（禁止使用）</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>❌ 禁止使用</th>
+                            <th>原因</th>
+                            <th>✅ 正确的中文摄影术语</th>
+                            <th>✅ 正确的英文摄影术语</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>(extreme long shot:1.3)</td>
+                            <td>权重参数格式</td>
+                            <td>广角镜头拍摄</td>
+                            <td>wide-angle shot</td>
+                        </tr>
+                        <tr>
+                            <td>3/4 front view</td>
+                            <td>电影分镜术语</td>
+                            <td>人物轻微向右转</td>
+                            <td>looking slightly to the right</td>
+                        </tr>
+                        <tr>
+                            <td>front view</td>
+                            <td>电影分镜术语</td>
+                            <td>人物直视镜头</td>
+                            <td>looking forward</td>
+                        </tr>
+                        <tr>
+                            <td>side view</td>
+                            <td>电影分镜术语</td>
+                            <td>右侧面轮廓</td>
+                            <td>in profile looking right</td>
+                        </tr>
+                        <tr>
+                            <td>low angle</td>
+                            <td>电影分镜术语</td>
+                            <td>从下方拍摄</td>
+                            <td>from below</td>
+                        </tr>
+                        <tr>
+                            <td>high angle</td>
+                            <td>电影分镜术语</td>
+                            <td>从上方拍摄</td>
+                            <td>from above</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>POV镜头相关禁用词（会导致画面出现眼睛特写）</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>❌ 禁止使用</th>
+                            <th>原因</th>
+                            <th>✅ 正确的中文摄影术语</th>
+                            <th>✅ 正确的英文摄影术语</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>从眼睛看出去</td>
+                            <td>会被误解为画眼睛特写</td>
+                            <td>主观视角</td>
+                            <td>POV shot</td>
+                        </tr>
+                        <tr>
+                            <td>眼睛位置</td>
+                            <td>会被误解为画眼睛特写</td>
+                            <td>主观视角</td>
+                            <td>POV shot</td>
+                        </tr>
+                        <tr>
+                            <td>从角色眼睛</td>
+                            <td>会被误解为画眼睛特写</td>
+                            <td>主观视角</td>
+                            <td>POV shot</td>
+                        </tr>
+                        <tr>
+                            <td>从[角色名]眼睛</td>
+                            <td>会被误解为画眼睛特写</td>
+                            <td>主观视角</td>
+                            <td>POV shot</td>
+                        </tr>
+                        <tr>
+                            <td>角色视线看出去</td>
+                            <td>会被误解为画眼睛特写</td>
+                            <td>主观视角</td>
+                            <td>POV shot</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 高级规则 -->
+            <section id="advanced-rules">
+                <h2>🎓 高级规则</h2>
+                <p>本章节包含进阶的分镜设计规则，帮助你创作更专业、更有视觉冲击力的分镜脚本。</p>
+            </section>
+
+            <!-- 角度分布规则 -->
+            <section id="angle-distribution">
+                <h3>角度分布规则</h3>
+
+                <div class="info-box error">
+                    <strong>⚠️ 最高优先级规则</strong><br>
+                    以下规则是强制性的，违反会导致画面单调、缺乏视觉冲击力！
+                </div>
+
+                <h4>核心规则</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>规则项</th>
+                            <th>要求</th>
+                            <th>优先级</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="background-color: rgba(231, 76, 60, 0.1);">
+                            <td>正面镜头占比</td>
+                            <td>≤7%（30个镜头最多2个）</td>
+                            <td>最高</td>
+                        </tr>
+                        <tr style="background-color: rgba(231, 76, 60, 0.1);">
+                            <td>平视镜头占比</td>
+                            <td>10-15%（禁止连续2个以上）</td>
+                            <td>最高</td>
+                        </tr>
+                        <tr style="background-color: rgba(39, 174, 96, 0.1);">
+                            <td>默认角度高度</td>
+                            <td>轻微仰拍/轻微俯拍（40-50%）</td>
+                            <td>最高</td>
+                        </tr>
+                        <tr style="background-color: rgba(243, 156, 18, 0.1);">
+                            <td>极端角度占比</td>
+                            <td>≥15%（必须有，不能全是温和角度）</td>
+                            <td>高</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>为什么要限制正面镜头？</h4>
+                <ul>
+                    <li>❌ <strong>缺乏空间感</strong>：正面镜头无法展示人物与环境的关系</li>
+                    <li>❌ <strong>缺乏动态感</strong>：画面显得呆板、静止</li>
+                    <li>❌ <strong>缺乏视觉引导</strong>：观众视线无处可去</li>
+                    <li>❌ <strong>缺乏情绪表达</strong>：正面+平视组合过于中性</li>
+                </ul>
+
+                <h4>推荐的角度组合</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>情绪需求</th>
+                            <th>推荐组合</th>
+                            <th>效果</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>威压、强势</td>
+                            <td>3/4正面 + 轻微仰拍</td>
+                            <td>人物显得高大、有力量感</td>
+                        </tr>
+                        <tr>
+                            <td>脆弱、渺小</td>
+                            <td>3/4正面 + 轻微俯拍</td>
+                            <td>人物显得弱小、无助</td>
+                        </tr>
+                        <tr>
+                            <td>神秘、冷酷</td>
+                            <td>正侧面 + 轻微俯拍</td>
+                            <td>展示轮廓，隐藏表情</td>
+                        </tr>
+                        <tr>
+                            <td>追逐、紧张</td>
+                            <td>3/4背面 + 轻微仰拍</td>
+                            <td>跟随视角，动态感强</td>
+                        </tr>
+                        <tr>
+                            <td>震撼、冲击</td>
+                            <td>正面 + 极端仰拍/俯拍</td>
+                            <td>极端角度打破常规</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 透视应用规则 -->
+            <section id="perspective">
+                <h3>透视应用规则</h3>
+
+                <h4>人物透视变形规则</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>相机角度</th>
+                            <th>人物透视变形</th>
+                            <th>提示词关键词</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>鸟瞰</td>
+                            <td>只见头顶背部、脸部压缩、地面占主导</td>
+                            <td>top of head visible, face foreshortened, ground dominant</td>
+                        </tr>
+                        <tr>
+                            <td>极端俯拍</td>
+                            <td>头顶突出、肩膀顶面可见、人物显矮小</td>
+                            <td>head top prominent, shoulder tops visible, figure appears shorter</td>
+                        </tr>
+                        <tr>
+                            <td>中度俯拍</td>
+                            <td>头顶略突出、肩膀顶面部分可见</td>
+                            <td>head top slightly prominent, shoulder tops partially visible</td>
+                        </tr>
+                        <tr>
+                            <td>轻微俯拍</td>
+                            <td>头顶轮廓可见、比例接近正常</td>
+                            <td>head top outline visible, proportions nearly normal</td>
+                        </tr>
+                        <tr>
+                            <td>平视</td>
+                            <td>正常比例、镜头水平视线</td>
+                            <td>normal proportions, camera at eye level</td>
+                        </tr>
+                        <tr>
+                            <td>轻微仰拍</td>
+                            <td>下巴轮廓略显、胸部底面部分可见</td>
+                            <td>chin outline slightly visible, chest underside partially visible</td>
+                        </tr>
+                        <tr>
+                            <td>中度仰拍</td>
+                            <td>下巴突出、胸部底面可见、人物显高大</td>
+                            <td>chin prominent, chest underside visible, figure appears taller</td>
+                        </tr>
+                        <tr>
+                            <td>极端仰拍</td>
+                            <td>下巴突出、鼻孔可见、肩膀放大、腿部缩短</td>
+                            <td>chin prominent, nostrils visible, shoulders widened, foreshortened legs</td>
+                        </tr>
+                        <tr>
+                            <td>虫视</td>
+                            <td>极度仰视、身体呈倒三角、天空占主导</td>
+                            <td>extreme upward view, body inverted triangle, sky dominant</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>透视类型与使用频率</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>透视类型</th>
+                            <th>使用频率</th>
+                            <th>适用场景</th>
+                            <th>提示词关键词</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>一点透视</td>
+                            <td>30-40%</td>
+                            <td>走廊、隧道、街道、铁轨</td>
+                            <td>strong depth, space extending into distance, narrowing toward center</td>
+                        </tr>
+                        <tr>
+                            <td>两点透视</td>
+                            <td>30-40%</td>
+                            <td>建筑外观、街角、室内空间</td>
+                            <td>two-point perspective, walls angling toward left and right sides</td>
+                        </tr>
+                        <tr>
+                            <td>三点透视向上</td>
+                            <td>15-25%</td>
+                            <td>仰视高耸建筑、威压感</td>
+                            <td>three-point perspective upward, verticals angling upward, towering</td>
+                        </tr>
+                        <tr>
+                            <td>三点透视向下</td>
+                            <td>15-25%</td>
+                            <td>俯视眩晕感、渺小感</td>
+                            <td>three-point perspective downward, verticals angling downward, vertiginous</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box tip">
+                    <strong>💡 透视缩短（foreshortening）规则</strong><br>
+                    躺倒的人体接近<strong>正方形</strong>，而非长方形。大脑会"脑补"成更长的形态，需要强调身体角度符合透视规律。<br>
+                    <strong>提示词关键词</strong>：foreshortened body, body compressed into square shape, shoulders and knees at natural perspective angles
+                </div>
+            </section>
+
+            <!-- 分镜连续性三原则 -->
+            <section id="continuity">
+                <h3>分镜连续性三原则</h3>
+
+                <div class="info-box error">
+                    <strong>⚠️ 重要提醒</strong><br>
+                    违反连续性原则会导致观众对空间、动作、视线产生认知混乱！
+                </div>
+
+                <h4>1. 空间连续性（180度轴线规则）</h4>
+                <p><strong>核心原则</strong>：镜头始终在"两主要元素连线同侧"</p>
+                <p>当场景中存在两个核心叙事元素（如"主角A"与"目标B"、"角色与关键道具"）时，需想象二者间存在一条隐形"连线"。所有连续镜头的摄影机，必须固定在这条连线的<strong>同一侧</strong>拍摄，不可突然越至另一侧。</p>
+
+                <div class="info-box tip">
+                    <strong>示例</strong>：<br>
+                    • 若第一镜从"主角（左）- 反派（右）"连线的左侧拍摄，后续镜头需始终保持在左侧<br>
+                    • 若突然越至右侧，会导致观众对角色位置、动线产生认知混乱<br>
+                    • 就像观看足球比赛时镜头突然反切，分不清攻防方向
+                </div>
+
+                <h4>2. 视觉中心连续性</h4>
+                <p><strong>核心原则</strong>：上一镜视觉焦点，下一镜优先承接</p>
+                <p>镜头切换时，需确保上一镜的"视觉中心"（如角色的眼睛、关键道具、动作终点），在下一镜中以"承接式构图"出现——或直接作为新镜头的视觉焦点，或通过"引导线"（如角色视线、道具延伸方向）自然过渡。</p>
+
+                <div class="info-box tip">
+                    <strong>示例</strong>：<br>
+                    • 上一镜特写"主角看向右侧的手"<br>
+                    • 下一镜需优先展示"右侧手的动作"或"手所指向的目标"<br>
+                    • 避免视觉焦点跳脱，让观众视线"有迹可循"
+                </div>
+
+                <h4>3. 动作与视线连续性</h4>
+                <p><strong>核心原则</strong>：动作衔接顺承，视线方向统一</p>
+
+                <p><strong>动作衔接</strong>：</p>
+                <ul>
+                    <li>上一镜"抬手"，下一镜需延续为"握拳"或"伸手取物"</li>
+                    <li>不可突然跳转为"垂手"</li>
+                </ul>
+
+                <p><strong>视线衔接</strong>：</p>
+                <ul>
+                    <li>上一镜角色"看向画右"，下一镜需展示"画右的目标"（如反派、道具）</li>
+                    <li>而非突然切至"画左的无关元素"</li>
+                </ul>
+
+                <p>这种顺承并非机械重复，而是通过"动作拐点""视线引导"强化剧情逻辑——即使镜头景别、角度变化，核心动作与视线的"因果关系"需清晰可见。</p>
+            </section>
+
+            <!-- POV镜头使用指南 -->
+            <section id="pov-guide">
+                <h3>POV镜头使用指南</h3>
+
+                <h4>定义</h4>
+                <p><strong>POV镜头</strong>（Point of View Shot）= <strong>主观视角</strong> = 从角色眼睛看出去的第一人称视角</p>
+
+                <h4>标准格式</h4>
+                <div class="code-block">
+                    <pre>"主观视角，[目标物体/角色的状态和位置]"</pre>
+                </div>
+
+                <h4>正确示例</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>场景</th>
+                            <th>提示词</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>发现敌人</td>
+                            <td>"主观视角，敌人正面站立在3米外，表情凶狠，手持武器"</td>
+                        </tr>
+                        <tr>
+                            <td>追逐场景</td>
+                            <td>"主观视角，人物背对镜头向前奔跑，距离5米，披风飘动"</td>
+                        </tr>
+                        <tr>
+                            <td>探索空间</td>
+                            <td>"主观视角，走廊向前延伸20米，尽头是发光的蓝色门，两侧墙壁布满电路纹路"</td>
+                        </tr>
+                        <tr>
+                            <td>发现线索</td>
+                            <td>"主观视角，神秘符号刻在墙上，发出微弱红光，距离1米"</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>关键要点</h4>
+                <ul>
+                    <li>✅ <strong>必须使用"主观视角"开头</strong> - 这是AI能理解的标准术语</li>
+                    <li>❌ <strong>禁止提及"眼睛"</strong> - 会被误解为画眼睛特写</li>
+                    <li>✅ <strong>描述目标物体，而非视角起点</strong> - 重点是"看到什么"，不是"从哪里看"</li>
+                    <li>✅ <strong>包含距离信息</strong> - 帮助AI理解空间关系（如"3米外"、"5米"）</li>
+                </ul>
+
+                <h4>使用频率</h4>
+                <div class="info-box warning">
+                    <strong>建议占比</strong>：≤5%（30个镜头最多1-2个）<br>
+                    <strong>原因</strong>：POV镜头代入感强，但过多会导致视角单调<br>
+                    <strong>搭配建议</strong>：与3/4正面、正侧面等常规角度交替使用
+                </div>
+
+                <h4>适用场景</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>场景类型</th>
+                            <th>情绪效果</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>发现关键线索</td>
+                            <td>强代入感、揭秘感</td>
+                        </tr>
+                        <tr>
+                            <td>惊恐/震撼时刻</td>
+                            <td>强烈恐惧、压迫感</td>
+                        </tr>
+                        <tr>
+                            <td>追逐中的威胁视角</td>
+                            <td>紧张、追逐感</td>
+                        </tr>
+                        <tr>
+                            <td>探索未知空间</td>
+                            <td>好奇、探索感</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- 视频提示词规范 -->
+            <section id="video-prompts">
+                <h2>🎬 视频提示词规范</h2>
+
+                <div class="info-box tip">
+                    <strong>💡 核心原则（黄金法则）</strong><br>
+                    1. <strong>使用自然语言描述</strong>：即梦和可灵使用自然语言，不使用权重参数格式<br>
+                    2. <strong>使用摄影术语</strong>：AI视频生成模型训练数据主要是摄影作品，使用摄影术语而非电影分镜术语<br>
+                    3. <strong>语言简洁</strong>：句子结构简单，避免复杂从句<br>
+                    4. <strong>动态适度</strong>：优先简单动作（走路、挥手、微笑），避免大幅度动作（跑酷、打斗）<br>
+                    5. <strong>风格一致</strong>：提示词中必须强调风格保持<br>
+                    6. <strong>时长匹配</strong>：画面内容必须在指定时长内可完成
+                </div>
+
+                <h3>I2V（图生视频）公式</h3>
+                <div class="code-block">
+                    <pre>风格保持 + 情绪调节 + 主体动作（具象化+量化） + 运镜方式 + 光影变化（具象化） + 时长</pre>
+                </div>
+
+                <p><strong>示例</strong>：</p>
+                <div class="code-block">
+                    <pre>水墨风格保持不变，仕女缓慢抬起右手，轻执茶杯，
+镜头从人物侧面缓慢推进至手部特写，
+背景纱帘随微风轻微飘动，
+暖光从窗棂渗入，在人物衣袂上形成渐变光影</pre>
+                </div>
+
+                <h3>首尾帧生视频（Keyframe）公式</h3>
+                <div class="code-block">
+                    <pre>从首帧到尾帧，[过渡方式] + [核心元素变化细节] + [速度节奏] + [光影过渡] + [风格保持] + [时长]</pre>
+                </div>
+
+                <p><strong>示例</strong>：</p>
+                <div class="code-block">
+                    <pre>从首帧到尾帧，人物身体匀速覆盖机械装甲，
+装甲先从肩部生成再向手臂躯干腿部延伸，
+金属纹理逐步清晰，眼睛变为蓝色发光体，
+保持整体姿势不变，光影从自然光转为冷色调机械光，
+全程无风格断层，8秒</pre>
+                </div>
+
+                <h3>运镜类型</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>运镜方式</th>
+                            <th>中文描述</th>
+                            <th>英文描述</th>
+                            <th>适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>推镜头</td>
+                            <td>镜头向前推进</td>
+                            <td>camera push in</td>
+                            <td>聚焦细节、情绪升级</td>
+                        </tr>
+                        <tr>
+                            <td>拉镜头</td>
+                            <td>镜头向后拉远</td>
+                            <td>camera pull out</td>
+                            <td>展示环境、情绪释放</td>
+                        </tr>
+                        <tr>
+                            <td>横摇镜头</td>
+                            <td>镜头水平左右摇动</td>
+                            <td>camera pan left/right</td>
+                            <td>展示空间宽度、跟随视线</td>
+                        </tr>
+                        <tr>
+                            <td>竖摇镜头</td>
+                            <td>镜头垂直上下摇动</td>
+                            <td>camera tilt up/down</td>
+                            <td>展示空间高度、揭示感</td>
+                        </tr>
+                        <tr>
+                            <td>移镜头</td>
+                            <td>镜头平移跟随</td>
+                            <td>camera tracking</td>
+                            <td>跟随动作、展示关系</td>
+                        </tr>
+                        <tr>
+                            <td>跟镜头</td>
+                            <td>镜头跟随主体</td>
+                            <td>camera follow</td>
+                            <td>追逐场景、动态展示</td>
+                        </tr>
+                        <tr>
+                            <td>升降镜头</td>
+                            <td>镜头上升/下降</td>
+                            <td>camera crane up/down</td>
+                            <td>展示规模、情绪变化</td>
+                        </tr>
+                        <tr>
+                            <td>环绕镜头</td>
+                            <td>镜头环绕主体</td>
+                            <td>camera orbit around</td>
+                            <td>展示全貌、戏剧效果</td>
+                        </tr>
+                        <tr>
+                            <td>固定镜头</td>
+                            <td>镜头固定不动</td>
+                            <td>camera static</td>
+                            <td>聚焦动作、稳定画面</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>能力边界</h3>
+
+                <h4>✅ AI擅长的动作</h4>
+                <ul>
+                    <li>简单肢体动作（挥手、转身、点头、走路）</li>
+                    <li>表情变化（微笑→严肃、平静→愤怒）</li>
+                    <li>物体移动（飘动、旋转、坠落）</li>
+                    <li>光影变化（明暗、颜色、强度）</li>
+                    <li>简单运镜（推拉摇移）</li>
+                    <li>原有框架内扩展（在原图构图内添加动态）</li>
+                    <li>5-10秒时长（最佳时长范围）</li>
+                </ul>
+
+                <h4>❌ AI难以处理的动作</h4>
+                <ul>
+                    <li>复杂肢体动作（打斗、舞蹈、翻滚、跑酷）</li>
+                    <li>多人互动（拥抱、握手、对打）</li>
+                    <li>精细手部动作（弹琴、写字、打字）</li>
+                    <li>口型同步（说话、唱歌）</li>
+                    <li>物理规律复杂的动作（液体流动、布料飘动、球类弹跳）</li>
+                    <li>突破原图空间框架（如原图室内，难以扩展为室外全景）</li>
+                    <li>超过10秒时长（易出现节奏混乱）</li>
+                </ul>
+
+                <h3>负面提示词（Negative Prompt）</h3>
+
+                <h4>必须避免的描述</h4>
+                <ul>
+                    <li>❌ 模糊、失焦、低质量</li>
+                    <li>❌ 变形、扭曲、比例失调</li>
+                    <li>❌ 多余的肢体（多手、多脚）</li>
+                    <li>❌ 文字、水印、logo</li>
+                    <li>❌ 画面抖动、闪烁</li>
+                    <li>❌ 风格偏移、风格断层（视频特有）</li>
+                    <li>❌ 动作卡顿、不连贯（视频特有）</li>
+                    <li>❌ 背景额外元素新增（视频特有）</li>
+                    <li>❌ 构图框架突变（视频特有）</li>
+                </ul>
+
+                <h4>标准负面提示词模板</h4>
+                <div class="code-block">
+                    <pre>blurry, out of focus, low quality, distorted, deformed,
+extra limbs, extra fingers, watermark, text, logo,
+shaky, flickering, artifacts,
+style shift, style inconsistency, choppy motion, jerky movement,
+background elements appearing, composition frame change</pre>
+                </div>
+            </section>
+
+            <!-- 常见问题 -->
+            <section id="faq">
+                <h2>❓ 常见问题解答（FAQ）</h2>
+
+                <h3>Q1: 如何选择合适的景别？</h3>
+                <p><strong>A:</strong> 景别选择主要取决于你想传达的信息和情绪：</p>
+                <ul>
+                    <li><strong>展示环境</strong>：使用特远景(ELS)或远景(LS)</li>
+                    <li><strong>展示人物全身动作</strong>：使用全景(FS)</li>
+                    <li><strong>展示人物互动</strong>：使用中景(MS)</li>
+                    <li><strong>展示人物表情</strong>：使用近景(MCU)或特写(CU)</li>
+                    <li><strong>展示细节</strong>：使用大特写(ECU)或局部特写(DS)</li>
+                </ul>
+
+                <h3>Q2: 正面镜头为什么要少用？</h3>
+                <p><strong>A:</strong> 正面镜头有以下问题：</p>
+                <ul>
+                    <li>❌ <strong>缺乏空间感</strong>：无法展示人物与环境的关系</li>
+                    <li>❌ <strong>缺乏动态感</strong>：画面显得呆板、静止</li>
+                    <li>❌ <strong>缺乏视觉引导</strong>：观众视线无处可去</li>
+                </ul>
+                <p><strong>推荐做法</strong>：</p>
+                <ul>
+                    <li>✅ 使用3/4正面（轻微向右/左转）</li>
+                    <li>✅ 使用正侧面（展示轮廓）</li>
+                    <li>✅ 如果必须使用正面，通过调整视角高度（仰拍/俯拍）增加变化</li>
+                </ul>
+
+                <h3>Q3: 提示词中是否应该加入摄影参数（如85mm、f/1.4）？</h3>
+                <p><strong>A:</strong> 取决于你使用的AI模型：</p>
+                <div class="info-box error">
+                    <strong>即梦4.5和可灵AI：❌ 不建议使用</strong><br>
+                    官方手册没有提到支持具体参数，AI可能无法理解这些参数。<br>
+                    更好的做法：描述效果（如"浅景深"、"背景虚化"）
+                </div>
+                <div class="info-box tip">
+                    <strong>Nano Banana Pro：✅ 可以使用，但要用自然语言描述</strong><br>
+                    官方手册示例："景深要浅（f/1.8），焦点在她的眼睛上"<br>
+                    不要简单堆砌参数，要用对话式描述
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        // ==================== 数据库 ====================
+
+        // 景别术语映射（对象格式，用于显示）
+        const shotSizeMapping = {
+            '特远景': { cn: '广角镜头拍摄', en: 'extreme long shot', abbr: 'ELS' },
+            '远景': { cn: '远景拍摄', en: 'long shot', abbr: 'LS' },
+            '全景': { cn: '全景拍摄', en: 'full shot', abbr: 'FS' },
+            '中景': { cn: '中景拍摄', en: 'medium shot', abbr: 'MS' },
+            '近景': { cn: '近景拍摄', en: 'medium close-up', abbr: 'MCU' },
+            '特写': { cn: '特写拍摄', en: 'close-up', abbr: 'CU' },
+            '大特写': { cn: '大特写拍摄', en: 'extreme close-up', abbr: 'ECU' },
+            '局部特写': { cn: '局部特写拍摄', en: 'detail shot', abbr: 'DS' }
+        };
+
+        // 🆕 景别术语映射（数组格式，用于转换，按长度排序）
+        const shotSizeMappingArray = [
+            { term: '特远景(ELS)', cn: '广角镜头拍摄', type: 'basic' },
+            { term: '特远景', cn: '广角镜头拍摄', type: 'basic' },
+            { term: '远景(LS)', cn: '远景拍摄', type: 'basic' },
+            { term: '远景', cn: '远景拍摄', type: 'basic' },
+            { term: '全景(FS)', cn: '全景拍摄', type: 'basic' },
+            { term: '全景', cn: '全景拍摄', type: 'basic' },
+            { term: '中景(MS)', cn: '中景拍摄', type: 'basic' },
+            { term: '中景', cn: '中景拍摄', type: 'basic' },
+            { term: '近景(MCU)', cn: '近景拍摄', type: 'basic' },
+            { term: '近景', cn: '近景拍摄', type: 'basic' },
+            { term: '特写(CU)', cn: '特写拍摄', type: 'basic' },
+            { term: '特写', cn: '特写拍摄', type: 'basic' },
+            { term: '大特写(ECU)', cn: '大特写拍摄', type: 'basic' },
+            { term: '大特写', cn: '大特写拍摄', type: 'basic' },
+            { term: '局部特写(DS)', cn: '局部特写拍摄', type: 'basic' },
+            { term: '局部特写', cn: '局部特写拍摄', type: 'basic' },
+        ].sort((a, b) => b.term.length - a.term.length); // 按长度降序排序
+
+        // 视角高度术语映射（对象格式，用于显示）
+        const angleHeightMapping = {
+            '鸟瞰': { cn: '航拍视角', en: 'aerial shot' },
+            '极端俯拍': { cn: '从高处拍摄', en: 'from high above' },
+            '中度俯拍': { cn: '从上方拍摄', en: 'from above' },
+            '轻微俯拍': { cn: '略微从上方拍摄', en: 'from slightly above' },
+            '平视': { cn: '镜头水平视线', en: 'camera at eye level' },
+            '轻微仰拍': { cn: '略微从下方拍摄', en: 'from slightly below' },
+            '中度仰拍': { cn: '从下方拍摄', en: 'from below' },
+            '极端仰拍': { cn: '从极低处拍摄', en: 'from far below' },
+            '虫视': { cn: '贴近地面仰视', en: 'from ground level' },
+            '荷兰角': { cn: '镜头倾斜拍摄', en: 'tilted camera' }
+        };
+
+        // 🆕 视角高度术语映射（数组格式，用于转换，按长度排序）
+        const angleHeightMappingArray = [
+            { term: '鸟瞰(Bird Eye)', cn: '航拍视角', type: 'basic' },
+            { term: '鸟瞰', cn: '航拍视角', type: 'basic' },
+            { term: '极端俯拍(Extreme High)', cn: '从高处拍摄', type: 'basic' },
+            { term: '极端俯拍', cn: '从高处拍摄', type: 'basic' },
+            { term: '中度俯拍(Moderate High)', cn: '从上方拍摄', type: 'basic' },
+            { term: '中度俯拍', cn: '从上方拍摄', type: 'basic' },
+            { term: '轻微俯拍(Mild High)', cn: '略微从上方拍摄', type: 'basic' },
+            { term: '轻微俯拍', cn: '略微从上方拍摄', type: 'basic' },
+            { term: '平视(Eye Level)', cn: '镜头水平视线', type: 'basic' },
+            { term: '平视', cn: '镜头水平视线', type: 'basic' },
+            { term: '轻微仰拍(Mild Low)', cn: '略微从下方拍摄', type: 'basic' },
+            { term: '轻微仰拍', cn: '略微从下方拍摄', type: 'basic' },
+            { term: '中度仰拍(Moderate Low)', cn: '从下方拍摄', type: 'basic' },
+            { term: '中度仰拍', cn: '从下方拍摄', type: 'basic' },
+            { term: '极端仰拍(Extreme Low)', cn: '从极低处拍摄', type: 'basic' },
+            { term: '极端仰拍', cn: '从极低处拍摄', type: 'basic' },
+            { term: '虫视(Worm Eye)', cn: '贴近地面仰视', type: 'basic' },
+            { term: '虫视', cn: '贴近地面仰视', type: 'basic' },
+            { term: '荷兰角(Dutch Angle)', cn: '镜头倾斜拍摄', type: 'basic' },
+            { term: '荷兰角', cn: '镜头倾斜拍摄', type: 'basic' },
+        ].sort((a, b) => b.term.length - a.term.length); // 按长度降序排序
+
+        // 人物朝向术语映射（对象格式，用于显示）
+        const characterDirectionMapping = {
+            '正面': { cn: '人物直视镜头', en: 'looking forward' },
+            '微侧正面': { cn: '人物略微向右转', en: 'looking slightly to the right' },
+            '3/4正面': { cn: '人物轻微向右转', en: 'looking slightly to the right' },
+            '1/3侧面': { cn: '人物侧身轮廓带部分正面', en: 'mostly in profile, some front visible' },
+            '正侧面': { cn: '人物右侧面轮廓', en: 'in profile looking right' },
+            '1/3背面': { cn: '人物侧身轮廓带部分背面', en: 'mostly in profile, some back visible' },
+            '3/4背面': { cn: '人物大部分背对镜头，可见少许侧面轮廓', en: 'turned mostly away, slight side visible' },
+            '背面': { cn: '人物背对镜头', en: 'back to camera' }
+        };
+
+        // 🆕 人物朝向术语映射（数组格式，用于转换，按长度排序）
+        const characterDirectionMappingArray = [
+            { term: '3/4正面(3/4 Front)', cn: '人物轻微向右转', type: 'basic' },
+            { term: '3/4背面(3/4 Back)', cn: '人物大部分背对镜头，可见少许侧面轮廓', type: 'basic' },
+            { term: '微侧正面(Slight Front)', cn: '人物略微向右转', type: 'basic' },
+            { term: '1/3侧面(1/3 Side)', cn: '人物侧身轮廓带部分正面', type: 'basic' },
+            { term: '1/3背面(1/3 Back)', cn: '人物侧身轮廓带部分背面', type: 'basic' },
+            { term: '正侧面(Full Side)', cn: '人物右侧面轮廓', type: 'basic' },
+            { term: '正面(Front)', cn: '人物直视镜头', type: 'basic' },
+            { term: '背面(Back)', cn: '人物背对镜头', type: 'basic' },
+            { term: '3/4正面', cn: '人物轻微向右转', type: 'basic' },
+            { term: '3/4背面', cn: '人物大部分背对镜头，可见少许侧面轮廓', type: 'basic' },
+            { term: '微侧正面', cn: '人物略微向右转', type: 'basic' },
+            { term: '1/3侧面', cn: '人物侧身轮廓带部分正面', type: 'basic' },
+            { term: '1/3背面', cn: '人物侧身轮廓带部分背面', type: 'basic' },
+            { term: '正侧面', cn: '人物右侧面轮廓', type: 'basic' },
+            { term: '正面', cn: '人物直视镜头', type: 'basic' },
+            { term: '背面', cn: '人物背对镜头', type: 'basic' },
+        ].sort((a, b) => b.term.length - a.term.length); // 按长度降序排序
+
+        // 禁用术语列表
+        const forbiddenTerms = [
+            { term: '(extreme long shot', reason: '权重参数格式', replacement: '广角镜头拍摄' },
+            { term: ':1.', reason: '权重参数格式', replacement: '使用自然语言描述' },
+            { term: '3/4 front view', reason: '电影分镜术语', replacement: '人物轻微向右转' },
+            { term: 'front view', reason: '电影分镜术语', replacement: '人物直视镜头' },
+            { term: 'side view', reason: '电影分镜术语', replacement: '人物右侧面轮廓' },
+            { term: 'low angle', reason: '电影分镜术语', replacement: '从下方拍摄' },
+            { term: 'high angle', reason: '电影分镜术语', replacement: '从上方拍摄' },
+            { term: '从眼睛看出去', reason: '会被误解为画眼睛特写', replacement: '主观视角' },
+            { term: '眼睛位置', reason: '会被误解为画眼睛特写', replacement: '主观视角' },
+            { term: '从角色眼睛', reason: '会被误解为画眼睛特写', replacement: '主观视角' },
+            { term: '角色视线看出去', reason: '会被误解为画眼睛特写', replacement: '主观视角' }
+        ];
+
+        // 运镜类型映射
+        const cameraMovementMapping = {
+            '推镜头': { cn: '镜头向前推进', en: 'camera push in' },
+            '拉镜头': { cn: '镜头向后拉远', en: 'camera pull out' },
+            '横摇镜头': { cn: '镜头水平左右摇动', en: 'camera pan left/right' },
+            '竖摇镜头': { cn: '镜头垂直上下摇动', en: 'camera tilt up/down' },
+            '移镜头': { cn: '镜头平移跟随', en: 'camera tracking' },
+            '跟镜头': { cn: '镜头跟随主体', en: 'camera follow' },
+            '升降镜头': { cn: '镜头上升/下降', en: 'camera crane up/down' },
+            '环绕镜头': { cn: '镜头环绕主体', en: 'camera orbit around' },
+            '固定镜头': { cn: '镜头固定不动', en: 'camera static' }
+        };
+
+        // 负面提示词模板
+        const negativePromptTemplate = `blurry, out of focus, low quality, distorted, deformed,
+extra limbs, extra fingers, watermark, text, logo,
+shaky, flickering, artifacts,
+style shift, style inconsistency, choppy motion, jerky movement,
+background elements appearing, composition frame change`;
+
+        // AI难以处理的动作关键词
+        const difficultActions = [
+            '打斗', '舞蹈', '翻滚', '跑酷', '拥抱', '握手', '对打',
+            '弹琴', '写字', '打字', '说话', '唱歌', '液体流动', '球类弹跳'
+        ];
+
+        // ==================== 规则引擎 ====================
+
+        // 检测景别
+        function detectShotSize(text) {
+            const keywords = {
+                '特远景': ['广角', '远景', '全景环境', '大场景', '航拍'],
+                '远景': ['远景', '全身', '环境'],
+                '全景': ['全景', '全身'],
+                '中景': ['中景', '半身', '腰部以上'],
+                '近景': ['近景', '胸部以上', '肩部以上'],
+                '特写': ['特写', '面部', '脸部'],
+                '大特写': ['大特写', '眼睛', '嘴唇'],
+                '局部特写': ['局部', '手部', '脚部', '细节']
+            };
+
+            for (const [shotSize, words] of Object.entries(keywords)) {
+                if (words.some(word => text.includes(word))) {
+                    return shotSize;
+                }
+            }
+
+            return '中景'; // 默认值
+        }
+
+        // 检测视角高度
+        function detectAngleHeight(text) {
+            const keywords = {
+                '鸟瞰': ['鸟瞰', '航拍', '垂直俯视'],
+                '极端俯拍': ['极端俯拍', '从高处'],
+                '中度俯拍': ['俯拍', '从上方'],
+                '轻微俯拍': ['轻微俯拍', '略微从上方'],
+                '平视': ['平视', '水平'],
+                '轻微仰拍': ['轻微仰拍', '略微从下方'],
+                '中度仰拍': ['仰拍', '从下方'],
+                '极端仰拍': ['极端仰拍', '从极低处'],
+                '虫视': ['虫视', '地面视角'],
+                '荷兰角': ['荷兰角', '倾斜']
+            };
+
+            for (const [angleHeight, words] of Object.entries(keywords)) {
+                if (words.some(word => text.includes(word))) {
+                    return angleHeight;
+                }
+            }
+
+            return '轻微仰拍'; // 默认值
+        }
+
+        // 检测人物朝向
+        function detectDirection(text) {
+            const keywords = {
+                '正面': ['正面', '直视', '面向镜头'],
+                '微侧正面': ['微侧正面', '略微向'],
+                '3/4正面': ['3/4正面', '轻微向'],
+                '1/3侧面': ['1/3侧面'],
+                '正侧面': ['正侧面', '侧面轮廓'],
+                '1/3背面': ['1/3背面'],
+                '3/4背面': ['3/4背面', '回头看肩'],
+                '背面': ['背面', '背对']
+            };
+
+            for (const [direction, words] of Object.entries(keywords)) {
+                if (words.some(word => text.includes(word))) {
+                    return direction;
+                }
+            }
+
+            return '3/4正面'; // 默认值
+        }
+
+        // 检测禁用术语
+        function detectForbiddenTerms(text) {
+            const violations = [];
+
+            forbiddenTerms.forEach(item => {
+                if (text.includes(item.term)) {
+                    violations.push({
+                        term: item.term,
+                        reason: item.reason,
+                        replacement: item.replacement
+                    });
+                }
+            });
+
+            return violations;
+        }
+
+        // 提取人物名称
+        function extractCharacterName(text) {
+            // 常见人物名称模式（中文名字通常2-4个字）
+            // 优先匹配完整的角色名（如"晋安"、"林溪"），避免只匹配到姓氏
+            const namePatterns = [
+                /(晋安|林溪|张三|李四|王五|赵六)/,  // 预定义的常见名字（完整名字）
+                /([一-龥]{2,4})(?:站|坐|躺|走|跑|看|望|转|回|抬|低|握|拿|持)/,  // 名字+动作
+                /([一-龥]{2,4})(?:位于|在|于)/,  // 名字+位置
+                /([一-龥]{2,4})(?:的|之)/  // 名字+的/之
+            ];
+
+            for (const pattern of namePatterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    return match[1];
+                }
+            }
+
+            return null;
+        }
+
+        // 生成图像提示词
+        function optimizeImagePrompt() {
+            const userInput = document.getElementById('imageInput').value.trim();
+
+            if (!userInput) {
+                alert('请先输入画面描述！');
+                return;
+            }
+
+            // 分析用户输入
+            const shotSize = detectShotSize(userInput);
+            const angleHeight = detectAngleHeight(userInput);
+            const direction = detectDirection(userInput);
+            const violations = detectForbiddenTerms(userInput);
+            const characterName = extractCharacterName(userInput);
+
+            // 🆕 检测是否已有完整的中文摄影术语（而不是分镜术语）
+            const hasShotSize = shotSizeMappingArray.some(item => userInput.includes(item.cn));
+            const hasAngleHeight = angleHeightMappingArray.some(item => userInput.includes(item.cn));
+
+            // 🆕 第一步：预处理输入
+            // 移除【】标记，替换 + 为逗号，统一换行为空格，清理 | 符号
+            let processedInput = userInput
+                .replace(/【[^】]*】/g, '') // 移除【景别】【角度】等标记
+                .replace(/\+/g, '，') // 替换 + 为逗号
+                .replace(/\n/g, ' ') // 替换换行为空格
+                .replace(/\|/g, '，') // 替换 | 为逗号
+                .replace(/\s+/g, ' ') // 合并多个空格
+                .replace(/，+/g, '，') // 合并多个逗号
+                .trim();
+
+            // 🔧 转换景别术语（如果存在）
+            let detectedShotSizeTerm = null;
+
+            for (const item of shotSizeMappingArray) {
+                const term = item.term;
+                const cnTerm = item.cn;
+                if (processedInput.includes(term)) {
+                    // 检查是否是独立的术语（后面跟标点、空格、换行、+号或结尾）
+                    const escapedTerm = term.replace(/[()]/g, '\\$&');
+                    const pattern = new RegExp(`${escapedTerm}(?=，|。|；|！|？|\\s|\\+|\\n|$)`, 'g');
+                    if (pattern.test(processedInput)) {
+                        detectedShotSizeTerm = cnTerm;
+                        // 从输入中移除原始术语
+                        processedInput = processedInput.replace(pattern, '');
+                        // 清理多余的标点和空格
+                        processedInput = processedInput.replace(/，+/g, '，').replace(/\s+/g, ' ').replace(/^，|，$/g, '').trim();
+                        break;
+                    }
+                }
+            }
+
+            // 🔧 转换角度高度术语（如果存在）
+            let detectedAngleHeightTerm = null;
+
+            for (const item of angleHeightMappingArray) {
+                const term = item.term;
+                const cnTerm = item.cn;
+                if (processedInput.includes(term)) {
+                    // 检查是否是独立的术语（后面跟标点、空格、换行、+号或结尾）
+                    const escapedTerm = term.replace(/[()]/g, '\\$&');
+                    const pattern = new RegExp(`${escapedTerm}(?=，|。|；|！|？|\\s|\\+|\\n|$)`, 'g');
+                    if (pattern.test(processedInput)) {
+                        // 如果中文术语已经包含"镜头"，就不再添加
+                        if (cnTerm.includes('镜头')) {
+                            detectedAngleHeightTerm = cnTerm;
+                        } else {
+                            detectedAngleHeightTerm = `镜头${cnTerm}`;
+                        }
+                        // 从输入中移除原始术语
+                        processedInput = processedInput.replace(pattern, '');
+                        // 清理多余的标点和空格
+                        processedInput = processedInput.replace(/，+/g, '，').replace(/\s+/g, ' ').replace(/^，|，$/g, '').trim();
+                        break;
+                    }
+                }
+            }
+
+            // 🔧 转换角色朝向术语（如果存在）
+            let detectedDirectionTerm = null;
+
+            for (const item of characterDirectionMappingArray) {
+                const term = item.term;
+                const cnTerm = item.cn;
+                if (processedInput.includes(term)) {
+                    // 转义特殊字符（如括号、斜杠）
+                    const escapedTerm = term.replace(/[()]/g, '\\$&').replace(/\//g, '\\/');
+                    const pattern = new RegExp(`${escapedTerm}(?=，|。|；|！|？|\\s|\\+|\\n|$)`, 'g');
+
+                    // 检查是否是独立的术语（后面跟标点、空格、换行、+号或结尾）
+                    if (pattern.test(processedInput)) {
+                        detectedDirectionTerm = cnTerm;
+                        // 从输入中移除原始术语
+                        processedInput = processedInput.replace(pattern, '');
+                        // 清理多余的标点和空格
+                        processedInput = processedInput.replace(/，+/g, '，').replace(/\s+/g, ' ').replace(/^，|，$/g, '').trim();
+                        break;
+                    }
+                }
+            }
+
+            // 🆕 第二步：检查缺失项（严格模式）
+            const missing = [];
+
+            // 检查景别
+            if (!detectedShotSizeTerm && !hasShotSize) {
+                missing.push('景别（如：远景、全景、中景、近景、特写）');
+            }
+
+            // 检查角度高度
+            if (!detectedAngleHeightTerm && !hasAngleHeight) {
+                missing.push('角度高度（如：轻微俯拍、轻微仰拍、平视、中度俯拍、中度仰拍）');
+            }
+
+            // 如果有缺失项，返回提示信息
+            if (missing.length > 0) {
+                const missingText = missing.map(m => `  • ${m}`).join('\n');
+                const examplePrompt = '远景，轻微俯拍，3/4背面。相机拉远。整段管道内的符文电路同步脉动红蓝强光';
+                document.getElementById('imageCnPrompt').textContent =
+                    `⚠️ 缺少以下信息，请补充：\n\n${missingText}\n\n💡 提示：请在画面描述前添加这些摄影术语，例如：\n"${examplePrompt}"`;
+
+                // 显示缺失项提示
+                let suggestions = [];
+                suggestions.push('⚠️ 请先补充缺失的摄影术语');
+                suggestions.push(`• 缺失项：${missing.join('、')}`);
+                document.getElementById('imageSuggestionsList').innerHTML = suggestions.join('<br>');
+                document.getElementById('imageViolationsList').innerHTML = '等待检测...';
+                return;
+            }
+
+            // 🆕 第三步：过滤视频相关内容
+            // 移除运镜描述（如"推镜头"、"拉远(Pull Out)"、"中速"等）
+            const cameraMovementPatterns = [
+                /推镜头[^，。|]*\|?[^，。|]*/g,
+                /拉镜头[^，。|]*\|?[^，。|]*/g,
+                /横摇镜头[^，。|]*\|?[^，。|]*/g,
+                /竖摇镜头[^，。|]*\|?[^，。|]*/g,
+                /移镜头[^，。|]*\|?[^，。|]*/g,
+                /跟镜头[^，。|]*\|?[^，。|]*/g,
+                /升镜头[^，。|]*\|?[^，。|]*/g,
+                /降镜头[^，。|]*\|?[^，。|]*/g,
+                /环绕镜头[^，。|]*\|?[^，。|]*/g,
+                /固定镜头[^，。|]*\|?[^，。|]*/g,
+                /推进\([^)]*\)[^，。|]*\|?[^，。|]*/g,
+                /拉远\([^)]*\)[^，。|]*\|?[^，。|]*/g,
+                /Pan\s+\w+[^，。|]*\|?[^，。|]*/gi,
+                /Tilt\s+\w+[^，。|]*\|?[^，。|]*/gi,
+                /Tracking[^，。|]*\|?[^，。|]*/gi,
+                /Follow[^，。|]*\|?[^，。|]*/gi,
+                /Crane\s+\w+[^，。|]*\|?[^，。|]*/gi,
+                /Orbit[^，。|]*\|?[^，。|]*/gi,
+                /Push\s+In[^，。|]*\|?[^，。|]*/gi,
+                /Pull\s+Out[^，。|]*\|?[^，。|]*/gi,
+                /\|\s*(慢速|中速|快速|极慢|极快)[^，。|]*/g,
+                /【运镜】[^【】]*/g
+            ];
+
+            for (const pattern of cameraMovementPatterns) {
+                processedInput = processedInput.replace(pattern, '');
+            }
+
+            // 清理多余的标点和空格
+            processedInput = processedInput
+                .replace(/，+/g, '，')
+                .replace(/\s+/g, ' ')
+                .replace(/^，|，$/g, '')
+                .trim();
+
+            // 🆕 第四步：按照提示词规范重新组织内容
+            // 公式：技术参数 + 主体描述 + 环境背景 + 光影氛围
+
+            // 简化方案：直接使用字符串分割
+            const parts = {
+                subject: '', // 主体描述（人物位置、姿态、表情、道具）
+                environment: '', // 环境背景（构图FG/MG/BG）
+                lighting: '' // 光影氛围
+            };
+
+            // 1. 提取并转换 FG/MG/BG（使用字符串分割）
+            let fgContent = '';
+            let mgContent = '';
+            let bgContent = '';
+
+            if (processedInput.includes('FG:')) {
+                const fgStart = processedInput.indexOf('FG:');
+                const mgStart = processedInput.indexOf('MG:', fgStart);
+                if (mgStart > -1) {
+                    fgContent = processedInput.substring(fgStart + 3, mgStart).trim();
+                    processedInput = processedInput.substring(0, fgStart) + processedInput.substring(mgStart);
+                }
+            }
+
+            if (processedInput.includes('MG:')) {
+                const mgStart = processedInput.indexOf('MG:');
+                const bgStart = processedInput.indexOf('BG:', mgStart);
+                if (bgStart > -1) {
+                    mgContent = processedInput.substring(mgStart + 3, bgStart).trim();
+                    processedInput = processedInput.substring(0, mgStart) + processedInput.substring(bgStart);
+                }
+            }
+
+            if (processedInput.includes('BG:')) {
+                const bgStart = processedInput.indexOf('BG:');
+                // 找到下一个句号或逗号，或者到字符串末尾
+                let bgEnd = processedInput.length;
+                const nextComma = processedInput.indexOf('，', bgStart);
+                const nextPeriod = processedInput.indexOf('。', bgStart);
+                if (nextComma > -1 && nextComma < bgEnd) bgEnd = nextComma;
+                if (nextPeriod > -1 && nextPeriod < bgEnd) bgEnd = nextPeriod;
+
+                bgContent = processedInput.substring(bgStart + 3, bgEnd).trim();
+                processedInput = processedInput.substring(0, bgStart) + processedInput.substring(bgEnd);
+            }
+
+            // 转换为自然语言
+            const envParts = [];
+            if (fgContent) envParts.push(`前景是${fgContent}`);
+            if (mgContent) envParts.push(`中景是${mgContent}`);
+            if (bgContent) envParts.push(`背景是${bgContent}`);
+            parts.environment = envParts.join('，');
+
+            // 2. 提取光影（包含"光"、"照"、"映"等关键词的句子）
+            const sentences = processedInput.split(/[，。]/);
+            const lightingSentences = [];
+            const otherSentences = [];
+
+            sentences.forEach(sentence => {
+                const trimmed = sentence.trim();
+                if (trimmed && (trimmed.includes('光') || trimmed.includes('照') || trimmed.includes('映') || trimmed.includes('阴影') || trimmed.includes('轮廓'))) {
+                    lightingSentences.push(trimmed);
+                } else if (trimmed) {
+                    otherSentences.push(trimmed);
+                }
+            });
+
+            parts.lighting = lightingSentences.join('，');
+            parts.subject = otherSentences.join('，');
+
+            // 🆕 第五步：组装优化后的提示词
+            let optimizedPrompt = '';
+            const components = [];
+
+            // 1. 技术参数（景别、角度、朝向）
+            const technicalPrefix = [];
+            if (detectedShotSizeTerm) {
+                technicalPrefix.push(detectedShotSizeTerm);
+            }
+            if (detectedAngleHeightTerm) {
+                technicalPrefix.push(detectedAngleHeightTerm);
+            }
+            if (detectedDirectionTerm) {
+                // 如果有角色名，替换"人物"为角色名
+                if (characterName) {
+                    detectedDirectionTerm = detectedDirectionTerm.replace(/^人物/, characterName);
+                }
+                technicalPrefix.push(detectedDirectionTerm);
+            }
+            if (technicalPrefix.length > 0) {
+                components.push(technicalPrefix.join('，'));
+            }
+
+            // 2. 主体描述
+            if (parts.subject) {
+                components.push(parts.subject);
+            }
+
+            // 3. 环境背景
+            if (parts.environment) {
+                components.push(parts.environment);
+            }
+
+            // 4. 光影氛围
+            if (parts.lighting) {
+                components.push(parts.lighting);
+            }
+
+            // 组装最终提示词
+            optimizedPrompt = components.join('。').replace(/。+/g, '。').trim();
+
+            // 控制字数在100-150字
+            if (optimizedPrompt.length > 200) {
+                // 如果超过200字，优先保留技术参数、主体描述、光影氛围
+                const essentialParts = [];
+                if (technicalPrefix.length > 0) {
+                    essentialParts.push(technicalPrefix.join('，'));
+                }
+                if (parts.subject) {
+                    essentialParts.push(parts.subject);
+                }
+                if (parts.lighting) {
+                    essentialParts.push(parts.lighting);
+                }
+                // 截取环境背景
+                const remaining = 150 - essentialParts.join('。').length;
+                if (remaining > 0 && parts.environment) {
+                    const envText = parts.environment.substring(0, remaining);
+                    essentialParts.push(envText);
+                }
+                optimizedPrompt = essentialParts.join('。').replace(/。+/g, '。').trim();
+            }
+
+            // 显示结果
+            document.getElementById('imageCnPrompt').textContent = optimizedPrompt;
+
+            // 生成技术建议
+            let suggestions = [];
+
+            // 显示检测到的术语
+            if (detectedShotSizeTerm) {
+                suggestions.push(`✅ 景别：${detectedShotSizeTerm}`);
+            }
+            if (detectedAngleHeightTerm) {
+                suggestions.push(`✅ 角度高度：${detectedAngleHeightTerm}`);
+            }
+            if (detectedDirectionTerm) {
+                suggestions.push(`✅ 人物朝向：${detectedDirectionTerm}`);
+            }
+
+            // 显示内容结构
+            suggestions.push('');
+            suggestions.push('📋 内容结构：');
+            if (parts.subject) {
+                const preview = parts.subject.length > 30 ? parts.subject.substring(0, 30) + '...' : parts.subject;
+                suggestions.push(`　• 主体描述：${preview}`);
+            } else {
+                suggestions.push(`　• 主体描述：（未提取）`);
+            }
+            if (parts.environment) {
+                const preview = parts.environment.length > 30 ? parts.environment.substring(0, 30) + '...' : parts.environment;
+                suggestions.push(`　• 环境背景：${preview}`);
+            } else {
+                suggestions.push(`　• 环境背景：（未提取）`);
+            }
+            if (parts.lighting) {
+                const preview = parts.lighting.length > 30 ? parts.lighting.substring(0, 30) + '...' : parts.lighting;
+                suggestions.push(`　• 光影氛围：${preview}`);
+            } else {
+                suggestions.push(`　• 光影氛围：（未提取）`);
+            }
+
+            // 字数统计
+            suggestions.push('');
+            suggestions.push(`📊 字数统计：${optimizedPrompt.length}字`);
+
+            if (optimizedPrompt.length < 80) {
+                suggestions.push(`⚠️ 字数偏少，建议增加到100-150字`);
+            } else if (optimizedPrompt.length > 200) {
+                suggestions.push(`⚠️ 字数偏多，已自动精简到150字以内`);
+            } else if (optimizedPrompt.length >= 100 && optimizedPrompt.length <= 150) {
+                suggestions.push(`✅ 字数符合最佳范围（100-150字）`);
+            } else {
+                suggestions.push(`✅ 字数符合规范（80-200字）`);
+            }
+
+            // 角度组合建议
+            if (shotSize === '正面' || direction === '正面') {
+                suggestions.push('⚠️ 正面镜头占比应≤7%，建议使用3/4正面或侧面');
+            }
+            if (angleHeight === '平视') {
+                suggestions.push('⚠️ 平视镜头占比应10-15%，建议使用轻微仰拍或俯拍');
+            }
+
+            document.getElementById('imageSuggestionsList').innerHTML = suggestions.join('<br>');
+
+            // 显示违规检测
+            if (violations.length > 0) {
+                let violationHtml = violations.map(v =>
+                    `• 发现禁用术语："${v.term}"<br>　原因：${v.reason}<br>　建议替换为："${v.replacement}"`
+                ).join('<br><br>');
+                document.getElementById('imageViolationsList').innerHTML = violationHtml;
+            } else {
+                document.getElementById('imageViolationsList').innerHTML = '✅ 未发现禁用术语';
+            }
+        }
+
+        // 生成视频提示词
+        function optimizeVideoPrompt() {
+            const userInput = document.getElementById('videoInput').value.trim();
+            const videoType = document.getElementById('videoType').value;
+            const includeStyle = document.getElementById('includeStyle').checked;
+            const includeCamera = document.getElementById('includeCamera').checked;
+
+            if (!userInput) {
+                alert('请先输入动作描述！');
+                return;
+            }
+
+            let videoPrompt = '';
+
+            if (videoType === 'i2v') {
+                // I2V（图生视频）公式
+                let parts = [];
+
+                if (includeStyle) {
+                    parts.push('保持原图风格不变');
+                }
+
+                parts.push(userInput);
+
+                if (includeCamera) {
+                    parts.push('镜头缓慢推进');
+                }
+
+                parts.push('光影自然过渡');
+
+                videoPrompt = parts.join('，') + '。';
+            } else {
+                // 首尾帧生视频公式
+                let parts = ['从首帧到尾帧'];
+
+                parts.push(userInput);
+                parts.push('动作流畅自然');
+
+                if (includeStyle) {
+                    parts.push('保持整体风格一致');
+                }
+
+                if (includeCamera) {
+                    parts.push('镜头固定不动');
+                }
+
+                parts.push('全程无风格断层');
+
+                videoPrompt = parts.join('，') + '。';
+            }
+
+            // 显示结果
+            document.getElementById('videoPrompt').textContent = videoPrompt;
+            document.getElementById('videoNegativePrompt').textContent = negativePromptTemplate;
+
+            // 生成技术建议
+            let suggestions = [];
+            suggestions.push(`• 视频类型：${videoType === 'i2v' ? 'I2V（图生视频）' : '首尾帧生视频'}`);
+            suggestions.push(`• 字数：${videoPrompt.length}字`);
+            suggestions.push(`• 包含风格保持：${includeStyle ? '是' : '否'}`);
+            suggestions.push(`• 包含运镜描述：${includeCamera ? '是' : '否'}`);
+
+            if (videoPrompt.length < 50) {
+                suggestions.push(`⚠️ 字数偏少，建议增加动作细节描述`);
+            } else if (videoPrompt.length > 150) {
+                suggestions.push(`⚠️ 字数偏多，建议精简描述`);
+            } else {
+                suggestions.push(`✅ 字数符合规范（50-150字）`);
+            }
+
+            document.getElementById('videoSuggestionsList').innerHTML = suggestions.join('<br>');
+
+            // 检测难以处理的动作
+            let warnings = [];
+            difficultActions.forEach(action => {
+                if (userInput.includes(action)) {
+                    warnings.push(`⚠️ 检测到"${action}"，AI可能难以准确生成`);
+                }
+            });
+
+            if (warnings.length > 0) {
+                warnings.push('<br><strong>建议</strong>：简化动作描述，使用AI擅长的简单动作（走路、挥手、转身等）');
+                document.getElementById('videoWarningsList').innerHTML = warnings.join('<br>');
+            } else {
+                document.getElementById('videoWarningsList').innerHTML = '✅ 未检测到难以处理的动作';
+            }
+        }
+
+        // 更新视频提示词占位符
+        function updateVideoPlaceholder() {
+            const videoType = document.getElementById('videoType').value;
+            const textarea = document.getElementById('videoInput');
+
+            if (videoType === 'i2v') {
+                textarea.placeholder = '例如：仕女缓慢抬起右手，轻执茶杯，背景纱帘随微风轻微飘动...';
+            } else {
+                textarea.placeholder = '例如：人物身体匀速覆盖机械装甲，装甲先从肩部生成再向手臂躯干腿部延伸...';
+            }
+        }
+
+        // ==================== 交互功能 ====================
+
+        // 切换优化助手
+        function toggleOptimizer() {
+            const optimizer = document.getElementById('prompt-optimizer');
+            const icon = document.getElementById('optimizerToggleIcon');
+
+            if (optimizer.classList.contains('collapsed')) {
+                optimizer.classList.remove('collapsed');
+                optimizer.classList.add('expanded');
+                icon.textContent = '▼ 收起';
+            } else {
+                optimizer.classList.remove('expanded');
+                optimizer.classList.add('collapsed');
+                icon.textContent = '▲ 展开';
+            }
+        }
+
+        // 切换标签页
+        function switchTab(tabName) {
+            // 隐藏所有标签页内容
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // 移除所有标签按钮的active状态
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // 显示选中的标签页
+            if (tabName === 'image') {
+                document.getElementById('imageTab').classList.add('active');
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            } else {
+                document.getElementById('videoTab').classList.add('active');
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            }
+        }
+
+        // 清空图像输入
+        function clearImageInput() {
+            document.getElementById('imageInput').value = '';
+            document.getElementById('imageCnPrompt').textContent = '等待优化...';
+            document.getElementById('imageSuggestionsList').textContent = '等待分析...';
+            document.getElementById('imageViolationsList').textContent = '等待检测...';
+        }
+
+        // 清空视频输入
+        function clearVideoInput() {
+            document.getElementById('videoInput').value = '';
+            document.getElementById('videoPrompt').textContent = '等待生成...';
+            document.getElementById('videoNegativePrompt').textContent = '等待生成...';
+            document.getElementById('videoSuggestionsList').textContent = '等待分析...';
+            document.getElementById('videoWarningsList').textContent = '等待检测...';
+        }
+
+        // 复制文本（带成功反馈）
+        function copyText(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            const button = event.target;
+
+            navigator.clipboard.writeText(text).then(() => {
+                // 显示成功提示
+                showToast('✅ 已复制到剪贴板！');
+
+                // 按钮动画反馈
+                button.classList.add('copied');
+                const originalText = button.textContent;
+                button.textContent = '✓ 已复制';
+
+                setTimeout(() => {
+                    button.classList.remove('copied');
+                    button.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                showToast('❌ 复制失败，请重试', 'error');
+            });
+        }
+
+        // 显示提示消息
+        function showToast(message, type = 'success') {
+            // 移除已存在的提示
+            const existingToast = document.querySelector('.success-toast');
+            if (existingToast) {
+                existingToast.remove();
+            }
+
+            // 创建新提示
+            const toast = document.createElement('div');
+            toast.className = 'success-toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            // 3秒后自动移除
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        // 切换主题
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const floatIcon = document.getElementById('themeIcon');
+            const sidebarIcon = document.getElementById('sidebarThemeIcon');
+
+            document.documentElement.setAttribute('data-theme', newTheme);
+            const iconText = newTheme === 'dark' ? '☀️' : '🌙';
+            if (floatIcon) floatIcon.textContent = iconText;
+            if (sidebarIcon) sidebarIcon.textContent = iconText;
+
+            // 保存主题偏好
+            localStorage.setItem('theme', newTheme);
+
+            // 显示切换提示
+            const themeIcon = newTheme === 'dark' ? '🌙' : '☀️';
+            const text = newTheme === 'dark' ? '已切换到暗色主题' : '已切换到亮色主题';
+            showToast(`${themeIcon} ${text}`);
+        }
+
+        // 快捷键支持
+        document.addEventListener('keydown', (e) => {
+            // Ctrl/Cmd + Enter: 生成提示词
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                const activeTab = document.querySelector('.tab-content.active');
+                if (activeTab && activeTab.id === 'imageTab') {
+                    optimizeImagePrompt();
+                } else if (activeTab && activeTab.id === 'videoTab') {
+                    optimizeVideoPrompt();
+                }
+            }
+
+            // Ctrl/Cmd + K: 清空输入
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                const activeTab = document.querySelector('.tab-content.active');
+                if (activeTab && activeTab.id === 'imageTab') {
+                    clearImageInput();
+                } else if (activeTab && activeTab.id === 'videoTab') {
+                    clearVideoInput();
+                }
+            }
+
+            // Ctrl/Cmd + D: 切换主题
+            if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+                e.preventDefault();
+                toggleTheme();
+            }
+        });
+
+        // 搜索功能
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const sections = document.querySelectorAll('section');
+
+            sections.forEach(section => {
+                const text = section.textContent.toLowerCase();
+                if (text.includes(searchTerm) || searchTerm === '') {
+                    section.style.display = 'block';
+                } else {
+                    section.style.display = 'none';
+                }
+            });
+        });
+
+        // 目录高亮
+        window.addEventListener('scroll', function() {
+            const sections = document.querySelectorAll('section');
+            const tocLinks = document.querySelectorAll('.toc-link');
+
+            let currentSection = '';
+
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (window.pageYOffset >= sectionTop - 100) {
+                    currentSection = section.getAttribute('id');
+                }
+            });
+
+            tocLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + currentSection) {
+                    link.classList.add('active');
+                }
+            });
+        });
+
+        // 页面加载时恢复主题
+        window.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const floatIcon = document.getElementById('themeIcon');
+            const sidebarIcon = document.getElementById('sidebarThemeIcon');
+
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            const iconText = savedTheme === 'dark' ? '☀️' : '🌙';
+            if (floatIcon) floatIcon.textContent = iconText;
+            if (sidebarIcon) sidebarIcon.textContent = iconText;
+
+            // 显示快捷键提示（仅首次访问）
+            if (!localStorage.getItem('shortcutsShown')) {
+                setTimeout(() => {
+                    showToast('💡 快捷键：Ctrl+Enter 生成 | Ctrl+K 清空 | Ctrl+D 切换主题');
+                    localStorage.setItem('shortcutsShown', 'true');
+                }, 2000);
+            }
+        });
+    </script>
+
+    <!-- 浮动主题切换按钮 -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="切换主题 (Ctrl+D)">
+        <span id="themeIcon">🌙</span>
+    </button>
+</body>
+</html>
+

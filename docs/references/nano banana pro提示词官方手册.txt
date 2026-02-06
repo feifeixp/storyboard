@@ -1,0 +1,436 @@
+nano banana pro提示词
+核心提示词公式 (The Pro Formula) Nano Banana Pro 具备“思考”能力，因此你可以写得更像是在跟摄影师对话，而不是单纯堆砌关键词。
+公式：[基础描述] + [参考指引] + [精准控制] + [文字/细节]
+基础描述 (Base): 这是一个穿赛博朋克外套的女孩，站在雨夜的台北街头。
+参考指引 (Reference): （关键功能） 请保持人物面部特征与我上传的照片一致。
+精准控制 (Control): 景深要浅（f/1.8），焦点在她的眼睛上，光线要是霓虹灯反射的蓝紫色调。
+文字/细节 (Text/Detail): 墙上的霓虹灯招牌必须清晰地写着 "BANANA CAFE"。
+“Pro” 版的三大独家功能（必看！） 这份手册里最值钱的部分是这三个新功能的使用方法：
+A. 角色一致性 (Character Consistency) 这是 Nano Banana Pro 最强的功能。
+怎么用： 必须先上传参考图（最多支持上传参考图）。
+提示词写法：
+"Generate a new image of this character (referring to the uploaded photo). She is now sitting in a coffee shop reading a book. Keep her facial features, hair style, and clothing consistent with the reference image." (中文：生成这个角色的新图片。她现在正坐在咖啡店看书。请保持她的五官、发型和衣服与参考图完全一致。)
+B. 思考型生成 (Thinking Process) Nano Banana Pro 会在生成前“思考”你的逻辑。
+怎么用： 在 Gemini Advanced 或 API 设置中开启 "Thinking" (思考) 模式。
+提示词写法： 你可以提出复杂的逻辑要求。
+"Draw a diagram showing the anatomy of a mechanical dragon, labelled in English. Make it look like a Leonardo da Vinci sketch on old parchment." (中文：画一张机械龙的解剖图，用英文标注。风格要像达芬奇在旧羊皮纸上的素描。) 它会理解“解剖图”、“标注”、“达芬奇风格”之间的逻辑关系，而不仅仅是拼接元素。
+C. 精准文字渲染 (Text Rendering) 终于不再是乱码了。
+怎么用： 使用双引号 "" 明确框出文字。
+提示词写法：
+"A futuristic movie poster titled 'NANO BANANA'. The text should be in bold, glowing chrome letters at the top."
+官方推荐的“编辑”技巧 (In-painting) Nano Banana Pro 的另一大强项是局部重绘，也就是“改图”。
+场景： 你生成了一张完美的图，但想给人物戴个帽子。
+官方指令： 不要重新生成！直接选中区域（或在对话中说）：
+"Add a red baseball cap to the character's head. Keep the lighting consistent." (中文：给角色头上加一顶红色的棒球帽。保持光影一致。)
+提示词 = 主体 (Subject) + 媒介 (Medium) + 风格 (Style) + 环境/光影 (Context/Lighting) + 细节 (Details)
+分解说明： 主体 (Subject): 画面的核心。
+例: "A cute robot", "A futuristic car".
+媒介 (Medium): 图片的物理形态。
+关键修饰词: Photography (摄影), Oil painting (油画), 3D render (3D渲染), Vector art (矢量图), Pencil sketch (素描).
+风格 (Style): 艺术流派或视觉感受。
+关键修饰词: Minimalist (极简), Cyberpunk (赛博朋克), Vintage (复古), Studio Ghibli style (吉卜力风格), Abstract (抽象).
+环境/光影 (Context/Lighting): 背景和氛围。
+关键修饰词: Golden hour (黄金时刻), Cinematic lighting (电影光), Studio lighting (影棚光), Soft focus (柔焦), In a dense forest.
+细节 (Details): 提升质感的补充描述。
+关键修饰词: 4k, High resolution, Intricate details, Sharp focus, Wide angle.
+Imagen 配置
+Imagen 目前仅支持英语提示和以下参数：
+注意： 参数的命名惯例因编程语言而异。
+
+numberOfImages：要生成的图片数量，范围为 1 到 4（含）。 默认值为 4。
+
+
+imageSize：生成的图片的大小。仅 Standard 和 Ultra 型号支持此功能。支持的值为 1K 和 2K。 默认值为 1K。
+
+
+aspectRatio：更改所生成图片的宽高比。支持的值包括 "1:1"、"3:4"、"4:3"、"9:16" 和 "16:9"。默认值为 "1:1"。
+
+
+personGeneration：允许模型生成人物图片。支持以下值：
+
+"dont_allow"：禁止生成人物图片。
+"allow_adult"：生成成人的图像，但不生成儿童的图像。这是默认值。
+"allow_all"：生成包含成人和儿童的图片。
+注意： 欧盟、英国、瑞士、中东和北非 (MENA) 地区不允许使用 "allow_all" 参数值。
+Gemini 3 Pro 图片功能的新变化
+Gemini 3 Pro Image (gemini-3-pro-image-preview) 是一款最先进的图像生成与编辑模型，专为专业素材资源制作而优化。 Gemini 1.5 Pro 旨在通过高级推理功能应对最具挑战性的工作流程，擅长处理复杂的、多轮的创建和修改任务。
+高分辨率输出：内置了生成 1K、2K 和 4K 视觉内容的功能。
+高级文字渲染：能够为信息图表、菜单、图表和营销素材资源生成清晰易读的风格化文字。
+使用 Google 搜索进行接地：模型可以使用 Google 搜索作为工具来验证事实，并根据实时数据（例如当前天气地图、股市图表、近期活动）生成图片。
+思考模式：模型会利用“思考”过程来推理复杂的提示。它会生成临时“思维图像”（在后端可见，但不收费），以在生成最终的高质量输出之前优化构图。
+最多 14 张参考图片：您现在最多可以混合使用 14 张参考图片来生成最终图片。
+最多可使用 14 张参考图片
+借助 Gemini 3 Pro 预览版，您可以混合使用最多 14 张参考图片。这 14 张图片可以包含以下内容：
+最多 6 张高保真对象图片，用于包含在最终图片中
+最多 5 张人像照片，以保持角色一致性
+magen 提示指南
+本部分 Imagen 指南介绍了修改文本转图片提示会如何产生不同的结果，并举例说明了您可以创建的图片。
+提示撰写的基础知识
+注意： 提示的长度上限为 480 个 token。
+好的提示应具有描述性、清晰明了，并使用有意义的关键字和修饰符。首先，请考虑主题、背景和风格。
+主体：对于任何提示，首先要考虑的都是主体：对象、人物、动物或场景。
+背景和环境：与主体所处的背景或环境一样重要。请尝试将主体置于各种背景下。例如，白色背景、户外或室内环境下的工作室。
+样式：最后，添加所需图片的样式。样式可以是常规内容（绘画、照片、草图），也可以是非常具体的内容（色粉画、木炭画、无透视三维绘图）。您还可以组合使用多种样式。
+在撰写第一版提示后，请通过添加更多详细信息来优化提示，直到您获得所需的图片为止。迭代很重要。首先确定核心概念，然后在此核心概念的基础上进行优化和扩展，直到生成的图片接近您的构想为止。
+提示：A park in the spring next to a lake
+提示：A park in the spring next to a lake, the sun sets across the lake, golden hour
+提示：A park in the spring next to a lake, the sun sets across the lake, golden hour, red wildflowers
+无论您的提示是简短的还是较长且详细的，Imagen 模型都可以将您的想法转换为详细的图片。通过迭代提示和添加详细信息来优化您的构想，直到您获得理想的结果。
+您可以使用短提示快速生成图片。提示：close-up photo of a woman in her 20s, street photography, movie still, muted orange warm tones
+您可以使用较长提示添加具体详细信息并构建图片。
+提示：captivating photo of a woman in her 20s utilizing a street photography style. The image should look like a movie still with muted orange warm tones.
+关于 Imagen 提示撰写的其他建议：
+使用描述性语言：使用详细的形容词和副词，为 Imagen 描绘清晰的画面。
+提供背景信息：根据需要，添加背景信息以帮助 AI 理解。
+参考特定艺术家或风格：如果您有特定的审美观，参考特定艺术家或艺术运动可能会有所帮助。
+使用提示工程工具：可考虑探索提示工程工具或资源，以帮助您优化提示并实现最佳结果。
+增强个人和群组图片中的面部细节：指定面部细节作为照片的焦点（例如，在提示中使用“portrait”一词）。
+在图片中生成文本
+Imagen 模型可以在图片中添加文字，从而为创造性图片生成提供了更多可能性。请按照以下指南来充分利用此功能：
+自信地迭代：您可能需要重新生成图片，直到实现所需的外观为止。Imagen 的文本集成仍在不断发展，有时多次尝试才能获得最佳结果。
+简短明了：为获得最佳生成效果，请将文本长度限制在 25 个字符以内。
+多个短语：尝试使用两三个不同的词组来提供更多信息。为了让组合更清晰，请避免超过三个短语。
+提示：A poster with the text "Summerland" in bold font as a title, underneath this text is the slogan "Summer never felt so good"
+指导放置：虽然 Imagen 可以尝试按指示放置文本，但您应该预料到偶尔会出现一些变化。此功能正在不断改进。
+启发性字体样式：指定一种常规字体样式，以巧妙地影响 Imagen 的选择。不要依赖精确的字体复制，而是期待富有创意的诠释。
+字体大小：指定字体大小或有关大小的一般指示（例如，小、中、大）以影响字体大小生成。
+提示参数化
+为了更好地控制输出结果，将发送给 Imagen 的输入参数化可能会有所帮助。例如，假设您希望客户能够为自己的企业生成徽标，并且希望确保徽标始终在纯色背景上生成。您还想限制客户端可以从菜单中选择的选项。
+在此示例中，您可以创建一个类似于以下内容的参数化提示：
+A{logo_style} logo for a{company_area} company on a solid color background. Include the text{company_name}.
+在自定义界面中，客户可以使用菜单输入参数，并且他们选择的值会填充 Imagen 收到的提示。
+例如：
+提示：A minimalist logo for a health care company on a solid color background. Include the text Journey.
+提示：A modern logo for a software company on a solid color background. Include the text Silo.
+提示：A traditional logo for a baking company on a solid color background. Include the text Seed.
+
+高级提示撰写技术
+使用以下示例根据属性（例如摄影描述符、形状和材料、历史艺术运动和图像质量修饰符）创建更具体的提示。
+摄影
+提示包括：“...的照片”
+如需使用此风格，请先使用关键字，明确告诉 Imagen 您所需要的是照片。提示开头是*“一张. . . 的照片”*。例如：
+在以下示例中，您可以看到多个专用于照片的修饰符和参数。您可以组合使用多个修饰符，以便更精确地进行控制。
+相机邻近性 - 特写，从远处拍摄 
+
+提示：A close-up photo of coffee beans
+
+提示：A zoomed out photo of a small bag of coffee beans in a messy kitchen
+
+2、相机位置 - 航拍、仰拍
+提示：aerial photo of urban city with skyscrapers
+提示：A photo of a forest canopy with blue skies from below
+
+3、光线 - 自然、舞台、暖、冷
+提示：studio photo of a modern arm chair, natural lighting
+提示：studio photo of a modern arm chair, dramatic lighting
+4、相机设置 - 运动模糊、柔焦、焦外成像、人像
+提示：photo of a city with skyscrapers from the inside of a car with motion blur 提示：soft focus photograph of a bridge in an urban city at night
+5、镜头类型 - 35 毫米、50 毫米、鱼眼、广角、微距
+提示：叶子的照片，微距镜头 提示：街道摄影、纽约市、鱼眼镜头
+6、胶片类型 - 黑白、拍立得
+提示：a polaroid portrait of a dog wearing sunglasses 提示：black and white photo of a dog wearing sunglasses
+插图和艺术
+艺术风格各不相同，从铅笔素描等单色风格到超现实的数字艺术均有。例如，以下图片使用相同提示而使用不同风格：
+一辆背景是摩天大楼的棱角分明的运动型电动轿车的 [art style or creation technique]
+
+提示包括：“...的painting ”、“...的sketch ”
+
+提示：A technical pencil drawing of an angular...
+提示：A charcoal drawing of an angular...
+提示：A color pencil drawing of an angular...
+提示：A pastel painting of an angular...
+提示：A digital art of an angular...
+提示：An art deco (poster) of an angular...
+
+形状和材料
+提示包括：“...制作的...”、“...形状的…”
+这项技术的一大优势是您可以创建以其他方式难以实现或无法实现的图像。例如，您可以用不同的材料和纹理重新创建公司徽标。
+提示：a duffle bag made of cheese
+提示：neon tubes in the shape of a bird
+提示：an armchair made of paper, studio photo, origami style
+
+历史艺术参考
+提示包括：“...风格的...”
+多年来，某些风格已经成为标志。以下是一些您可以尝试的历史绘图或艺术风格想法。
+“generate an image in the style of [art period or movement] : a wind farm”
+提示：generate an image in the style of an impressionist painting: a wind farm
+提示：generate an image in the style of a renaissance painting: a wind farm
+提示：generate an image in the style of pop art: a wind farm
+图片质量修饰符
+某些关键字可使模型知道您正在寻找高质量的资源。质量修饰符的示例包括：
+常规修饰符 - 高品质、精美、风格化
+照片 - 4K、HDR、摄影棚照片
+艺术、插图 - 由专业的、详细的
+以下是几个不带质量修饰符的提示以及带有质量修饰符的相同提示的示例。
+提示（无质量修饰符）：a photo of a corn stalk
+提示（带有质量修饰符）：4k HDR beautiful photo of a corn stalk taken by aprofessional photographer
+宽高比
+借助 Imagen 图片生成，您可以设置五种不同的图片宽高比。
+方形（1:1，默认值）- 标准方形照片。这种宽高比的常见用途包括社交媒体帖子。
+全屏 (4:3) - 这种宽高比通常用于媒体或电影。它也是大多数旧款（非宽屏）电视和中等格式相机的尺寸。它可水平拍摄更多场景（与 1:1 相比），因而成为摄影的首选宽高比。 
+提示：close up of a musician's fingers playing the piano, black and white film, vintage (4:3 aspect ratio)
+提示：高档餐厅的炸薯条的专业工作室照片，采用美食杂志的风格（宽高比为 4:3）
+3、纵向全屏 (3:4) - 这是旋转 90 度的全屏宽高比。与 1:1 宽高比相比，这种宽高比可垂直拍摄更多场景。
+提示：一位徒步旅行的女士，靴子的近处倒映在水坑中，背景是大山，广告风格，戏剧性的角度（宽高比为 3:4）
+提示：aerial shot of a river flowing up a mystical valley (3:4 aspect ratio)
+4、宽屏 (16:9) - 此宽高比已取代 4:3，现在是电视、显示器和手机屏幕（横向）的最常用宽高比。如果您想拍摄更多背景（例如风景），请使用这种宽高比。
+提示：a man wearing all white clothing sitting on the beach, close up, golden hour lighting (16:9 aspect ratio)
+5、纵向 (9:16) - 这种宽高比是宽屏，但进行了旋转。这是一种相对较新的宽高比，深受短视频应用（例如 YouTube Shorts）的欢迎。可将这种宽高比用于具有强烈垂直方向的较高对象，例如建筑物、树、瀑布或其他类似对象。
+提示：a digital render of a massive skyscraper, modern, grand, epic with a beautiful sunset in the background (9:16 aspect ratio)
+逼真图片
+图片生成模型的不同版本可以同时提供具有艺术效果的输出和逼真的输出。根据要生成的主题，在提示中使用以下措辞，以生成更逼真的输出。
+**注意：**在尝试创建逼真图片时，请将这些关键字作为一般指导。为了获得你想要的结果，必须使用这些关键字。
+使用场景	镜头类型	焦距	其他详情
+人物（人像）	定焦、变焦	24-35 毫米	黑白胶片、黑色电影、景深、双色调（提及两种颜色）
+食品、昆虫、植物（物体、静物）	宏	60-105 毫米	高精度、精准聚焦、控制照明
+体育运动、野生动物（运动）	远摄变焦	100-400 毫米	高速快门、动作或运动追踪
+天文、风光（广角）	广角	10-24 毫米	长曝光、清晰对焦、长曝光、平滑的水或云
+人像
+使用场景	镜头类型	焦距	其他详情
+人物（人像）	定焦、变焦	24-35 毫米	黑白胶片、黑色电影、景深、双色调（提及两种颜色）
+提示：A woman, 35mm portrait, blue and grey duotones
+模型：imagen-3.0-generate-002
+提示：A woman, 35mm portrait, film noir
+模型：imagen-3.0-generate-002
+对象
+食品、昆虫、植物（物体、静物），焦距：60-105 毫米，高精度、精准聚焦、控制照明
+使用表中的多个关键字，Imagen 可以生成以下静物图片：
+提示：竹芋的叶子、微距镜头、60 毫米
+模型：imagen-3.0-generate-002
+提示：一盘意大利面、100 毫米微距镜头
+模型：imagen-3.0-generate-002
+动画
+体育运动、野生动物（运动），镜头：远摄变焦，焦距：100-400 毫米，其他：高速快门、动作或运动追踪
+使用表中的多个关键字，Imagen 可以生成以下运动图片：案例：
+提示：a winning touchdown, fast shutter speed, movement tracking
+模型：imagen-3.0-generate-002
+提示：森林中奔跑的鹿、高速快门、运动追踪
+模型： imagen-3.0-generate-002
+广角
+天文、风光（广角），镜头：广角，焦距：10-24毫米，其他：长曝光、清晰对焦、长曝光、平滑的水或云
+使用表中的多个关键字，Imagen 可以生成以下广角图片：
+提示：广阔的山脉、10 毫米风光广角
+模型：imagen-3.0-generate-002
+提示：月亮的照片、天文摄影、10 毫米广角
+模型：imagen-3.0-generate-002
+用于生成图片的提示
+以下策略将帮助您创建有效的提示，从而生成您想要的图片。
+
+逼真场景 对于逼真的图片，请使用摄影术语。提及拍摄角度、镜头类型、光线和细节，引导模型生成逼真的效果。 模板： A photorealistic [shot type] of [subject], [action or expression], set in [environment]. The scene is illuminated by [lighting description], creating a [mood] atmosphere. Captured with a [camera/lens details], emphasizing [key textures and details]. The image should be in a [aspect ratio] format. 中文： 一张照片级真实感的[镜头类型]，展现[主体]的[动作或表情]，置于[环境]之中。场景由[照明描述]照亮，营造出[氛围]氛围。使用[相机/镜头细节]拍摄，强调[关键纹理和细节]。图像应为[宽高比]格式。
+
+提示： A photorealistic close-up portrait of an elderly Japanese ceramicist with deep, sun-etched wrinkles and a warm, knowing smile. He is carefully inspecting a freshly glazed tea bowl. The setting is his rustic, sun-drenched workshop. The scene is illuminated by soft, golden hour light streaming through a window, highlighting the fine texture of the clay. Captured with an 85mm portrait lens, resulting in a soft, blurred background (bokeh). The overall mood is serene and masterful. Vertical portrait orientation. 中文： 一幅照片级逼真的特写肖像，描绘一位年迈的日本陶艺家。他深邃的皱纹如阳光镌刻，带着温暖而睿智的微笑，正仔细端详一只刚上釉的茶碗。场景设在他质朴的工作室内，阳光充盈其间。金色暮光透过窗户柔柔洒入，映照出陶土细腻的质感。使用85毫米人像镜头拍摄，营造出柔美的背景虚化效果。整体氛围静谧而彰显匠心，采用竖构图格式。 https://ai.google.dev/static/gemini-api/docs/images/photorealistic_example.png?hl=zh-cn
+
+
+风格化插画和贴纸 如需创建贴纸、图标或素材资源，请明确说明样式并要求使用透明背景。 A [style] sticker of a [subject], featuring [key characteristics] and a [color palette]. The design should have [line style] and [shading style]. The background must be transparent. 一张[风格]风格的[主体]贴纸，呈现[关键特征]与[配色方案]。设计需采用[线条风格]及[阴影风格]。背景必须为透明。 A kawaii-style sticker of a happy red panda wearing a tiny bamboo hat. It's munching on a green bamboo leaf. The design features bold, clean outlines, 一张萌系风格的小熊猫贴纸，它头戴小巧竹帽，正开心地啃着翠绿竹叶。设计采用粗犷清晰的轮廓线条，搭配简洁的赛璐珞风格着色与鲜活明快的色彩。背景必须为纯白色。 simple cel-shading, and a vibrant color palette. The background must be white. https://ai.google.dev/static/gemini-api/docs/images/red_panda_sticker.png?hl=zh-cn
+
+
+图片中的文字准确无误 Gemini 在呈现文本方面表现出色。清楚说明文字、字体样式（描述性）和整体设计。使用 Gemini 3 Pro 图片预览功能制作专业资源。 Create a [image type] for [brand/concept] with the text "[text to render]" in a [font style]. The design should be [style description], with a [color scheme]. 为[品牌/概念]创建[图像类型]，文字内容为"[待渲染文字]"，采用[字体风格]。整体设计应呈现[风格描述]，并搭配[配色方案]。 Create a modern, minimalist logo for a coffee shop called 'The Daily Grind'. The text should be in a clean, bold, sans-serif font. The color scheme is black and white. Put the logo in a circle. Use a coffee bean in a clever way. 为一家名为"每日研磨"的咖啡店设计现代极简风格的圆形标志。文字采用干净利落的粗体无衬线字体，配色方案为黑白双色。需巧妙融入咖啡豆元素（例如通过负空间等设计手法呈现）。
+
+https://ai.google.dev/static/gemini-api/docs/images/logo_example.jpg?hl=zh-cn
+
+
+产品模型和商业摄影 非常适合为电子商务、广告或品牌宣传制作清晰专业的商品照片。 模板：A high-resolution, studio-lit product photograph of a [product description] on a [background surface/description]. The lighting is a [lighting setup, e.g., three-point softbox setup] to [lighting purpose]. The camera angle is a [angle type] to showcase [specific feature]. Ultra-realistic, with sharp focus on [key detail]. [Aspect ratio].
+
+一张高分辨率、影棚灯光下的产品摄影图，呈现[产品描述]置于[背景表面/描述]之上。采用[灯光设置，如三点柔光箱布局]以实现[灯光目的]。相机角度选用[角度类型]以突出展示[具体特征]。超写实风格，对[关键细节]进行精准对焦。[画幅比例]。 提示：A high-resolution, studio-lit product photograph of a minimalist ceramic coffee mug in matte black, presented on a polished concrete surface. The lighting is a three-point softbox setup designed to create soft, diffused highlights and eliminate harsh shadows. The camera angle is a slightly elevated 45-degree shot to showcase its clean lines. Ultra-realistic, with sharp focus on the steam rising from the coffee. Square image.
+
+https://ai.google.dev/static/gemini-api/docs/images/product_mockup.png?hl=zh-cn
+
+5. 极简风格和负空间设计
+非常适合用于创建网站、演示或营销材料的背景，以便在其中叠加文字。
+https://ai.google.dev/static/gemini-api/docs/images/minimalist_design.png?hl=zh-cn
+模板：
+A minimalist composition featuring a single [subject] positioned in the
+[bottom-right/top-left/etc.] of the frame. The background is a vast, empty
+[color] canvas, creating significant negative space. Soft, subtle lighting.
+[Aspect ratio].
+
+一幅极简构图：将单一的[主体]置于画面的[右下角/左上角等]位置。背景是开阔的[颜色]留白画面，形成显著的负空间。光线柔和微妙。[画幅比例]。
+提示：
+A minimalist composition featuring a single, delicate red maple leaf
+positioned in the bottom-right of the frame. The background is a vast, empty
+off-white canvas, creating significant negative space for text. Soft,
+diffused lighting from the top left. Square image.
+一幅极简构图：唯有一片精致的红色枫叶静置于画面右下角。背景是开阔的米白画布，形成大量可供文字排版的负空间。左上方向投射来柔和漫射的光线。方形画幅。
+6. 连续艺术（漫画分格 / 故事板）
+以角色一致性和场景描述为基础，为视觉故事讲述创建分格。为了确保文本准确性和故事讲述能力，这些提示最适合搭配 Gemini 3 Pro Image Preview 使用。
+https://ai.google.dev/static/gemini-api/docs/images/comic_panel.jpg?hl=zh-cn
+模板：Make a 3 panel comic in a [style]. Put the character in a [type of scene].
+以[风格]绘制三格漫画。将角色置于[场景类型]中。
+提示：Make a 3 panel comic in a gritty, noir art style with high-contrast black and white inks. Put the character in a humurous scene.
+用粗犷的黑色电影艺术风格和高对比度的黑白墨水绘制三格漫画。将角色置于幽默场景中。
+7. 使用 Google 搜索建立依据
+使用 Google 搜索根据最新信息或实时信息生成图片。 这对于新闻、天气和其他时效性主题非常有用。
+Make a simple but stylish graphic of last night's Arsenal game in the Champion's League
+制作一张简约时尚的图形，呈现昨晚阿森纳队在欧冠联赛的比赛画面。
+用于修改图片的提示
+以下示例展示了如何提供图片以及文本提示，以进行编辑、构图和风格迁移。
+1. 添加和移除元素
+提供图片并描述您的更改。模型将与原始图片的风格、光照和透视效果保持一致。
+模板：
+Using the provided image of [subject], please [add/remove/modify] [element]
+to/from the scene. Ensure the change is [description of how the change should
+integrate].
+请使用提供的[主体]图像，[添加/移除/修改]场景中的[元素]。确保修改[描述修改应如何融入场景]。
+提示：
+"Using the provided image of my cat, please add a small, knitted wizard hat
+on its head. Make it look like it's sitting comfortably and matches the soft
+lighting of the photo."
+请在我提供的猫咪照片中，为它添加一顶小巧的针织巫师帽。确保帽子看起来自然舒适，并与照片的柔和光线相协调。
+2. 局部重绘（语义遮盖）
+通过对话定义“蒙版”，以修改图片的特定部分，同时保持其余部分不变。
+Using the provided image, change only the [specific element] to [new
+element/description]. Keep everything else in the image exactly the same,
+preserving the original style, lighting, and composition.
+请使用提供的图像，仅将[特定元素]替换为[新元素/描述]。保持图像中其他所有内容完全一致，保留原始风格、光线和构图。
+"Using the provided image of a living room, change only the blue sofa to be
+a vintage, brown leather chesterfield sofa. Keep the rest of the room,
+including the pillows on the sofa and the lighting, unchanged."
+请使用提供的客厅图片，仅将图中的蓝色沙发更换为复古风格的棕色皮革切斯特菲尔德沙发。保持室内其他所有陈设不变，包括沙发上的靠垫和整体照明效果。
+3. 风格迁移
+提供一张图片，并让模型以不同的艺术风格重新创作其内容。
+Transform the provided photograph of [subject] into the artistic style of [artist/art style]. Preserve the original composition but render it with [description of stylistic elements].
+将提供的[主体]照片转换为[艺术家/艺术风格]的艺术风格。保持原始构图不变，但使用[风格元素描述]进行渲染。
+"Transform the provided photograph of a modern city street at night into the artistic style of Vincent van Gogh's 'Starry Night'. Preserve the original composition of buildings and cars, but render all elements with swirling, impasto brushstrokes and a dramatic palette of deep blues and bright yellows."
+将提供的现代都市夜景照片转换为文森特·梵高《星夜》的艺术风格。保持建筑物与车辆的原构图不变，但所有元素均以漩涡状的厚涂笔触呈现，并运用深蓝与明黄构成的戏剧性色彩 palette。
+4. 高级合成：组合多张图片
+提供多张图片作为上下文，以创建新的合成场景。这非常适合制作产品模型或创意拼贴画。
+Create a new image by combining the elements from the provided images. Take
+the [element from image 1] and place it with/on the [element from image 2].
+The final image should be a [description of the final scene].
+根据提供的多张图像元素进行合成。提取[图像1中的元素]并将其与[图像2中的元素]组合。最终画面应呈现为[最终场景描述]。
+"Create a professional e-commerce fashion photo. Take the blue floral dress
+from the first image and let the woman from the second image wear it.
+Generate a realistic, full-body shot of the woman wearing the dress, with
+the lighting and shadows adjusted to match the outdoor environment."
+创建一张专业的电商时尚照片。将第一张图片中的蓝色碎花连衣裙让第二张图片中的女士穿上。生成一张女士穿着该连衣裙的真实全景全身照，并调整光线和阴影以匹配户外环境。
+5. 高保真细节保留
+为确保在编辑过程中保留关键细节（例如面部或徽标），请在编辑请求中详细描述这些细节。
+Using the provided images, place [element from image 2] onto [element from
+image 1]. Ensure that the features of [element from image 1] remain
+completely unchanged. The added element should [description of how the
+element should integrate].
+使用提供的图像，将[图像2中的元素]添加至[图像1中的元素]。确保[图像1中的元素]特征完全保持不变。添加的元素应[描述该元素应如何集成]。
+"Take the first image of the woman with brown hair, blue eyes, and a neutral
+expression. Add the logo from the second image onto her black t-shirt.
+Ensure the woman's face and features remain completely unchanged. The logo
+should look like it's naturally printed on the fabric, following the folds
+of the shirt."
+选取第一张图像中棕发蓝眼、表情自然的女性，将第二张图像中的标志添加到她的黑色T恤上。确保女性面部及五官特征完全保持不变。标志需呈现自然印刷效果，顺应T恤布料的褶皱走向。
+6. 让事物焕发活力
+上传草图或简笔画，然后让模型将其优化为成品图片。
+Turn this rough [medium] sketch of a [subject] into a [style description]
+photo. Keep the [specific features] from the sketch but add [new details/materials].
+将这张[媒介]绘制的[主体]初步草图转化为[风格描述]风格的照片。保留草图里的[具体特征]，但需加入[新细节/材质]。
+
+`"Turn this rough pencil sketch of a futuristic car into a polished photo of the finished concept car in a showroom. Keep the sleek lines and low profile from the sketch but add metallic blue paint and neon rim lighting."`
+将这张未来风格汽车的铅笔草图转化为展示厅中的成品概念车精良照片。保留草图流畅的线条与低趴轮廓，但需添加金属蓝色喷漆与霓虹轮毂照明效果。
+7. 字符一致性：360 度全景
+您可以迭代提示不同的角度，从而生成角色的 360 度视图。为获得最佳效果，请在后续提示中添加之前生成的图片，以保持一致性。对于复杂的姿势，请添加所需姿势的参考图片。
+A studio portrait of [person] against [background], [looking forward/in profile looking right/etc.]
+一幅[人物]的影棚肖像，置于[背景]前，[直视镜头/右侧面轮廓等]。
+A studio portrait of this man against white, in profile looking right
+一幅该男子的影棚肖像，以白色为背景，右侧面轮廓。
+最佳做法
+如需将照片效果从“好”提升到“出色”，请将以下专业策略融入您的工作流程。
+具体化：您提供的信息越详细，对输出结果的掌控程度就越高。与其使用“奇幻盔甲”，不如具体描述：“华丽的精灵板甲，蚀刻着银叶图案，带有高领和猎鹰翅膀形状的肩甲。”
+提供上下文和意图：说明图片的用途。模型对上下文的理解会影响最终输出。例如，“为高端极简护肤品牌设计徽标”的效果要好于“设计徽标”。
+迭代和优化：不要指望第一次尝试就能生成完美的图片。利用模型的对话特性进行小幅更改。使用后续提示，例如“这很棒，但你能让光线更暖一些吗？”或“保持所有内容不变，但让角色的表情更严肃一些。”
+使用分步指令：对于包含许多元素的复杂场景，请将提示拆分为多个步骤。“首先，创建一个宁静、薄雾弥漫的黎明森林的背景。然后，在前景中添加一个长满苔藓的古老石制祭坛。最后，将一把发光的剑放在祭坛顶部。”
+使用“语义负面提示”：不要说“没有汽车”，而是通过说“一条没有交通迹象的空旷、荒凉的街道”来正面描述所需的场景。
+控制镜头：使用摄影和电影语言来控制构图。例如**wide-angle shot、macro shot、low-angle perspective**等字词。
+限制
+为获得最佳性能，请使用以下语言：英语、阿拉伯语（埃及）、德语（德国）、西班牙语（墨西哥）、法语（法国）、印地语（印度）、印度尼西亚语（印度尼西亚）、意大利语（意大利）、日语（日本）、韩语（韩国）、葡萄牙语（巴西）、俄语（俄罗斯）、乌克兰语（乌克兰）、越南语（越南）、中文（中国）。
+图片生成不支持音频或视频输入。
+模型不一定会严格按照用户明确要求的图片输出数量来生成图片。
+gemini-2.5-flash-image 最多可接受 3 张图片作为输入，而 gemini-3-pro-image-preview 支持 5 张高保真图片，总共最多可接受 14 张图片。
+为图片生成文字时，最好先生成文字，然后再要求生成包含该文字的图片，这样 Gemini 的效果最好。
+所有生成的图片都包含 SynthID 水印。
+根据最新的搜索结果和技术文档，"Nano Banana Pro" 是近期社区（特别是 Felo AI 等平台用户）对 Google Gemini 3 Pro 图像生成模型（及相关微调版本）的流行称呼/代号。它以强大的中文文字渲染能力、逻辑推理绘图和超高细节控制而著称。
+这是一份为你总结的 《Nano Banana Pro (Gemini 3 Pro) 提示词实战手册》。
+
+🍌 Nano Banana Pro (Gemini 3 Pro) 提示词实战手册
+本手册旨在帮助你驾驭这款最新的 AI 绘图模型，特别是利用其在文字排版和精准控图上的优势。
+📋 第一章：万能提示词公式
+不要只写简单的关键词，Nano Banana Pro 擅长理解长句和逻辑。
+公式：
+[主体描述] + [环境/背景] + [动作/状态] + [艺术风格/媒介] + [文字要求(可选)] + [技术参数]
+主体： 具体的角色或物体（如：一只穿着赛博朋克夹克的柴犬）。
+环境： 光线、天气、地点（如：东京雨夜的霓虹街道，地面有积水倒影）。
+动作： 正在做什么（如：正在吃拉面，热气腾腾）。
+风格： 摄影、3D渲染、油画、扁平插画（如：王家卫电影风格，高对比度）。
+文字： 需要出现在图里的字（如：招牌写着 "深夜食堂"）。
+参数： 构图视角（如：广角镜头，f/1.8 光圈，4K 分辨率）。
+
+🔡 第二章：必杀技——精准文字渲染 (Text Rendering)
+Nano Banana Pro 最大的强项是能写对中文。
+1. 基础文字指令
+必须使用双引号包裹文字内容，并明确指出文字出现的位置。
+
+指令模板：
+
+生成一张[场景]，图中有一个[物体]上面清晰地写着文字 "你的文字"。
+
+
+示例：
+
+一张极简风格的咖啡店海报，桌上有一杯拿铁，奶泡上清晰地写着文字 "早安"，背景是晨光，高分辨率摄影。
+
+2. 复杂排版与多行文字
+
+指令模板：
+
+标题为 "[标题内容]"，字体为粗体；副标题为 "[副标内容]"，位于底部。
+
+
+示例（海报设计）：
+
+设计一张复古电影海报，主视觉是一只宇航员拿着花。海报顶部写着大标题 "星际浪漫"，底部写着小字 "2025 Coming Soon"。字体风格为手写体，颜色为红色。
+
+3. 生僻字/繁体中文技巧
+如果遇到生僻字，可以描述字的结构，或者要求使用标准印刷体。
+技巧： 文字内容："龍"，使用繁体中文，书法风格，笔触苍劲有力。
+
+🎨 第三章：风格化速查表 (Style Cheat Sheet)
+直接复制以下关键词后缀到你的提示词中，以获得特定效果：
+1. 电商产品摄影 (Product Shot)
+关键词： Studio lighting, 4k, neutral background, product photography, commercial advertisement, sharp focus, ray tracing.
+中文： 工作室灯光，4k，中性背景，产品摄影，商业广告，对焦清晰，光线追踪。
+2. 社交媒体/自拍感 (Social Realism)
+关键词： Shot on iPhone, candid, amateur photo, slightly blurry, flash photography, Instagram story style, raw photo.
+中文： iPhone拍摄，抓拍，业余照片，轻微模糊，闪光灯摄影，Instagram快拍风格，原片直出。
+3. 盲盒/公仔风格 (Funko/Pop Mart)
+关键词： Blind box toy style, 3D render, C4D, cute, chibi, glossy plastic material, clean background, soft lighting.
+中文： 盲盒玩具风格，3D渲染，C4D，Q版，光泽塑料材质，干净背景，柔和光照。
+4. 扁平/UI 插画 (Tech Illustration)
+关键词： Flat design, corporate memphis, vector art, minimal, solid colors, tech startup style.
+中文： 扁平化设计，企业孟菲斯风格，矢量图，极简，纯色，科技初创公司风格。
+
+🛠️ 第四章：进阶技巧——修改与一致性
+Nano Banana Pro 支持强大的逻辑修改（Inpainting/Editing via Prompt）。
+1. 局部修改 (Change specific elements)
+不需要重新画整张图，只需告诉它改哪里。
+场景： 你生成了一张完美的客厅图，但沙发颜色不喜欢。
+提示词： 保持图片其他部分不变，仅将红色的沙发改为深蓝色的天鹅绒材质沙发。
+2. 角色一致性 (Character Consistency)
+虽然很难做到 100% 相同，但可以通过详细特征锁定角色。
+
+技巧： 设定一个具体的特征组合。
+
+"一个名叫 Leo 的男孩，银色短发，戴着红框眼镜，穿着绿色的连帽衫..."
+
+(在后续每张图中都重复这段描述)
+
+3. 这里的 "逻辑" 很重要
+Gemini 3 具有推理能力。你可以给它抽象的要求。
+示例： 让画面看起来更悲伤一点（它会主动调整色调为冷色，增加雨水或阴影）。
+示例： 把现在的白天变成赛博朋克的夜晚（它会自动把阳光换成霓虹灯，把天空变黑）。
+
+🚫 常见问题排除 (Troubleshooting)
+文字乱码？ 
+检查是否使用了英文双引号 "" 包裹文字。
+尝试在提示词最后强调：Make sure the text spelling is correct (确保拼写正确)。
+人物太假/恐怖谷？ 
+增加关键词：fujifilm xt4, film grain, skin texture, realistic pores (胶片颗粒、皮肤纹理、真实毛孔)。
+减少关键词：smooth, anime, 3d。
+被安全拦截 (Safety Filter)？ 
+Nano Banana Pro 对真实人物（尤其是名人）和成人内容有严格限制。尝试使用描述性语言代替人名，或生成虚构人物。

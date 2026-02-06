@@ -1,0 +1,100 @@
+/* ModelSelector 组件样式 - 深色主题 */
+.model-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.model-selector-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.model-selector-select {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #e5e7eb;
+  background-color: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+  min-width: 140px;
+}
+
+.model-selector-select:hover {
+  border-color: #6b7280;
+  background-color: #4b5563;
+}
+
+.model-selector-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* 紧凑版模型选择器 */
+.model-selector-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.model-selector-compact .model-selector-label {
+  font-size: 0.625rem;
+  margin: 0;
+}
+
+.model-selector-compact .model-selector-select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  min-width: 120px;
+}
+
+/* 生图模型选择器 - 深色主题 */
+.model-selector-image .model-selector-select {
+  background: linear-gradient(135deg, #78350f 0%, #92400e 100%);
+  border-color: #b45309;
+  color: #fef3c7;
+}
+
+.model-selector-image .model-selector-select:hover {
+  border-color: #d97706;
+}
+
+.model-selector-image .model-selector-select:focus {
+  border-color: #d97706;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
+}
+
+/* Tab切换动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Tab按钮缩放动画 */
+.scale-105 {
+  transform: scale(1.05);
+}
+
+.scale-102 {
+  transform: scale(1.02);
+}
+
+.hover\:scale-102:hover {
+  transform: scale(1.02);
+}
+
