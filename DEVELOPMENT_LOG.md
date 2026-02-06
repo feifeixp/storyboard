@@ -18,6 +18,38 @@
 
 ---
 
+## [2026-02-06 22:00] 🐛 问题修复
+
+**修改内容**：修复导出剧本模板中角色信息缺失问题（第二次修复）
+
+**影响范围**：
+- 文件/模块：
+  - services/scriptTemplateExport.ts (exportScriptTemplate 函数)
+  - App.tsx (handleExportScriptTemplate 函数)
+
+**修改原因**：
+- 用户反馈：导出剧本模板时，"本集出场人物人设" 仍然显示 "（本集未标注角色信息）"
+- 之前修复了 downloadScript 函数（导出TXT），但 exportScriptTemplate 函数（导出剧本模板）仍有问题
+- exportScriptTemplate 函数中的 generateCharacterSection 使用 project.characters
+- 但实际角色数据存储在 characterRefs 状态变量中
+- project.characters 可能为空或不完整
+
+**预期效果**：
+- ✅ 导出剧本模板时正确显示所有角色信息
+- ✅ 包括角色的性格、外貌、造型等详细信息
+- ✅ 从正确的数据源（characterRefs）读取角色数据
+
+**技术实现**：
+1. 修改 exportScriptTemplate 函数签名，添加 characterRefs 参数
+2. 修改 generateCharacterSection 函数，优先使用 characterRefs，降级使用 project.characters
+3. 在 App.tsx 中调用时传递 characterRefs 参数
+
+**相关修复**：
+- 第一次修复（commit 7c85f92）：修复 downloadScript 函数（导出TXT）
+- 第二次修复（本次）：修复 exportScriptTemplate 函数（导出剧本模板）
+
+---
+
 ## [2026-02-06 21:45] ✨ 新功能
 
 **修改内容**：切换到 Cloudflare D1 数据存储并添加迁移工具
