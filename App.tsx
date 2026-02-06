@@ -431,15 +431,27 @@ const App: React.FC = () => {
   // 🆕 项目管理函数
   // ═══════════════════════════════════════════════════════════════
 
-  const handleSelectProject = (project: Project) => {
-    setCurrentProject(project);
-    setCurrentProjectId(project.id);
-    // 加载项目的角色库
-    if (project.characters.length > 0) {
-      setCharacterRefs(project.characters);
+  // 🔧 核心修复：项目列表只返回元数据（id/name/timestamps），
+  //    点击项目时必须异步获取完整数据（含 settings/characters/scenes/episodes）
+  const handleSelectProject = async (project: Project) => {
+    try {
+      const fullProject = await getProject(project.id);
+      if (!fullProject) {
+        alert('无法加载项目数据，项目可能已被删除');
+        return;
+      }
+      setCurrentProject(fullProject);
+      setCurrentProjectId(fullProject.id);
+      // 加载项目的角色库
+      if (fullProject.characters && fullProject.characters.length > 0) {
+        setCharacterRefs(fullProject.characters);
+      }
+      // 进入项目主界面
+      setCurrentStep(AppStep.PROJECT_DASHBOARD);
+    } catch (error) {
+      console.error('[handleSelectProject] 加载项目失败:', error);
+      alert('加载项目失败，请重试');
     }
-    // 🆕 进入项目主界面（而不是直接进入剧本输入）
-    setCurrentStep(AppStep.PROJECT_DASHBOARD);
   };
 
   const handleCreateProject = () => {
@@ -463,8 +475,8 @@ const App: React.FC = () => {
       setProjects(allProjects);
       setCurrentProject(project);
       setCurrentProjectId(project.id);
-      // 加载项目角色
-      if (project.characters.length > 0) {
+      // 加载项目角色（安全检查）
+      if (project.characters && project.characters.length > 0) {
         setCharacterRefs(project.characters);
       }
       // 🆕 进入项目主界面
@@ -523,7 +535,7 @@ const App: React.FC = () => {
           episodeSummary.characterStates.map(cs => cs.characterName)
         );
         // 只选择当集出现的角色
-        const episodeChars = currentProject.characters.filter(
+        const episodeChars = (currentProject.characters || []).filter(
           c => episodeCharNames.has(c.name)
         );
         if (episodeChars.length > 0) {
@@ -531,11 +543,11 @@ const App: React.FC = () => {
           console.log(`[剧集${episode.episodeNumber}] 加载${episodeChars.length}个角色:`, episodeChars.map(c => c.name));
         } else {
           // 如果没有匹配到角色，加载全部项目角色
-          setCharacterRefs(currentProject.characters);
+          if (currentProject.characters) setCharacterRefs(currentProject.characters);
         }
       } else {
         // 如果没有角色状态信息，加载全部项目角色
-        setCharacterRefs(currentProject.characters);
+        if (currentProject.characters) setCharacterRefs(currentProject.characters);
       }
     }
 
@@ -548,8 +560,8 @@ const App: React.FC = () => {
     const allProjects = await getAllProjects();
     setProjects(allProjects);
     setCurrentProject(updatedProject);
-    // 同步角色库
-    if (updatedProject.characters.length > 0) {
+    // 同步角色库（安全检查）
+    if (updatedProject.characters && updatedProject.characters.length > 0) {
       setCharacterRefs(updatedProject.characters);
     }
   };
@@ -668,7 +680,7 @@ const App: React.FC = () => {
     setIsExtractingChars(true);
     try {
       // 如果有项目角色库，优先从中筛选当集出现的角色
-      if (currentProject && currentProject.characters.length > 0) {
+      if (currentProject && currentProject.characters && currentProject.characters.length > 0) {
         const scriptLower = script.toLowerCase();
         const matchedChars = currentProject.characters.filter(c => {
           // 只检查完整角色名是否出现在剧本中（不再使用简称匹配，避免误匹配）

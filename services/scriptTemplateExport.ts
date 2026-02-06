@@ -197,7 +197,7 @@ function generateSceneSection(project: Project, shots: Shot[]): string {
     }
 
     // 备选：通过背景描述匹配场景名称（兼容旧数据）
-    project.scenes.forEach(scene => {
+    (project.scenes || []).forEach(scene => {
       if (shot.background?.includes(scene.name) ||
           shot.midground?.includes(scene.name) ||
           shot.foreground?.includes(scene.name)) {
@@ -207,7 +207,7 @@ function generateSceneSection(project: Project, shots: Shot[]): string {
   });
 
   // 筛选本集场景
-  const episodeScenes = project.scenes.filter(scene =>
+  const episodeScenes = (project.scenes || []).filter(scene =>
     sceneIdsInEpisode.has(scene.id) ||  // 🆕 优先使用 sceneId 匹配
     sceneNamesInEpisode.has(scene.name) ||
     scene.appearsInEpisodes.includes(shots[0]?.shotNumber ? parseInt(shots[0].shotNumber) : 0)

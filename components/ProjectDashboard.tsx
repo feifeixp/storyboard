@@ -74,11 +74,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     let updatedProject = { ...project };
 
     if (editType === 'character') {
-      updatedProject.characters = project.characters.map(c =>
+      updatedProject.characters = (project.characters || []).map(c =>
         c.id === updatedData.id ? updatedData : c
       );
     } else if (editType === 'form' && editParentCharacter) {
-      updatedProject.characters = project.characters.map(c => {
+      updatedProject.characters = (project.characters || []).map(c => {
         if (c.id === editParentCharacter.id) {
           return {
             ...c,
@@ -88,7 +88,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         return c;
       });
     } else if (editType === 'scene') {
-      updatedProject.scenes = project.scenes.map(s =>
+      updatedProject.scenes = (project.scenes || []).map(s =>
         s.id === updatedData.id ? updatedData : s
       );
     } else if (editType === 'episode') {
@@ -102,7 +102,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
   // 智能补充角色细节
   const handleSupplementCharacter = async (characterId: string) => {
-    const character = project.characters.find(c => c.id === characterId);
+    const character = (project.characters || []).find(c => c.id === characterId);
     if (!character) return;
 
     const charCompleteness = charactersCompleteness.find(c => c.character.id === characterId);
@@ -136,7 +136,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       // 更新项目中的角色
       const updatedProject = {
         ...project,
-        characters: project.characters.map(c =>
+        characters: (project.characters || []).map(c =>
           c.id === characterId ? updatedCharacter : c
         ),
       };
@@ -154,7 +154,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
   // 智能补充场景细节
   const handleSupplementScene = async (sceneId: string) => {
-    const scene = project.scenes.find(s => s.id === sceneId);
+    const scene = (project.scenes || []).find(s => s.id === sceneId);
     if (!scene) return;
 
     // 检查是否已经有完整信息
@@ -184,7 +184,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       // 更新项目中的场景
       const updatedProject = {
         ...project,
-        scenes: project.scenes.map(s => s.id === sceneId ? updatedScene : s),
+        scenes: (project.scenes || []).map(s => s.id === sceneId ? updatedScene : s),
       };
 
       onUpdateProject(updatedProject);
@@ -207,7 +207,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
     const confirmExtract = confirm(
       `即将从${project.episodes.length}集剧本中重新提取场景。\n\n` +
-      `现有场景数: ${project.scenes.length}个\n` +
+      `现有场景数: ${project.scenes?.length || 0}个\n` +
       `提取过程可能需要1-2分钟，是否继续？`
     );
 
@@ -227,7 +227,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       // 调用提取服务
       const newScenes = await extractNewScenes(
         scripts,
-        project.scenes,
+        project.scenes || [],
         'google/gemini-2.0-flash-001',
         (current, total) => setExtractionProgress({ current, total })
       );
@@ -246,7 +246,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       if (confirmAdd) {
         const updatedProject = {
           ...project,
-          scenes: [...project.scenes, ...newScenes],
+          scenes: [...(project.scenes || []), ...newScenes],
         };
 
         onUpdateProject(updatedProject);
@@ -278,14 +278,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         <div className="bg-gray-800 rounded p-3">
           <h3 className="text-sm font-bold text-white mb-2">📋 项目信息</h3>
           <div className="space-y-1 text-xs">
-            {project.settings.mediaType && (
+            {project.settings?.mediaType && (
               <div><span className="text-gray-500">媒体类型:</span> <span className="text-blue-400">{PROJECT_MEDIA_TYPES[project.settings.mediaType]?.name || project.settings.mediaType}</span></div>
             )}
-            <div><span className="text-gray-500">题材类型:</span> <span className="text-white">{project.settings.genre || '未设置'}</span></div>
-            <div><span className="text-gray-500">视觉风格:</span> <span className="text-white">{project.settings.visualStyle || '未设置'}</span></div>
+            <div><span className="text-gray-500">题材类型:</span> <span className="text-white">{project.settings?.genre || '未设置'}</span></div>
+            <div><span className="text-gray-500">视觉风格:</span> <span className="text-white">{project.settings?.visualStyle || '未设置'}</span></div>
             <div><span className="text-gray-500">剧集:</span> <span className="text-white">{project.episodes?.length || 0}集</span></div>
-            <div><span className="text-gray-500">角色:</span> <span className="text-white">{project.characters.length}个</span></div>
-            <div><span className="text-gray-500">场景:</span> <span className="text-white">{project.scenes.length}个</span></div>
+            <div><span className="text-gray-500">角色:</span> <span className="text-white">{project.characters?.length || 0}个</span></div>
+            <div><span className="text-gray-500">场景:</span> <span className="text-white">{project.scenes?.length || 0}个</span></div>
           </div>
         </div>
 
@@ -310,12 +310,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       <div className="bg-gray-800 rounded p-3">
         <h3 className="text-sm font-bold text-white mb-2">🌍 世界观</h3>
         <p className="text-gray-300 text-xs leading-relaxed whitespace-pre-wrap">
-          {project.settings.worldView || '未设置'}
+          {project.settings?.worldView || '未设置'}
         </p>
       </div>
 
       {/* 专有名词 - 全宽展开 */}
-      {project.settings.keyTerms && project.settings.keyTerms.length > 0 && (
+      {project.settings?.keyTerms && project.settings.keyTerms.length > 0 && (
         <div className="bg-gray-800 rounded p-3">
           <h3 className="text-sm font-bold text-white mb-2">📚 名词 ({project.settings.keyTerms.length})</h3>
           <div className="flex flex-wrap gap-1.5">
@@ -349,12 +349,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const renderCharacters = () => (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
-        <h3 className="text-sm font-bold text-white">👥 角色库 ({project.characters.length})</h3>
+        <h3 className="text-sm font-bold text-white">👥 角色库 ({project.characters?.length || 0})</h3>
         <button className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs">+ 添加</button>
       </div>
 
       <div className="grid grid-cols-1 gap-2">
-        {project.characters.map((char) => {
+        {(project.characters || []).map((char) => {
           const charCompleteness = charactersCompleteness.find(c => c.character.id === char.id);
           return (
             <CharacterCard
@@ -382,7 +382,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="text-gray-400 hover:text-white text-sm">← 返回</button>
           <h1 className="text-base font-bold text-white">{project.name}</h1>
-          <span className="text-gray-500 text-xs">{project.settings.genre}</span>
+          <span className="text-gray-500 text-xs">{project.settings?.genre || ''}</span>
         </div>
         {/* 标签页导航 - 内联 */}
         <div className="flex gap-1">
@@ -613,7 +613,7 @@ const ScenesTab: React.FC<{
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
-        <h3 className="text-sm font-bold text-white">🏛️ 场景库 ({project.scenes.length})</h3>
+        <h3 className="text-sm font-bold text-white">🏛️ 场景库 ({project.scenes?.length || 0})</h3>
         <div className="flex gap-2">
           {/* 🆕 重新提取按钮 */}
           {onExtractNewScenes && (
@@ -641,7 +641,7 @@ const ScenesTab: React.FC<{
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        {project.scenes.map((scene) => {
+        {(project.scenes || []).map((scene) => {
           const isExpanded = expandedScene === scene.id;
           return (
             <div
@@ -777,7 +777,7 @@ const EpisodesTab: React.FC<{
           </div>
           <h4 className="text-white text-sm font-medium mt-1 truncate">{ep.title}</h4>
           <p className="text-gray-500 text-[10px] mt-1">
-            {ep.shots.length} 个分镜 · 更新于 {new Date(ep.updatedAt).toLocaleDateString()}
+            {ep.shots?.length || 0} 个分镜 · 更新于 {new Date(ep.updatedAt).toLocaleDateString()}
           </p>
         </div>
       ))}
