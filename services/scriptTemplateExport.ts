@@ -53,8 +53,7 @@ export function exportScriptTemplate(
   // 6. 分镜故事内容
   const storyContent = generateStoryContent(shots);
 
-  // 7. AI图片提示词
-  const aiPrompts = generateAIPrompts(shots);
+  // 🆕 不再导出 AI 图片提示词部分
 
   // 组合所有部分
   return [
@@ -63,8 +62,8 @@ export function exportScriptTemplate(
     scenes,
     layouts,
     summary,
-    storyContent,
-    aiPrompts
+    storyContent
+    // aiPrompts - 已移除
   ].filter(Boolean).join('\n\n');
 }
 
@@ -306,13 +305,12 @@ ${truncated}`;
 }
 
 /**
- * 生成分镜故事内容（🆕 包含提示词）
+ * 生成分镜故事内容（🆕 不包含AI提示词）
  */
 function generateStoryContent(shots: Shot[]): string {
   const storyTexts = shots.map((shot, index) => {
     const parts = [];
     const shotNum = shot.shotNumber || (index + 1).toString();
-    const isMotion = shot.shotType === '运动';
 
     // 镜头编号
     parts.push(`${shotNum}-${index + 1}`);
@@ -335,27 +333,6 @@ function generateStoryContent(shots: Shot[]): string {
     // 对白
     if (shot.dialogue) {
       parts.push(shot.dialogue);
-    }
-
-    // 🆕 添加提示词（如果有）
-    if (isMotion) {
-      // 运动镜头：区分首帧和尾帧
-      if (shot.imagePromptCn || shot.promptCn) {
-        parts.push(`\n【首帧】中文提示词：\n${shot.imagePromptCn || shot.promptCn || '（未生成）'}`);
-      }
-
-      if (shot.endImagePromptCn || shot.endFramePromptCn) {
-        parts.push(`\n【尾帧】中文提示词：\n${shot.endImagePromptCn || shot.endFramePromptCn || '（未生成）'}`);
-      }
-
-      if (shot.videoGenPrompt) {
-        parts.push(`\n【视频提示词】：\n${shot.videoGenPrompt}`);
-      }
-    } else {
-      // 静态镜头：只有单一提示词
-      if (shot.imagePromptCn || shot.promptCn) {
-        parts.push(`\n【中文提示词】：\n${shot.imagePromptCn || shot.promptCn || '（未生成）'}`);
-      }
     }
 
     return parts.join('\n');
