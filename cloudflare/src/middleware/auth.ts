@@ -107,18 +107,21 @@ async function ensureUserExists(db: D1Database, user: { id: string; phone?: stri
       .first();
 
     if (!existingUser) {
+      const now = Date.now();
       // 创建新用户
       await db.prepare(
-        'INSERT INTO users (id, phone, email, created_at) VALUES (?, ?, ?, ?)'
+        'INSERT INTO users (id, phone, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
       )
-        .bind(user.id, user.phone || null, user.email || null, Date.now())
+        .bind(user.id, user.phone || null, user.email || null, now, now)
         .run();
 
       console.log(`[Auth] Created new user: ${user.id}`);
     }
   } catch (error) {
-    console.error('Ensure user exists error:', error);
-    // 不抛出错误，允许继续（用户可能已存在）
+    console.error('[Auth] Ensure user exists error:', error);
+    console.error('[Auth] Error details:', JSON.stringify(error, null, 2));
+    // 抛出错误，让调用者知道用户创建失败
+    throw error;
   }
 }
 
