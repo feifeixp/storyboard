@@ -575,7 +575,7 @@ const App: React.FC = () => {
   // 🆕 用户确认后开始重新分析
   const confirmAndStartReanalyze = () => {
     const confirm = window.confirm(
-      `确定要重新分析项目吗？\n\n这将从 ${currentProject?.episodes.length} 集剧本中重新提取：\n• 类型/题材\n• 角色信息\n• 场景库\n• 剧情大纲\n\n原有数据将被覆盖。`
+      `确定要重新分析项目吗？\n\n这将从 ${currentProject?.episodes?.length || 0} 集剧本中重新提取：\n• 类型/题材\n• 角色信息\n• 场景库\n• 剧情大纲\n\n原有数据将被覆盖。`
     );
     if (!confirm) return;
 
@@ -584,7 +584,7 @@ const App: React.FC = () => {
 
   // 🆕 执行重新分析
   const performReanalyze = async () => {
-    if (!currentProject || !currentProject.episodes) return;
+    if (!currentProject || !currentProject.episodes || !Array.isArray(currentProject.episodes)) return;
 
     setIsReanalyzing(true);
     try {

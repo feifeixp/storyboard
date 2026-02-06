@@ -30,7 +30,7 @@ export function exportScriptTemplate(
   episodeSummary?: GeneratedEpisodeSummary | null,
   characterRefs?: CharacterRef[]
 ): string {
-  const episode = project.episodes.find(ep => ep.episodeNumber === episodeNumber);
+  const episode = project.episodes?.find(ep => ep.episodeNumber === episodeNumber);
   if (!episode) {
     throw new Error(`未找到第${episodeNumber}集`);
   }
