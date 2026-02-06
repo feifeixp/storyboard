@@ -6,7 +6,8 @@
 import { getAccessToken, getUserInfo } from './auth';
 import { uploadToOSS, generateOSSPath } from './oss';
 
-const API_BASE_URL = 'https://dev.neodomain.cn';
+// 🔧 尝试使用与登录 API 相同的域名
+const API_BASE_URL = 'https://story.neodomain.cn';
 
 // ============================================
 // 类型定义
