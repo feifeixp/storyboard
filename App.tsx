@@ -968,43 +968,119 @@ const App: React.FC = () => {
       setCotCurrentStage(1);
       setProgressMsg("【阶段1/5】剧本分析中...");
       let stage1Text = '';
-      const stage1Gen = generateStage1Analysis(script, analysisModel);
-      for await (const chunk of stage1Gen) {
-        stage1Text += chunk;
-        setCotRawOutput(stage1Text);
-        setStreamText(`【阶段1】剧本分析\n\n${stage1Text}`);
+      let stage1Result: any = null;
+
+      // 🆕 添加重试机制
+      const maxRetries = 3;
+      let retryCount = 0;
+
+      while (retryCount < maxRetries) {
+        try {
+          stage1Text = '';
+          const stage1Gen = generateStage1Analysis(script, analysisModel);
+          for await (const chunk of stage1Gen) {
+            stage1Text += chunk;
+            setCotRawOutput(stage1Text);
+            setStreamText(`【阶段1】剧本分析\n\n${stage1Text}`);
+          }
+
+          // 尝试解析结果
+          stage1Result = parseStage1Output(stage1Text);
+          setCotStage1(stage1Result);
+          setStreamText(prev => prev + '\n\n✅ 阶段1完成！');
+          break; // 成功则跳出重试循环
+
+        } catch (error: any) {
+          retryCount++;
+          console.warn(`[WARN] 阶段1失败 (重试 ${retryCount}/${maxRetries}):`, error.message);
+
+          if (retryCount >= maxRetries) {
+            // 超过最大重试次数，提供更友好的错误提示
+            throw new Error(
+              `阶段1剧本分析失败（已重试${maxRetries}次）\n\n` +
+              `可能原因：\n` +
+              `1. 网络连接不稳定 - 请检查网络连接\n` +
+              `2. API服务暂时不可用 - 请稍后重试\n` +
+              `3. 剧本内容过长 - 请尝试缩短剧本\n\n` +
+              `原始错误：${error.message}`
+            );
+          }
+
+          // 等待2秒后重试
+          setProgressMsg(`【阶段1/5】网络错误，${2}秒后重试 (${retryCount}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
-      const stage1Result = parseStage1Output(stage1Text);
-      setCotStage1(stage1Result);
-      setStreamText(prev => prev + '\n\n✅ 阶段1完成！');
 
       // ========== 阶段2：视觉策略 ==========
       setCotCurrentStage(2);
       setProgressMsg("【阶段2/5】视觉策略规划中...");
       let stage2Text = '';
-      const stage2Gen = generateStage2Analysis(stage1Result, analysisModel);
-      for await (const chunk of stage2Gen) {
-        stage2Text += chunk;
-        setCotRawOutput(stage2Text);
-        setStreamText(`【阶段2】视觉策略\n\n${stage2Text}`);
+      let stage2Result: any = null;
+
+      retryCount = 0;
+      while (retryCount < maxRetries) {
+        try {
+          stage2Text = '';
+          const stage2Gen = generateStage2Analysis(stage1Result, analysisModel);
+          for await (const chunk of stage2Gen) {
+            stage2Text += chunk;
+            setCotRawOutput(stage2Text);
+            setStreamText(`【阶段2】视觉策略\n\n${stage2Text}`);
+          }
+
+          stage2Result = parseStage2Output(stage2Text);
+          setCotStage2(stage2Result);
+          setStreamText(prev => prev + '\n\n✅ 阶段2完成！');
+          break;
+
+        } catch (error: any) {
+          retryCount++;
+          console.warn(`[WARN] 阶段2失败 (重试 ${retryCount}/${maxRetries}):`, error.message);
+
+          if (retryCount >= maxRetries) {
+            throw new Error(`阶段2视觉策略规划失败（已重试${maxRetries}次）\n原始错误：${error.message}`);
+          }
+
+          setProgressMsg(`【阶段2/5】网络错误，${2}秒后重试 (${retryCount}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
-      const stage2Result = parseStage2Output(stage2Text);
-      setCotStage2(stage2Result);
-      setStreamText(prev => prev + '\n\n✅ 阶段2完成！');
 
       // ========== 阶段3：镜头分配 ==========
       setCotCurrentStage(3);
       setProgressMsg("【阶段3/5】镜头分配中...");
       let stage3Text = '';
-      const stage3Gen = generateStage3Analysis(script, stage1Result, stage2Result, analysisModel);
-      for await (const chunk of stage3Gen) {
-        stage3Text += chunk;
-        setCotRawOutput(stage3Text);
-        setStreamText(`【阶段3】镜头分配\n\n${stage3Text}`);
+      let stage3Result: any = null;
+
+      retryCount = 0;
+      while (retryCount < maxRetries) {
+        try {
+          stage3Text = '';
+          const stage3Gen = generateStage3Analysis(script, stage1Result, stage2Result, analysisModel);
+          for await (const chunk of stage3Gen) {
+            stage3Text += chunk;
+            setCotRawOutput(stage3Text);
+            setStreamText(`【阶段3】镜头分配\n\n${stage3Text}`);
+          }
+
+          stage3Result = parseStage3Output(stage3Text);
+          setCotStage3(stage3Result);
+          setStreamText(prev => prev + '\n\n✅ 阶段3完成！');
+          break;
+
+        } catch (error: any) {
+          retryCount++;
+          console.warn(`[WARN] 阶段3失败 (重试 ${retryCount}/${maxRetries}):`, error.message);
+
+          if (retryCount >= maxRetries) {
+            throw new Error(`阶段3镜头分配失败（已重试${maxRetries}次）\n原始错误：${error.message}`);
+          }
+
+          setProgressMsg(`【阶段3/5】网络错误，${2}秒后重试 (${retryCount}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
-      const stage3Result = parseStage3Output(stage3Text);
-      setCotStage3(stage3Result);
-      setStreamText(prev => prev + '\n\n✅ 阶段3完成！');
 
       // ========== 阶段4：逐镜设计 ==========
       setCotCurrentStage(4);
