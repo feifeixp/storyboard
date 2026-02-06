@@ -79,10 +79,11 @@ function generateHeader(episodeNumber: number, episodeTitle: string): string {
 
 /**
  * 生成本集人物人设部分
- * 🆕 修复：优先使用 characterRefs（当前加载的角色数据），降级使用 project.characters
+ * 🔧 修复：当分镜未标注角色时，fallback 到项目全部角色
+ * 🔧 增强：输出更丰富的角色信息（性别、能力、形态等）
  */
 function generateCharacterSection(project: Project, shots: Shot[], characterRefs?: CharacterRef[]): string {
-  // 从分镜脚本中提取本集出现的角色
+  // 从分镜脚本中提取本集出现的角色（通过 assignedCharacterIds）
   const characterIdsInEpisode = new Set<string>();
   shots.forEach(shot => {
     if (shot.assignedCharacterIds) {
@@ -90,31 +91,54 @@ function generateCharacterSection(project: Project, shots: Shot[], characterRefs
     }
   });
 
-  // 🆕 优先使用 characterRefs（当前加载的角色数据），降级使用 project.characters
-  const characterSource = characterRefs && characterRefs.length > 0 ? characterRefs : project.characters;
+  // 优先使用 characterRefs（当前加载的角色数据），降级使用 project.characters
+  const characterSource = characterRefs && characterRefs.length > 0
+    ? characterRefs
+    : (project.characters || []);
 
-  // 从角色库中筛选本集角色
-  const episodeCharacters = characterSource.filter(char =>
-    characterIdsInEpisode.has(char.id)
-  );
+  let episodeCharacters: CharacterRef[] = [];
+
+  if (characterIdsInEpisode.size > 0) {
+    // 通过 ID 或名称匹配（兼容两种情况）
+    episodeCharacters = characterSource.filter(char =>
+      characterIdsInEpisode.has(char.id) || characterIdsInEpisode.has(char.name)
+    );
+  }
+
+  // 🔧 如果通过分镜匹配不到角色，fallback 到全部项目角色
+  if (episodeCharacters.length === 0 && characterSource.length > 0) {
+    episodeCharacters = characterSource;
+  }
 
   if (episodeCharacters.length === 0) {
     return `本集出场人物人设：
 
-（本集未标注角色信息）`;
+（项目中暂无角色信息）`;
   }
 
   const characterTexts = episodeCharacters.map(char => {
-    const parts = [];
+    const parts: string[] = [];
 
-    // 角色名称和身份描述
-    let nameLine = char.name;
+    // 角色名称和身份演变
+    let nameLine = `【${char.name}】`;
     if (char.identityEvolution) {
-      nameLine += `：${char.identityEvolution}`;
+      nameLine += `  ${char.identityEvolution}`;
     }
     parts.push(nameLine);
 
-    // 性格
+    // 性别和年龄段
+    const basicInfo: string[] = [];
+    if (char.gender && char.gender !== '未知') {
+      basicInfo.push(char.gender);
+    }
+    if (char.ageGroup) {
+      basicInfo.push(char.ageGroup);
+    }
+    if (basicInfo.length > 0) {
+      parts.push(`基本信息：${basicInfo.join('，')}`);
+    }
+
+    // 性格/经典台词
     if (char.quote) {
       parts.push(`性格：${char.quote}`);
     }
@@ -126,7 +150,27 @@ function generateCharacterSection(project: Project, shots: Shot[], characterRefs
       parts.push(`外貌：`);
     }
 
-    // 造型
+    // 能力
+    if (char.abilities && char.abilities.length > 0) {
+      parts.push(`能力：${char.abilities.join('、')}`);
+    }
+
+    // 多形态/变装
+    if (char.forms && char.forms.length > 0) {
+      const formTexts = char.forms.map(form => {
+        let formLine = `  - ${form.name}`;
+        if (form.episodeRange) {
+          formLine += `（${form.episodeRange}）`;
+        }
+        if (form.description) {
+          formLine += `：${form.description}`;
+        }
+        return formLine;
+      });
+      parts.push(`形态：\n${formTexts.join('\n')}`);
+    }
+
+    // 造型（保留占位，供用户手动填写）
     parts.push(`造型：`);
 
     return parts.join('\n');
