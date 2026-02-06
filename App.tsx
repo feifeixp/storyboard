@@ -92,6 +92,9 @@ const STORAGE_KEYS = {
   COT_STAGE3: 'storyboard_cot_stage3',
   COT_STAGE4: 'storyboard_cot_stage4',
   COT_STAGE5: 'storyboard_cot_stage5',
+  // 🆕 剧本清洗状态
+  CLEANING_RESULT: 'storyboard_cleaning_result',
+  CLEANING_PROGRESS: 'storyboard_cleaning_progress',
 };
 
 // 🆕 从 localStorage 安全读取数据
@@ -249,9 +252,13 @@ const App: React.FC = () => {
   const [reanalyzeProgress, setReanalyzeProgress] = useState<BatchAnalysisProgress | null>(null);
   const [reanalyzeResult, setReanalyzeResult] = useState<ProjectAnalysisResult | null>(null);
 
-  // 🆕 剧本清洗状态
-  const [cleaningResult, setCleaningResult] = useState<ScriptCleaningResult | null>(null);
-  const [cleaningProgress, setCleaningProgress] = useState('');
+  // 🆕 剧本清洗状态（从localStorage恢复）
+  const [cleaningResult, setCleaningResult] = useState<ScriptCleaningResult | null>(() =>
+    loadFromStorage(STORAGE_KEYS.CLEANING_RESULT, null)
+  );
+  const [cleaningProgress, setCleaningProgress] = useState(() =>
+    loadFromStorage(STORAGE_KEYS.CLEANING_PROGRESS, '')
+  );
   const [isCleaning, setIsCleaning] = useState(false);
 
   // 🆕 思维链模式状态
@@ -332,6 +339,15 @@ const App: React.FC = () => {
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.CHAT_HISTORY, chatHistory);
   }, [chatHistory]);
+
+  // 🆕 自动保存剧本清洗结果和进度
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.CLEANING_RESULT, cleaningResult);
+  }, [cleaningResult]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.CLEANING_PROGRESS, cleaningProgress);
+  }, [cleaningProgress]);
 
   // 🆕 不再保存 hqUrls 到 localStorage（图片数据太大，会超出配额）
   // hqUrls 是临时数据，刷新页面后重新生成即可
