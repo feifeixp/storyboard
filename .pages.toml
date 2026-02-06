@@ -1,0 +1,21 @@
+# Cloudflare Pages 配置文件
+# 文档: https://developers.cloudflare.com/pages/configuration/build-configuration/
+
+[build]
+# 构建命令
+command = "npm run build"
+
+# 构建输出目录
+destination = "dist"
+
+# 不需要部署命令（Cloudflare Pages 自动处理静态文件）
+# deploy_command = ""
+
+[build.environment]
+# Node.js 版本
+NODE_VERSION = "22"
+
+# 生产环境变量（如果需要）
+# [env.production]
+# VITE_API_URL = "https://storyboard-api.feifeixp.workers.dev"
+
