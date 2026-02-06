@@ -151,12 +151,26 @@ const App: React.FC = () => {
   // ═══════════════════════════════════════════════════════════════
   // 🆕 项目管理状态
   // ═══════════════════════════════════════════════════════════════
-  const [projects, setProjects] = useState<Project[]>(() => getAllProjects());
-  const [currentProject, setCurrentProject] = useState<Project | null>(() => {
-    const id = getCurrentProjectId();
-    return id ? getProject(id) : null;
-  });
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState<number | null>(null);
+
+  // 🆕 加载项目列表和当前项目
+  useEffect(() => {
+    const loadProjects = async () => {
+      const allProjects = await getAllProjects();
+      setProjects(allProjects);
+
+      // 加载当前项目
+      const id = getCurrentProjectId();
+      if (id) {
+        const project = await getProject(id);
+        setCurrentProject(project);
+      }
+    };
+
+    loadProjects();
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════
   // 原有状态
@@ -420,19 +434,21 @@ const App: React.FC = () => {
     setCurrentStep(AppStep.PROJECT_WIZARD);
   };
 
-  const handleDeleteProject = (projectId: string) => {
-    deleteProject(projectId);
-    setProjects(getAllProjects());
+  const handleDeleteProject = async (projectId: string) => {
+    await deleteProject(projectId);
+    const allProjects = await getAllProjects();
+    setProjects(allProjects);
     if (currentProject?.id === projectId) {
       setCurrentProject(null);
       setCurrentProjectId(null);
     }
   };
 
-  const handleProjectComplete = (project: Project) => {
+  const handleProjectComplete = async (project: Project) => {
     try {
-      saveProject(project);
-      setProjects(getAllProjects());
+      await saveProject(project);
+      const allProjects = await getAllProjects();
+      setProjects(allProjects);
       setCurrentProject(project);
       setCurrentProjectId(project.id);
       // 加载项目角色
@@ -515,9 +531,10 @@ const App: React.FC = () => {
   };
 
   // 🆕 更新项目
-  const handleUpdateProject = (updatedProject: Project) => {
-    saveProject(updatedProject);
-    setProjects(getAllProjects());
+  const handleUpdateProject = async (updatedProject: Project) => {
+    await saveProject(updatedProject);
+    const allProjects = await getAllProjects();
+    setProjects(allProjects);
     setCurrentProject(updatedProject);
     // 同步角色库
     if (updatedProject.characters.length > 0) {
@@ -2555,14 +2572,15 @@ const App: React.FC = () => {
   );
 
   // 🆕 清除所有缓存数据，重新开始
-  const handleResetAll = () => {
+  const handleResetAll = async () => {
     if (confirm('确定要清除所有数据并重新开始吗？此操作不可撤销。')) {
       Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
       // 清除项目相关数据
       setCurrentProjectId(null);
       setCurrentProject(null);
       setCurrentEpisodeNumber(null);
-      setProjects(getAllProjects());
+      const allProjects = await getAllProjects();
+      setProjects(allProjects);
       // 重置到项目列表
       setCurrentStep(AppStep.PROJECT_LIST);
       setScript('');

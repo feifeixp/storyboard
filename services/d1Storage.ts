@@ -43,12 +43,25 @@ async function apiRequest<T>(
  * 获取所有项目（仅元数据）
  */
 export async function getAllProjects(): Promise<Project[]> {
-  const data = await apiRequest<{ projects: any[] }>('/api/projects');
-  return data.projects.map(p => ({
-    ...p,
-    createdAt: new Date(p.createdAt).toISOString(),
-    updatedAt: new Date(p.updatedAt).toISOString(),
-  }));
+  try {
+    const data = await apiRequest<{ projects: any[] }>('/api/projects');
+
+    // 🆕 验证返回数据格式
+    if (!data || !Array.isArray(data.projects)) {
+      console.error('Invalid projects data format:', data);
+      return [];
+    }
+
+    return data.projects.map(p => ({
+      ...p,
+      createdAt: new Date(p.createdAt).toISOString(),
+      updatedAt: new Date(p.updatedAt).toISOString(),
+    }));
+  } catch (error) {
+    console.error('Get all projects error:', error);
+    // 🆕 返回空数组而不是抛出错误
+    return [];
+  }
 }
 
 /**
