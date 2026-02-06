@@ -33,6 +33,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
   // 构建剧本数据
   const scripts: ScriptFile[] = useMemo(() => {
+    if (!project.episodes || !Array.isArray(project.episodes)) return [];
     return project.episodes.map(ep => ({
       fileName: `第${ep.episodeNumber}集`,
       content: ep.script,
@@ -111,7 +112,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
 
     // 构建剧本文件数组
-    const scripts: ScriptFile[] = project.episodes.map(ep => ({
+    const scripts: ScriptFile[] = (project.episodes || []).map(ep => ({
       fileName: `第${ep.episodeNumber}集`,
       content: ep.script,
       episodeNumber: ep.episodeNumber,
@@ -163,7 +164,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
 
     // 获取所有剧本
-    const scripts: ScriptFile[] = project.episodes.map((ep, index) => ({
+    const scripts: ScriptFile[] = (project.episodes || []).map((ep, index) => ({
       episodeNumber: index + 1,
       content: ep.script || '',
       fileName: `第${index + 1}集`,
@@ -199,7 +200,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
   // 🆕 重新提取场景
   const handleExtractNewScenes = async () => {
-    if (project.episodes.length === 0) {
+    if (!project.episodes || project.episodes.length === 0) {
       alert('项目中没有剧本内容，无法提取场景');
       return;
     }
@@ -217,7 +218,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
     try {
       // 构建剧本数据
-      const scripts: ScriptFile[] = project.episodes.map((ep, index) => ({
+      const scripts: ScriptFile[] = (project.episodes || []).map((ep, index) => ({
         episodeNumber: ep.episodeNumber || (index + 1),
         content: ep.script || '',
         fileName: `第${ep.episodeNumber || (index + 1)}集`,
@@ -282,7 +283,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             )}
             <div><span className="text-gray-500">题材类型:</span> <span className="text-white">{project.settings.genre || '未设置'}</span></div>
             <div><span className="text-gray-500">视觉风格:</span> <span className="text-white">{project.settings.visualStyle || '未设置'}</span></div>
-            <div><span className="text-gray-500">剧集:</span> <span className="text-white">{project.episodes.length}集</span></div>
+            <div><span className="text-gray-500">剧集:</span> <span className="text-white">{project.episodes?.length || 0}集</span></div>
             <div><span className="text-gray-500">角色:</span> <span className="text-white">{project.characters.length}个</span></div>
             <div><span className="text-gray-500">场景:</span> <span className="text-white">{project.scenes.length}个</span></div>
           </div>
@@ -759,12 +760,12 @@ const EpisodesTab: React.FC<{
 }> = ({ project, onSelectEpisode }) => (
   <div className="space-y-2">
     <div className="flex justify-between items-center">
-      <h3 className="text-sm font-bold text-white">📺 剧集列表 ({project.episodes.length})</h3>
+      <h3 className="text-sm font-bold text-white">📺 剧集列表 ({project.episodes?.length || 0})</h3>
       <button className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs">+ 添加</button>
     </div>
 
     <div className="grid grid-cols-4 gap-2">
-      {project.episodes.map((ep) => (
+      {(project.episodes || []).map((ep) => (
         <div
           key={ep.id}
           className="bg-gray-800 rounded p-2 cursor-pointer hover:bg-gray-750 transition-colors"
