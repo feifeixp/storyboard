@@ -2691,14 +2691,9 @@ const App: React.FC = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">分析模型</label>
-                      <ModelSelector
-                        value={analysisModel}
-                        onChange={setAnalysisModel}
-                        type="all"
-                        label=""
-                        showLabel={false}
-                        className="w-full"
-                      />
+                      <div className="bg-gray-800 rounded px-3 py-2 text-sm text-white flex items-center gap-2">
+                        🔮 Gemini 2.5 Flash ($0.30) ⭐推荐
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">剧集数量</label>
@@ -2710,13 +2705,6 @@ const App: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-3">
                     💡 分析将从剧本中提取：类型/题材、角色信息及形态、场景库、剧情大纲
                   </p>
-                  {/* 🆕 弱模型警告 */}
-                  {MODEL_CAPABILITIES[analysisModel] === 'weak' && (
-                    <div className="mt-3 p-2 bg-amber-900/40 border border-amber-700 rounded text-amber-300 text-xs">
-                      ⚠️ <strong>警告：</strong>当前模型能力较弱，批量分析可能导致提取信息不完整（角色/场景/概要缺失）。
-                      建议使用 <strong>Gemini 3 Flash</strong> 或更强的模型。
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex justify-center">
@@ -2903,13 +2891,10 @@ const App: React.FC = () => {
                   onChange={(e) => setScript(e.target.value)}
                 />
                 <div className="flex items-center gap-2">
-                  <ModelSelector
-                    value={analysisModel}
-                    onChange={setAnalysisModel}
-                    type="all"
-                    label="模型"
-                    className="flex-1"
-                  />
+                  <div className="flex-1 bg-gray-800 rounded px-3 py-2 text-xs text-gray-400 flex items-center gap-2">
+                    <span className="text-gray-500">🤖 分析模型:</span>
+                    <span className="text-white">🔮 Gemini 2.5 Flash ($0.30) ⭐推荐</span>
+                  </div>
                   <button
                     onClick={startScriptCleaning}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all text-xs"
@@ -3390,13 +3375,6 @@ const App: React.FC = () => {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <ModelSelector
-                  value={analysisModel}
-                  onChange={setAnalysisModel}
-                  type="all"
-                  label="模型"
-                  className="model-selector-compact"
-                />
                 <button
                   onClick={startReview}
                   disabled={isLoading}
@@ -3559,13 +3537,6 @@ const App: React.FC = () => {
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <ModelSelector
-                  value={reviewModel}
-                  onChange={setReviewModel}
-                  type="all"
-                  label="模型"
-                  className="model-selector-compact"
-                />
                 <button
                   onClick={applyOptimizations}
                   disabled={isLoading || getSelectedSuggestionsCount() === 0}

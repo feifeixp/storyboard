@@ -419,21 +419,17 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
               </div>
             )}
 
-            {/* 模型选择 */}
+            {/* 模型显示 */}
             {scripts.length > 0 && (
               <div className="mt-6 p-4 bg-gray-900 rounded-lg border border-gray-700">
                 <div className="flex items-center gap-4">
                   <span className="text-sm font-medium text-gray-300">🤖 分析模型：</span>
-                  <ModelSelector
-                    value={selectedModel}
-                    onChange={setSelectedModel}
-                    type="all"
-                    label=""
-                    className="flex-1"
-                  />
+                  <div className="flex-1 bg-gray-800 rounded px-3 py-2 text-sm text-white flex items-center gap-2">
+                    🔮 Gemini 2.5 Flash ($0.30) ⭐推荐
+                  </div>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  💡 推荐使用 Gemini 2.0 Flash 或 DeepSeek（性价比高）
+                  💡 高性价比模型，速度快且质量好
                 </p>
               </div>
             )}
