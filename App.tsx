@@ -681,6 +681,62 @@ const App: React.FC = () => {
   };
 
   const downloadScript = () => {
+    // 🆕 提取本集出现的角色信息
+    const characterIdsInEpisode = new Set<string>();
+    shots.forEach(shot => {
+      if (shot.assignedCharacterIds) {
+        shot.assignedCharacterIds.forEach(id => characterIdsInEpisode.add(id));
+      }
+    });
+
+    // 从项目角色库中筛选本集角色
+    const episodeCharacters = currentProject?.characters.filter(char =>
+      characterIdsInEpisode.has(char.id)
+    ) || [];
+
+    // 生成角色信息部分
+    let characterSection = '';
+    if (episodeCharacters.length > 0) {
+      const characterTexts = episodeCharacters.map(char => {
+        const parts = [`👤 ${char.name}`];
+
+        if (char.gender) {
+          parts.push(`   性别: ${char.gender}`);
+        }
+
+        if (char.appearance) {
+          parts.push(`   外貌: ${char.appearance}`);
+        }
+
+        if (char.identityEvolution) {
+          parts.push(`   身份: ${char.identityEvolution}`);
+        }
+
+        if (char.quote) {
+          parts.push(`   台词: ${char.quote}`);
+        }
+
+        if (char.abilities && char.abilities.length > 0) {
+          parts.push(`   能力: ${char.abilities.join('、')}`);
+        }
+
+        return parts.join('\n');
+      });
+
+      characterSection = [
+        ``,
+        `╔═══════════════════════════════════════════════════════════════════╗`,
+        `║                       本 集 角 色 信 息                           ║`,
+        `╚═══════════════════════════════════════════════════════════════════╝`,
+        ``,
+        characterTexts.join('\n\n'),
+        ``,
+        `═══════════════════════════════════════════════════════════════════`,
+        ``,
+        ``
+      ].join('\n');
+    }
+
     const content = shots.map(s => {
       const isMotion = s.shotType === '运动';
       const lines = [
@@ -702,6 +758,17 @@ const App: React.FC = () => {
         ``,
         `💡 光影: ${s.lighting || '—'}`,
       ];
+
+      // 🆕 添加镜头中的角色信息
+      if (s.assignedCharacterIds && s.assignedCharacterIds.length > 0) {
+        const characterNames = s.assignedCharacterIds
+          .map(id => {
+            const char = currentProject?.characters.find(c => c.id === id);
+            return char ? char.name : id;
+          })
+          .join('、');
+        lines.push(`👥 角色: ${characterNames}`);
+      }
 
       if (isMotion) {
         lines.push(
@@ -752,13 +819,14 @@ const App: React.FC = () => {
       `║                       分 镜 脚 本 导 出                           ║`,
       `╠═══════════════════════════════════════════════════════════════════╣`,
       `║  镜头总数: ${shots.length.toString().padEnd(10)}                                       ║`,
+      `║  角色数量: ${episodeCharacters.length.toString().padEnd(10)}                                       ║`,
       `║  导出时间: ${new Date().toLocaleString().padEnd(22)}                      ║`,
       `╚═══════════════════════════════════════════════════════════════════╝`,
       ``,
       ``
     ].join('\n');
 
-    const blob = new Blob([header + content], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([header + characterSection + content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
