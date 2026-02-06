@@ -54,8 +54,9 @@ export async function getAllProjects(): Promise<Project[]> {
 
     return data.projects.map(p => ({
       ...p,
-      createdAt: new Date(p.createdAt).toISOString(),
-      updatedAt: new Date(p.updatedAt).toISOString(),
+      // 🆕 处理 D1 返回的蛇形命名和数字时间戳
+      createdAt: new Date(p.created_at || p.createdAt).toISOString(),
+      updatedAt: new Date(p.updated_at || p.updatedAt).toISOString(),
     }));
   } catch (error) {
     console.error('Get all projects error:', error);
@@ -72,11 +73,12 @@ export async function getProject(projectId: string): Promise<Project | null> {
     const project = await apiRequest<any>(`/api/projects/${projectId}`);
     return {
       ...project,
-      createdAt: new Date(project.createdAt).toISOString(),
-      updatedAt: new Date(project.updatedAt).toISOString(),
+      // 🆕 处理 D1 返回的蛇形命名和数字时间戳
+      createdAt: new Date(project.created_at || project.createdAt).toISOString(),
+      updatedAt: new Date(project.updated_at || project.updatedAt).toISOString(),
       episodes: project.episodes.map((ep: any) => ({
         ...ep,
-        updatedAt: new Date(ep.updatedAt).toISOString(),
+        updatedAt: new Date(ep.updated_at || ep.updatedAt).toISOString(),
       })),
     };
   } catch (error) {
