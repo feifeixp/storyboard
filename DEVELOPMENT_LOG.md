@@ -18,6 +18,65 @@
 
 ---
 
+## [2026-02-06 21:30] 🏗️ 架构调整
+
+**修改内容**：完成 Cloudflare D1 数据库集成和部署
+
+**影响范围**：
+- 文件/模块：
+  - 新增 `cloudflare/` 目录（完整的 Workers API）
+  - 新增 `services/d1Storage.ts`（数据服务层）
+  - 新增 `components/DataMigrationTool.tsx`（迁移工具）
+  - 新增 `.env`（API 配置）
+  - 新增 3 个文档文件
+
+**修改原因**：
+- 用户要求将数据保存在 Cloudflare D1 数据库
+- localStorage 容量限制（5-10MB）
+- 需要多设备同步和数据备份
+
+**预期效果**：
+- ✅ 数据存储在云端（5GB 免费空间）
+- ✅ 支持多设备同步
+- ✅ 自动备份，数据不会丢失
+- ✅ 支持团队协作（未来功能）
+
+**技术实现**：
+1. **数据库设计**（`cloudflare/schema.sql`）：
+   - 7 个表：users, projects, episodes, character_images, generated_images, chat_history, sessions
+   - JSON 字段存储复杂数据
+   - 级联删除和索引优化
+
+2. **Cloudflare Workers API**（Hono 框架）：
+   - `src/index.ts` - 主入口
+   - `src/middleware/auth.ts` - 认证中间件
+   - `src/routes/auth.ts` - 认证路由
+   - `src/routes/projects.ts` - 项目 CRUD
+   - `src/routes/episodes.ts` - 剧集 CRUD
+
+3. **前端数据服务**（`services/d1Storage.ts`）：
+   - 完整的 CRUD 操作
+   - 自动迁移工具
+   - 项目导出/导入
+
+4. **部署信息**：
+   - API 地址: https://storyboard-api.feifeixp.workers.dev
+   - 生产数据库 ID: b89a10de-f769-41f5-bbd5-cb4e6463bfe5
+   - 开发数据库 ID: 0ec29997-b9d2-4ee1-8b9c-31c41e0d4776
+
+**相关文档**：
+- `docs/Cloudflare-D1-部署指南.md` - 完整部署步骤
+- `docs/Cloudflare-D1-集成总结.md` - 架构总结
+- `docs/Cloudflare-D1-部署完成.md` - 部署报告
+- `docs/快速开始-数据迁移.md` - 迁移指南
+
+**下一步**：
+1. 更新前端代码，切换到 D1 存储
+2. 执行数据迁移
+3. 测试多设备同步
+
+---
+
 ## [2026-02-06 20:00] 🐛 问题修复
 
 **修改内容**：修复下载剧本中角色信息缺失问题

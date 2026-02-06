@@ -1,0 +1,28 @@
+{
+  "name": "storyboard-api",
+  "version": "1.0.0",
+  "description": "Cloudflare Workers API for Storyboard Studio",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "tsc",
+    "db:create": "wrangler d1 create storyboard-db",
+    "db:migrate": "wrangler d1 execute storyboard-db --file=./schema.sql",
+    "db:migrate:dev": "wrangler d1 execute storyboard-db --local --file=./schema.sql",
+    "db:query": "wrangler d1 execute storyboard-db --command",
+    "db:query:dev": "wrangler d1 execute storyboard-db --local --command"
+  },
+  "keywords": ["cloudflare", "workers", "d1", "storyboard"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.8.2",
+    "wrangler": "^3.94.0"
+  },
+  "dependencies": {
+    "hono": "^4.7.11"
+  }
+}
+
