@@ -59,7 +59,8 @@ export async function getSTSToken(): Promise<STSToken> {
 
   // 缓存令牌
   stsTokenCache = result.data;
-  tokenExpirationTime = new Date(result.data.expiration).getTime();
+  // expiration是秒数，转换为毫秒时间戳
+  tokenExpirationTime = now + parseInt(result.data.expiration) * 1000;
 
   return result.data;
 }

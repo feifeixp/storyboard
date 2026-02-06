@@ -18,6 +18,70 @@
 
 ---
 
+## [2026-02-06 19:45] ✨ 新功能
+
+**修改内容**：集成AI图片生成API和OSS上传功能
+
+**影响范围**：
+- 文件/模块：
+  - 新增 `services/aiImageGeneration.ts` - AI图片生成服务
+  - 修改 `services/oss.ts` - 修复STS令牌过期时间计算
+  - 新增 `components/AIImageModelSelector.tsx` - AI图片生成模型选择器组件
+
+**修改原因**：
+- 用户要求使用新的AI图片生成接口（豆包AI绘画4.0等）
+- 生成的图片需要保存到OSS而非临时URL
+- 提供更好的模型选择和配置体验
+
+**预期效果**：
+- ✅ 支持多种AI图片生成模型（豆包、Gemini等）
+- ✅ 图片自动上传到OSS永久存储
+- ✅ 轮询查询生成结果，实时显示进度
+- ✅ 支持会员权限、积分消耗等功能
+- ✅ 提供模型选择器组件，显示模型详细信息
+
+**技术要点**：
+- 使用新的AI图片生成接口（dev.neodomain.cn）
+- 异步任务模式：提交请求 → 轮询查询 → 下载上传
+- STS令牌缓存机制，提前5分钟刷新
+- 支持进度回调，实时显示生成和上传进度
+
+**核心功能**：
+1. `getModelsByScenario()` - 获取场景下可用模型列表
+2. `generateImage()` - 提交图片生成请求
+3. `pollGenerationResult()` - 轮询查询生成结果
+4. `generateAndUploadImage()` - 生成并上传到OSS（一站式）
+5. `AIImageModelSelector` - 模型选择器组件
+
+**使用示例**：
+```typescript
+import { generateAndUploadImage, ScenarioType } from './services/aiImageGeneration';
+
+// 生成图片并上传到OSS
+const ossUrls = await generateAndUploadImage(
+  {
+    prompt: '一个美丽的风景画，山川湖泊，日落',
+    negativePrompt: 'blurry, low quality',
+    modelName: 'doubao-seedream-4-0',
+    numImages: '1',
+    aspectRatio: '16:9',
+    size: '2K',
+  },
+  projectId,
+  shotNumber,
+  (stage, percent) => {
+    console.log(`${stage}: ${percent}%`);
+  }
+);
+```
+
+**下一步**：
+- 在分镜生成页面集成新的AI图片生成功能
+- 替换现有的OpenRouter图片生成为新接口
+- 添加批量生成和重试机制
+
+---
+
 ## [2026-02-06 19:35] 🎨 UI优化
 
 **修改内容**：移除AI导演助理模型选择器，固定使用 Gemini 2.5 Flash
