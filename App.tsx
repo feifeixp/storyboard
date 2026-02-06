@@ -2616,13 +2616,6 @@ const App: React.FC = () => {
             </button>
           )}
           <button
-            onClick={handleResetAll}
-            className="px-3 py-1.5 bg-gray-800 text-red-400 border border-gray-700 rounded-md text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
-            title="清除所有缓存数据，重新开始"
-          >
-            🔄 重新开始
-          </button>
-          <button
             onClick={logout}
             className="px-3 py-1.5 bg-gray-800 text-yellow-400 border border-gray-700 rounded-md text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
             title="退出登录"
