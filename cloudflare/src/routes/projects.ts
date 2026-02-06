@@ -12,20 +12,49 @@ export const projectRoutes = new Hono<{ Bindings: Env }>();
 projectRoutes.use('/*', authMiddleware);
 
 /**
- * 获取所有项目（仅元数据）
+ * 获取所有项目（包含完整数据）
  * GET /api/projects
  */
 projectRoutes.get('/', async (c) => {
   const user = getCurrentUser(c);
 
   try {
-    const { results } = await c.env.DB.prepare(
-      'SELECT id, name, created_at, updated_at FROM projects WHERE user_id = ? ORDER BY updated_at DESC'
+    // 🔧 修复：返回完整项目数据（包括 settings, characters, scenes）
+    const { results: projects } = await c.env.DB.prepare(
+      'SELECT id, name, created_at, updated_at, settings, characters, scenes FROM projects WHERE user_id = ? ORDER BY updated_at DESC'
     )
       .bind(user.id)
       .all();
 
-    return c.json({ projects: results });
+    // 🔧 修复：为每个项目查询 episodes 数据
+    const projectsWithEpisodes = await Promise.all(
+      projects.map(async (project: any) => {
+        const { results: episodes } = await c.env.DB.prepare(
+          'SELECT id, episode_number, title, status, updated_at FROM episodes WHERE project_id = ? ORDER BY episode_number ASC'
+        )
+          .bind(project.id)
+          .all();
+
+        return {
+          id: project.id,
+          name: project.name,
+          createdAt: project.created_at,
+          updatedAt: project.updated_at,
+          settings: JSON.parse(project.settings || '{}'),
+          characters: JSON.parse(project.characters || '[]'),
+          scenes: JSON.parse(project.scenes || '[]'),
+          episodes: episodes.map((ep: any) => ({
+            id: ep.id,
+            episodeNumber: ep.episode_number,
+            title: ep.title,
+            status: ep.status,
+            updatedAt: new Date(ep.updated_at).toISOString(),
+          })),
+        };
+      })
+    );
+
+    return c.json({ projects: projectsWithEpisodes });
   } catch (error) {
     console.error('Get projects error:', error);
     return c.json({ error: 'Failed to get projects' }, 500);
