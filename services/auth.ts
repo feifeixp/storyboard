@@ -1,9 +1,10 @@
 /**
  * 用户认证服务
- * 🆕 使用 Cloudflare D1 认证系统
+ * 🆕 使用 Neodomain 统一登录 API
  */
 
-// 🆕 使用 D1 API
+// 🆕 使用 Neodomain API
+const NEODOMAIN_API_BASE = 'https://story.neodomain.cn';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://storyboard-api.feifeixp.workers.dev';
 
 // 用户信息接口
@@ -27,44 +28,43 @@ interface ApiResponse<T> {
 
 /**
  * 发送验证码（统一接口，支持手机号和邮箱）
+ * 🆕 调用 Neodomain API
  */
 export async function sendVerificationCode(contact: string): Promise<void> {
-  // 🆕 判断是手机号还是邮箱
-  const validation = validateContact(contact);
-  const body = validation.type === 'mobile'
-    ? { phone: contact }
-    : { email: contact };
-
-  const response = await fetch(`${API_BASE_URL}/api/auth/send-code`, {
+  const response = await fetch(`${NEODOMAIN_API_BASE}/user/login/send-unified-code`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ contact }),
   });
 
   const result = await response.json();
 
   if (!result.success) {
-    throw new Error(result.error || result.message || '发送验证码失败');
+    throw new Error(result.errMessage || '发送验证码失败');
   }
 }
 
 /**
  * 统一登录（支持手机号和邮箱验证码登录）
+ * 🆕 调用 Neodomain API
  */
 export async function login(
   contact: string,
   code: string,
   invitationCode?: string
 ): Promise<UserInfo> {
-  // 🆕 判断是手机号还是邮箱
-  const validation = validateContact(contact);
-  const body = validation.type === 'mobile'
-    ? { phone: contact, code }
-    : { email: contact, code };
+  const body: { contact: string; code: string; invitationCode?: string } = {
+    contact,
+    code,
+  };
 
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  if (invitationCode) {
+    body.invitationCode = invitationCode;
+  }
+
+  const response = await fetch(`${NEODOMAIN_API_BASE}/user/login/unified-login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -75,19 +75,11 @@ export async function login(
   const result = await response.json();
 
   if (!result.success) {
-    throw new Error(result.error || result.message || '登录失败');
+    throw new Error(result.errMessage || '登录失败');
   }
 
-  // 🆕 D1 API 返回格式不同，需要转换
-  const userInfo: UserInfo = {
-    authorization: result.accessToken,
-    userId: result.user.id,
-    email: result.user.email || '',
-    mobile: result.user.phone || '',
-    nickname: result.user.email || result.user.phone || '',
-    avatar: '',
-    status: 1,
-  };
+  // 🆕 Neodomain API 直接返回 UserInfo 格式
+  const userInfo: UserInfo = result.data;
 
   // 保存用户信息到本地存储
   saveUserInfo(userInfo);
