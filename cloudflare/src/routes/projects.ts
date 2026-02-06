@@ -98,11 +98,16 @@ projectRoutes.post('/', async (c) => {
   const user = getCurrentUser(c);
   const body = await c.req.json();
 
+  console.log('[Projects] Creating project for user:', user.id);
+  console.log('[Projects] Project name:', body.name);
+
   const projectId = `proj-${Date.now()}`;
   const now = Date.now();
 
   try {
-    await c.env.DB.prepare(
+    console.log('[Projects] Inserting project into database...');
+
+    const result = await c.env.DB.prepare(
       `INSERT INTO projects (
         id, user_id, name, created_at, updated_at,
         settings, characters, scenes, volumes, antagonists, story_outline
@@ -123,6 +128,9 @@ projectRoutes.post('/', async (c) => {
       )
       .run();
 
+    console.log('[Projects] Insert result:', JSON.stringify(result));
+    console.log('[Projects] Project created successfully:', projectId);
+
     return c.json({
       id: projectId,
       name: body.name,
@@ -137,8 +145,9 @@ projectRoutes.post('/', async (c) => {
       episodes: [],
     });
   } catch (error) {
-    console.error('Create project error:', error);
-    return c.json({ error: 'Failed to create project' }, 500);
+    console.error('[Projects] Create project error:', error);
+    console.error('[Projects] Error details:', JSON.stringify(error, null, 2));
+    return c.json({ error: 'Failed to create project', details: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
 

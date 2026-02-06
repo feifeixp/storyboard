@@ -41,6 +41,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   const accessToken = c.req.header('accessToken') || c.req.header('Authorization')?.replace('Bearer ', '');
 
   if (!accessToken) {
+    console.error('[Auth] Missing access token');
     return c.json({ error: 'Unauthorized: Missing access token' }, 401);
   }
 
@@ -49,11 +50,15 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     const payload = parseJWT(accessToken);
 
     if (!payload) {
+      console.error('[Auth] Invalid token format');
       return c.json({ error: 'Unauthorized: Invalid token format' }, 401);
     }
 
+    console.log('[Auth] JWT payload:', JSON.stringify(payload, null, 2));
+
     // 检查 Token 是否过期
     if (payload.exp && payload.exp * 1000 < Date.now()) {
+      console.error('[Auth] Token expired');
       return c.json({ error: 'Unauthorized: Token expired' }, 401);
     }
 
@@ -62,8 +67,11 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     const userId = payload.userId || payload.sub || payload.id;
 
     if (!userId) {
+      console.error('[Auth] Invalid token payload - no userId found');
       return c.json({ error: 'Unauthorized: Invalid token payload' }, 401);
     }
+
+    console.log('[Auth] User ID:', userId);
 
     // 🆕 确保用户在数据库中存在（如果不存在则创建）
     await ensureUserExists(c.env.DB, {
@@ -79,9 +87,11 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
       email: payload.email,
     });
 
+    console.log('[Auth] Authentication successful for user:', userId);
+
     await next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    console.error('[Auth] Middleware error:', error);
     return c.json({ error: 'Internal server error' }, 500);
   }
 }
