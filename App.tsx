@@ -3651,17 +3651,9 @@ const App: React.FC = () => {
                             <p className="text-[10px] text-gray-400">讨论剧情/镜头，确认后执行修改</p>
                         </div>
                         <div className="flex items-center gap-3">
-                            <select
-                              value={editModel}
-                              onChange={(e) => setEditModel(e.target.value)}
-                              className="py-1 px-2 bg-gray-700 text-white text-xs rounded border border-gray-600 outline-none"
-                            >
-                              {Object.values(MODELS).map((model) => (
-                                <option key={model} value={model}>
-                                  {model.split('/')[1]}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="py-1 px-2 bg-gray-700 text-white text-xs rounded border border-gray-600">
+                              🔮 Gemini 2.5 Flash
+                            </div>
                             <button
                                 onClick={handleExecuteChanges}
                                 disabled={isLoading || chatHistory.length < 2}
