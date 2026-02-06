@@ -71,15 +71,21 @@ export async function getAllProjects(): Promise<Project[]> {
 export async function getProject(projectId: string): Promise<Project | null> {
   try {
     const project = await apiRequest<any>(`/api/projects/${projectId}`);
+
+    // 🔧 确保 episodes 存在且是数组
+    const episodes = Array.isArray(project.episodes)
+      ? project.episodes.map((ep: any) => ({
+          ...ep,
+          updatedAt: new Date(ep.updated_at || ep.updatedAt).toISOString(),
+        }))
+      : [];
+
     return {
       ...project,
       // 🆕 处理 D1 返回的蛇形命名和数字时间戳
       createdAt: new Date(project.created_at || project.createdAt).toISOString(),
       updatedAt: new Date(project.updated_at || project.updatedAt).toISOString(),
-      episodes: project.episodes.map((ep: any) => ({
-        ...ep,
-        updatedAt: new Date(ep.updated_at || ep.updatedAt).toISOString(),
-      })),
+      episodes,
     };
   } catch (error) {
     console.error('Get project error:', error);
