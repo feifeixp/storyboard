@@ -31,6 +31,10 @@ export function ProjectList({
   };
 
   const getEpisodeStats = (project: Project) => {
+    // 🔧 安全检查：确保 episodes 存在且是数组
+    if (!project.episodes || !Array.isArray(project.episodes)) {
+      return { total: 0, generated: 0 };
+    }
     const total = project.episodes.length;
     const generated = project.episodes.filter(e => e.status !== 'draft').length;
     return { total, generated };
@@ -68,7 +72,7 @@ export function ProjectList({
           </button>
 
           {/* 现有项目卡片 */}
-          {projects.map((project) => {
+          {(projects || []).map((project) => {
             const stats = getEpisodeStats(project);
             return (
               <div
@@ -159,7 +163,7 @@ export function ProjectList({
         </div>
 
         {/* 空状态 */}
-        {projects.length === 0 && (
+        {(!projects || projects.length === 0) && (
           <div className="text-center mt-10 text-gray-500">
             <p>还没有项目，点击上方「新建项目」开始创作</p>
           </div>
