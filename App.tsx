@@ -705,10 +705,10 @@ const App: React.FC = () => {
       }
     });
 
-    // 从项目角色库中筛选本集角色
-    const episodeCharacters = currentProject?.characters.filter(char =>
+    // 🆕 修复：从 characterRefs 中筛选本集角色（而不是 currentProject.characters）
+    const episodeCharacters = characterRefs.filter(char =>
       characterIdsInEpisode.has(char.id)
-    ) || [];
+    );
 
     // 生成角色信息部分
     let characterSection = '';
@@ -779,7 +779,7 @@ const App: React.FC = () => {
       if (s.assignedCharacterIds && s.assignedCharacterIds.length > 0) {
         const characterNames = s.assignedCharacterIds
           .map(id => {
-            const char = currentProject?.characters.find(c => c.id === id);
+            const char = characterRefs.find(c => c.id === id);
             return char ? char.name : id;
           })
           .join('、');

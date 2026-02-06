@@ -18,6 +18,30 @@
 
 ---
 
+## [2026-02-06 20:00] 🐛 问题修复
+
+**修改内容**：修复下载剧本中角色信息缺失问题
+
+**影响范围**：
+- 文件/模块：App.tsx (downloadScript 函数)
+
+**修改原因**：
+- downloadScript 函数错误地使用 currentProject?.characters 来获取角色信息
+- 实际角色数据存储在 characterRefs 状态变量中
+- 导致下载的剧本中"本集出场人物人设"部分显示"（本集未标注角色信息）"
+
+**预期效果**：
+- 下载的剧本正确显示本集出场角色的详细信息
+- 包括角色的性别、外貌、身份、台词、能力等
+- 每个镜头正确显示出场角色名称
+
+**技术细节**：
+- 修改第709行：currentProject?.characters → characterRefs
+- 修改第782行：currentProject?.characters → characterRefs
+- 确保从正确的数据源读取角色信息
+
+---
+
 ## [2026-02-06 19:45] ✨ 新功能
 
 **修改内容**：集成AI图片生成API和OSS上传功能
