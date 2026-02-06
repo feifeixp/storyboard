@@ -71,8 +71,6 @@ import { BatchAnalysisProgress } from './types/project';
 // 🆕 本集概述生成
 import { generateEpisodeSummary } from './services/episodeSummaryGenerator';
 import { EpisodeSummaryPanel } from './components/EpisodeSummaryPanel';
-// 🆕 数据迁移工具
-import { DataMigrationTool } from './components/DataMigrationTool';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -2629,11 +2627,6 @@ const App: React.FC = () => {
       {/* 🆕 项目列表页面 */}
       {currentStep === AppStep.PROJECT_LIST && (
         <div className="max-w-7xl mx-auto">
-          {/* 数据迁移工具 */}
-          <div className="mb-6">
-            <DataMigrationTool />
-          </div>
-
           {/* 项目列表 */}
           <ProjectList
             projects={projects}
