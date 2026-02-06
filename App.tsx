@@ -560,7 +560,7 @@ const App: React.FC = () => {
       alert('没有当前项目');
       return;
     }
-    if (currentProject.episodes.length === 0) {
+    if (!currentProject.episodes || currentProject.episodes.length === 0) {
       alert('项目中没有剧集，无法分析');
       return;
     }
@@ -584,7 +584,7 @@ const App: React.FC = () => {
 
   // 🆕 执行重新分析
   const performReanalyze = async () => {
-    if (!currentProject) return;
+    if (!currentProject || !currentProject.episodes) return;
 
     setIsReanalyzing(true);
     try {
@@ -1487,7 +1487,7 @@ const App: React.FC = () => {
 
       // 🆕 生成本集概述（从思维链结果提取信息）
       if (currentProject && currentEpisodeNumber !== null) {
-        const currentEpisode = currentProject.episodes.find(ep => ep.episodeNumber === currentEpisodeNumber);
+        const currentEpisode = currentProject.episodes?.find(ep => ep.episodeNumber === currentEpisodeNumber);
         const episodeTitle = currentEpisode?.title || `第${currentEpisodeNumber}集`;
 
         const summary = generateEpisodeSummary(
@@ -2699,7 +2699,7 @@ const App: React.FC = () => {
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">剧集数量</label>
                       <div className="bg-gray-800 rounded px-3 py-2 text-sm text-white">
-                        {currentProject.episodes.length} 集
+                        {currentProject?.episodes?.length || 0} 集
                       </div>
                     </div>
                   </div>
@@ -2833,7 +2833,7 @@ const App: React.FC = () => {
             {isReanalyzing && !reanalyzeResult && (
               <div className="text-center py-12">
                 <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-gray-400">正在分析 {currentProject.episodes.length} 集剧本...</p>
+                <p className="text-gray-400">正在分析 {currentProject?.episodes?.length || 0} 集剧本...</p>
               </div>
             )}
           </div>
