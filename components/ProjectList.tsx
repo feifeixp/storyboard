@@ -109,7 +109,7 @@ export function ProjectList({
                         {project.name}
                       </h3>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {project.settings.genre || '未设置类型'}
+                        {project.settings?.genre || '未设置类型'}
                       </p>
                     </div>
                   </div>
@@ -125,13 +125,13 @@ export function ProjectList({
                     <div className="flex items-center gap-1.5">
                       <span className="text-gray-500">👥</span>
                       <span className="text-gray-300">
-                        {project.characters.length} 角色
+                        {project.characters?.length || 0} 角色
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-gray-500">🏛️</span>
                       <span className="text-gray-300">
-                        {project.scenes.length} 场景
+                        {project.scenes?.length || 0} 场景
                       </span>
                     </div>
                   </div>
