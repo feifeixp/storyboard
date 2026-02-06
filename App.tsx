@@ -166,6 +166,17 @@ const App: React.FC = () => {
       const id = getCurrentProjectId();
       if (id) {
         const project = await getProject(id);
+
+        // 🔧 如果项目不存在（404），清除当前项目ID并返回项目列表
+        if (!project) {
+          console.warn(`[App] 项目 ${id} 不存在，清除当前项目ID`);
+          setCurrentProjectId(null);
+          setCurrentProject(null);
+          setCurrentStep(AppStep.PROJECT_LIST);
+          alert('项目不存在或已被删除，请重新选择项目');
+          return;
+        }
+
         setCurrentProject(project);
       }
     };
