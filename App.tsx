@@ -44,7 +44,8 @@ import {
   validateAngleDistribution,
   generateAngleDistributionReport
 } from './services/angleValidation';
-import { ModelSelector, ImageModelSelector, IMAGE_GENERATION_MODELS, MODEL_CAPABILITIES, getModelCapabilityHint } from './components/ModelSelector';
+import { ModelSelector, IMAGE_GENERATION_MODELS, MODEL_CAPABILITIES, getModelCapabilityHint } from './components/ModelSelector';
+import { AIImageModelSelector } from './components/AIImageModelSelector';
 import { SuggestionDetailModal } from './components/SuggestionDetailModal';
 // 思维链类型
 import type { ScriptAnalysis, VisualStrategy, ShotPlanning, ShotDesign, QualityCheck } from './prompts/chain-of-thought/types';
@@ -247,7 +248,7 @@ const App: React.FC = () => {
   const [analysisModel, setAnalysisModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 剧本分析模型
   const [reviewModel, setReviewModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 审核优化模型
   const [editModel, setEditModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 编辑对话模型
-  const [imageModel, setImageModel] = useState(IMAGE_GENERATION_MODELS.GEMINI_PRO_IMAGE); // 生图模型，默认 Nano Banana
+  const [imageModel, setImageModel] = useState('doubao-seedream-4-0'); // 🆕 生图模型，默认豆包AI绘画4.0
 
   // 🆕 分镜草图风格选择
   const [selectedStyle, setSelectedStyle] = useState<StoryboardStyle>(STORYBOARD_STYLES[0]);
@@ -4229,11 +4230,14 @@ const App: React.FC = () => {
                   <span className="text-xs text-gray-400">{showStyleCards ? '▲' : '▼'}</span>
                 </button>
 
-                {/* 模型显示 - 只使用 Nano Banana Pro */}
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-900/30 border border-amber-700 rounded-lg">
-                  <span className="text-lg">🍌</span>
-                  <span className="text-sm font-medium text-amber-400">Nano Banana Pro</span>
-                </div>
+                {/* 🆕 AI图片生成模型选择器 */}
+                <AIImageModelSelector
+                  value={imageModel}
+                  onChange={setImageModel}
+                  scenarioType={5} // 5 = 分镜场景
+                  className="flex-shrink-0"
+                  label="生图模型"
+                />
 
                 <div className="flex-1" />
 
@@ -4533,7 +4537,7 @@ const App: React.FC = () => {
             <div className="bg-emerald-900/30 p-4 rounded-lg border border-emerald-700">
               <h4 className="text-sm font-bold text-emerald-400 mb-2">🎨 AI分镜草图说明</h4>
               <ul className="text-xs text-emerald-300 space-y-1">
-                <li>• <strong>AI图像生成</strong>：调用 OpenRouter API（{imageModel}）为每个镜头生成AI草图</li>
+                <li>• <strong>AI图像生成</strong>：调用 Neodomain API（{imageModel}）为每个镜头生成AI草图</li>
                 <li>• <strong>九宫格布局</strong>：每张图包含9个镜头（3×3），标注镜号、景别、台词、首尾帧</li>
                 <li>• <strong>风格控制</strong>：选择的风格（{selectedStyle.name}）会作为提示词后缀影响生成效果</li>
                 <li>• <strong>批量下载</strong>：点击"下载全部"可一次性下载所有九宫格图</li>

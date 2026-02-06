@@ -3287,8 +3287,8 @@ export async function* chatEditShotListStream(
 }
 
 /**
- * 调用 OpenRouter 图像生成 API 生成单张图像
- * 支持传入角色设定图作为参考
+ * 🆕 使用 Neodomain API 生成单张图像
+ * 替代原有的 OpenRouter 图像生成
  */
 async function generateSingleImage(
   prompt: string,
@@ -3296,94 +3296,48 @@ async function generateSingleImage(
   characterRefs: CharacterRef[] = []
 ): Promise<string | null> {
   try {
-    // 图像生成始终使用 OpenRouter（DeepSeek 不支持图像生成）
-    const client = getClient(imageModel);
+    console.log(`[Neodomain] 图像生成请求: ${prompt.substring(0, 100)}...`);
 
-    console.log(`[OpenRouter] 图像生成请求: ${prompt.substring(0, 100)}...`);
-    if (characterRefs.length > 0) {
-      console.log(`[OpenRouter] 附带 ${characterRefs.length} 张角色设定图作为参考`);
-    }
+    // 动态导入 neodomain API
+    const { generateImage, pollGenerationResult, TaskStatus } = await import('./aiImageGeneration');
 
-    // 构建消息内容 - 支持多模态（文本 + 图像参考）
-    const messageContent: any[] = [];
-
-    // 如果有角色设定图，先添加角色参考指令和图片
-    if (characterRefs.length > 0) {
-      // 添加角色参考提示
-      const charNames = characterRefs.map(c => c.name).filter(Boolean).join('、');
-      messageContent.push({
-        type: 'text',
-        text: `【角色参考】以下是角色设定图，请在生成分镜时保持角色外观一致：${charNames ? `涉及角色: ${charNames}` : ''}\n`
-      });
-
-      // 添加所有角色设定图
-      for (const ref of characterRefs) {
-        messageContent.push({
-          type: 'image_url',
-          image_url: {
-            url: ref.data // base64 data URL
-          }
-        });
-      }
-
-      // 添加分隔
-      messageContent.push({
-        type: 'text',
-        text: '\n【分镜生成任务】\n' + prompt
-      });
-    } else {
-      // 没有角色设定图，直接使用文本提示词
-      messageContent.push({
-        type: 'text',
-        text: prompt
-      });
-    }
-
-    // OpenRouter 图像生成 API 调用
-    const response = await (client as any).chat.completions.create({
-      model: imageModel,
-      messages: [
-        {
-          role: 'user',
-          content: characterRefs.length > 0 ? messageContent : prompt,
-        },
-      ],
-      // 启用图像生成模式
-      modalities: ['image', 'text'],
-      // 图像配置 - 使用1K分辨率加速预览
-      // 支持的尺寸: 1K (快速预览), 2K, 4K (高质量)
-      // 支持的宽高比: 1:1, 3:4, 4:3, 9:16, 16:9
-      image_config: {
-        aspect_ratio: '16:9',  // 九宫格分镜草图使用16:9横版
-        image_size: '1K',       // 1K分辨率，生成速度更快
-      },
+    // 提交生成请求
+    const task = await generateImage({
+      prompt: prompt,
+      negativePrompt: 'blurry, low quality, watermark, text, signature, distorted, deformed',
+      modelName: imageModel || 'doubao-seedream-4-0', // 使用豆包AI绘画4.0作为默认模型
+      numImages: '1',
+      aspectRatio: '16:9',  // 九宫格分镜草图使用16:9横版
+      size: '2K',           // 2K分辨率，平衡质量和速度
+      outputFormat: 'jpeg',
+      guidanceScale: 7.5,
+      showPrompt: false,
     });
 
-    // 从响应中提取图像
-    const message = response.choices?.[0]?.message;
-    if (message?.images && message.images.length > 0) {
-      const imageUrl = message.images[0]?.image_url?.url;
-      if (imageUrl) {
-        console.log('[OpenRouter] 图像生成成功');
-        return imageUrl;
-      }
-    }
+    console.log(`[Neodomain] 任务已提交: ${task.task_code}`);
 
-    console.warn('[OpenRouter] 响应中未找到图像，响应内容:', JSON.stringify(response, null, 2));
-    return null;
-  } catch (error) {
-    // 🆕 增强错误处理：区分不同类型的错误
-    if (error instanceof SyntaxError) {
-      console.error('[OpenRouter] JSON解析失败（可能是API响应不完整）:', error.message);
-      console.error('[OpenRouter] 建议：检查网络连接或稍后重试');
-    } else if (error && typeof error === 'object' && 'response' in error) {
-      // @ts-ignore
-      console.error('[OpenRouter] API请求失败:', error.response?.status, error.response?.statusText);
-      // @ts-ignore
-      console.error('[OpenRouter] 错误详情:', error.response?.data);
+    // 轮询查询结果
+    const result = await pollGenerationResult(
+      task.task_code,
+      (status, attempt) => {
+        console.log(`[Neodomain] 生成状态: ${status}, 第${attempt}次查询`);
+      }
+    );
+
+    // 检查生成结果
+    if (result.status === TaskStatus.SUCCESS && result.image_urls && result.image_urls.length > 0) {
+      const imageUrl = result.image_urls[0];
+      console.log('[Neodomain] 图像生成成功');
+      return imageUrl;
+    } else if (result.status === TaskStatus.FAILED) {
+      console.error('[Neodomain] 图像生成失败:', result.failure_reason);
+      return null;
     } else {
-      console.error('[OpenRouter] 图像生成失败:', error);
+      console.warn('[Neodomain] 未获取到生成的图片');
+      return null;
     }
+  } catch (error) {
+    console.error('[Neodomain] 图像生成失败:', error);
     return null;
   }
 }
