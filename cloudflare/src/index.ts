@@ -18,14 +18,14 @@ export interface Env {
 // 创建 Hono 应用
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS 中间件
+// CORS 中间件 - 允许所有来源（生产环境建议限制为特定域名）
 app.use('/*', cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'https://yourdomain.com'],
+  origin: '*',  // 允许所有来源
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'accessToken'],
   exposeHeaders: ['Content-Length'],
   maxAge: 600,
-  credentials: true,
+  credentials: false,  // 允许所有来源时必须设置为 false
 }));
 
 // 健康检查
