@@ -115,10 +115,11 @@ export async function saveProject(project: Project): Promise<void> {
       }),
     });
   } else {
-    // 创建新项目
+    // 🔧 核心修复：创建新项目时传入前端生成的 ID，避免 ID 不一致
     await apiRequest('/api/projects', {
       method: 'POST',
       body: JSON.stringify({
+        id: project.id,  // 🆕 传入前端生成的 ID
         name: project.name,
         settings: project.settings,
         characters: project.characters,
@@ -131,6 +132,18 @@ export async function saveProject(project: Project): Promise<void> {
   }
 
   console.log(`[D1存储] 项目保存成功: ${project.name}`);
+
+  // 🔧 核心修复：同时保存所有剧集到 episodes 表
+  if (project.episodes && Array.isArray(project.episodes) && project.episodes.length > 0) {
+    console.log(`[D1存储] 开始保存 ${project.episodes.length} 个剧集...`);
+
+    // 并行保存所有剧集（提升性能）
+    await Promise.all(
+      project.episodes.map(episode => saveEpisode(project.id, episode))
+    );
+
+    console.log(`[D1存储] ${project.episodes.length} 个剧集保存成功`);
+  }
 }
 
 /**

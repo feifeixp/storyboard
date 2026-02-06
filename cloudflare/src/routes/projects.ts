@@ -101,7 +101,10 @@ projectRoutes.post('/', async (c) => {
   console.log('[Projects] Creating project for user:', user.id);
   console.log('[Projects] Project name:', body.name);
 
-  const projectId = `proj-${Date.now()}`;
+  // 🔧 核心修复：接受前端传入的 ID，避免 ID 不一致导致刷新后找不到项目
+  const projectId = body.id || `proj-${Date.now()}`;
+  console.log('[Projects] Project ID:', projectId);
+
   const now = Date.now();
 
   try {

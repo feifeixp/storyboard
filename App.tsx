@@ -61,6 +61,7 @@ import { exportScriptTemplate } from './services/scriptTemplateExport';
 import {
   getAllProjects,
   saveProject,
+  saveEpisode,  // 🆕 添加 saveEpisode 导入
   deleteProject,
   getCurrentProjectId,
   setCurrentProjectId,
@@ -1543,6 +1544,27 @@ const App: React.FC = () => {
 
       setCotCurrentStage(null);
       setProgressMsg(`✅ 思维链生成完成！共 ${finalShots.length} 个镜头`);
+
+      // 🔧 核心修复：保存当前剧集的分镜数据到后端
+      if (currentProject && currentEpisodeNumber !== null) {
+        const currentEpisode = currentProject.episodes?.find(ep => ep.episodeNumber === currentEpisodeNumber);
+        if (currentEpisode) {
+          const updatedEpisode: Episode = {
+            ...currentEpisode,
+            shots: finalShots,
+            status: 'generated',
+            updatedAt: new Date().toISOString(),
+          };
+
+          try {
+            await saveEpisode(currentProject.id, updatedEpisode);
+            console.log(`[D1存储] 第${currentEpisodeNumber}集分镜保存成功`);
+          } catch (error) {
+            console.error('[D1存储] 保存剧集失败:', error);
+            // 不阻断用户操作，只记录错误
+          }
+        }
+      }
 
     } catch (error) {
       console.error('思维链生成失败:', error);
