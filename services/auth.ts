@@ -1,9 +1,10 @@
 /**
  * 用户认证服务
- * 基于接口文档: 用户认证接口文档.md
+ * 🆕 使用 Cloudflare D1 认证系统
  */
 
-const API_BASE_URL = 'https://story.neodomain.cn';
+// 🆕 使用 D1 API
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://storyboard-api.feifeixp.workers.dev';
 
 // 用户信息接口
 export interface UserInfo {
@@ -28,18 +29,24 @@ interface ApiResponse<T> {
  * 发送验证码（统一接口，支持手机号和邮箱）
  */
 export async function sendVerificationCode(contact: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/user/login/send-unified-code`, {
+  // 🆕 判断是手机号还是邮箱
+  const validation = validateContact(contact);
+  const body = validation.type === 'mobile'
+    ? { phone: contact }
+    : { email: contact };
+
+  const response = await fetch(`${API_BASE_URL}/api/auth/send-code`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ contact }),
+    body: JSON.stringify(body),
   });
 
-  const result: ApiResponse<null> = await response.json();
+  const result = await response.json();
 
   if (!result.success) {
-    throw new Error(result.errMessage || '发送验证码失败');
+    throw new Error(result.error || result.message || '发送验证码失败');
   }
 }
 
@@ -51,28 +58,41 @@ export async function login(
   code: string,
   invitationCode?: string
 ): Promise<UserInfo> {
-  const response = await fetch(`${API_BASE_URL}/user/login/unified-login`, {
+  // 🆕 判断是手机号还是邮箱
+  const validation = validateContact(contact);
+  const body = validation.type === 'mobile'
+    ? { phone: contact, code }
+    : { email: contact, code };
+
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      contact,
-      code,
-      invitationCode,
-    }),
+    body: JSON.stringify(body),
   });
 
-  const result: ApiResponse<UserInfo> = await response.json();
+  const result = await response.json();
 
-  if (!result.success || !result.data) {
-    throw new Error(result.errMessage || '登录失败');
+  if (!result.success) {
+    throw new Error(result.error || result.message || '登录失败');
   }
 
-  // 保存用户信息到本地存储
-  saveUserInfo(result.data);
+  // 🆕 D1 API 返回格式不同，需要转换
+  const userInfo: UserInfo = {
+    authorization: result.accessToken,
+    userId: result.user.id,
+    email: result.user.email || '',
+    mobile: result.user.phone || '',
+    nickname: result.user.email || result.user.phone || '',
+    avatar: '',
+    status: 1,
+  };
 
-  return result.data;
+  // 保存用户信息到本地存储
+  saveUserInfo(userInfo);
+
+  return userInfo;
 }
 
 /**
