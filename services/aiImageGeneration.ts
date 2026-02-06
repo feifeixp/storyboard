@@ -151,17 +151,12 @@ export async function generateImage(
     throw new Error('用户信息不完整，无法生成图片');
   }
 
-  // 添加 userId 到请求参数
-  const requestWithUserId = {
-    ...request,
-    userId: userInfo.userId,
-  };
-
   console.log('[Neodomain] 图像生成请求参数:', {
-    ...requestWithUserId,
-    prompt: requestWithUserId.prompt.substring(0, 100) + '...',
+    ...request,
+    prompt: request.prompt.substring(0, 100) + '...',
   });
 
+  // 🔧 尝试1：不传递 userId，只使用 accessToken 认证
   const response = await fetch(
     `${API_BASE_URL}/agent/ai-image-generation/generate`,
     {
@@ -170,7 +165,7 @@ export async function generateImage(
         'accessToken': accessToken,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestWithUserId),
+      body: JSON.stringify(request),
     }
   );
 
