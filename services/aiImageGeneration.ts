@@ -156,13 +156,14 @@ export async function generateImage(
     prompt: request.prompt.substring(0, 100) + '...',
   });
 
-  // 🔧 尝试1：不传递 userId，只使用 accessToken 认证
+  // 🔧 尝试使用 Authorization header（标准 JWT 认证方式）
   const response = await fetch(
     `${API_BASE_URL}/agent/ai-image-generation/generate`,
     {
       method: 'POST',
       headers: {
-        'accessToken': accessToken,
+        'Authorization': `Bearer ${accessToken}`,
+        'accessToken': accessToken,  // 同时保留 accessToken header
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
