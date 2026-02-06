@@ -13,6 +13,7 @@ import { Shot, CharacterRef } from '../types';
  * @param shots 分镜脚本数据
  * @param sceneLayouts 场景空间布局数据（来自分镜生成阶段）
  * @param episodeSummary 本集概述（从思维链结果生成，可选）
+ * @param characterRefs 角色引用列表（当前加载的角色数据）
  * @returns 剧本模板文本内容
  */
 export function exportScriptTemplate(
@@ -26,7 +27,8 @@ export function exportScriptTemplate(
     defaultPositions: { [characterName: string]: string };
     hiddenSettings?: string;
   }>,
-  episodeSummary?: GeneratedEpisodeSummary | null
+  episodeSummary?: GeneratedEpisodeSummary | null,
+  characterRefs?: CharacterRef[]
 ): string {
   const episode = project.episodes.find(ep => ep.episodeNumber === episodeNumber);
   if (!episode) {
@@ -37,7 +39,7 @@ export function exportScriptTemplate(
   const header = generateHeader(episodeNumber, episode.title);
 
   // 2. 本集人物人设
-  const characters = generateCharacterSection(project, shots);
+  const characters = generateCharacterSection(project, shots, characterRefs);
 
   // 3. 本集场景描述
   const scenes = generateSceneSection(project, shots);
@@ -78,8 +80,9 @@ function generateHeader(episodeNumber: number, episodeTitle: string): string {
 
 /**
  * 生成本集人物人设部分
+ * 🆕 修复：优先使用 characterRefs（当前加载的角色数据），降级使用 project.characters
  */
-function generateCharacterSection(project: Project, shots: Shot[]): string {
+function generateCharacterSection(project: Project, shots: Shot[], characterRefs?: CharacterRef[]): string {
   // 从分镜脚本中提取本集出现的角色
   const characterIdsInEpisode = new Set<string>();
   shots.forEach(shot => {
@@ -88,8 +91,11 @@ function generateCharacterSection(project: Project, shots: Shot[]): string {
     }
   });
 
-  // 从项目角色库中筛选本集角色
-  const episodeCharacters = project.characters.filter(char =>
+  // 🆕 优先使用 characterRefs（当前加载的角色数据），降级使用 project.characters
+  const characterSource = characterRefs && characterRefs.length > 0 ? characterRefs : project.characters;
+
+  // 从角色库中筛选本集角色
+  const episodeCharacters = characterSource.filter(char =>
     characterIdsInEpisode.has(char.id)
   );
 

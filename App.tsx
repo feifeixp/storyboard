@@ -2099,7 +2099,8 @@ const App: React.FC = () => {
         currentEpisodeNumber,
         shots,
         sceneLayouts,  // 🆕 传递 sceneLayouts 数据
-        episodeSummary  // 🆕 传递已生成的本集概述
+        episodeSummary,  // 🆕 传递已生成的本集概述
+        characterRefs  // 🆕 传递当前加载的角色数据
       );
 
       // 生成文件名
