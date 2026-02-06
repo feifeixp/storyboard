@@ -377,9 +377,9 @@ const getClient = (model?: string) => {
  * ╠══════════════════════════════╬═══════════════╬═══════════════╬════════════════╣
  * ║ GPT-4o Mini                  ║ $0.15         ║ $0.60         ║ OpenAI经济型    ║
  * ║ Gemini 2.5 Flash             ║ $0.30         ║ $2.50         ║ Google快速型    ║
- * ║ Gemini 3 Flash Preview       ║ $0.50         ║ $3.00         ║ ✅ 默认推荐     ║
+ * ║ Gemini 3 Flash Preview       ║ $0.50         ║ $3.00         ║ Google新版      ║
  * ║ Claude Haiku 4.5             ║ $1.00         ║ $5.00         ║ Anthropic快速型 ║
- * ║ Gemini 2.5 Pro               ║ $1.25         ║ $10.00        ║ Google高质量    ║
+ * ║ Gemini 2.5 Pro               ║ $1.25         ║ $10.00        ║ ✅ 默认推荐     ║
  * ║ Gemini 3 Pro Preview         ║ $1.25         ║ $10.00        ║ 思维链推理      ║
  * ║ Claude Sonnet 4.5            ║ $3.00         ║ $15.00        ║ 最高质量        ║
  * ╚══════════════════════════════╩═══════════════╩═══════════════╩════════════════╝
@@ -453,9 +453,9 @@ export const MODEL_NAMES: Record<string, string> = {
   [MODELS.DEEPSEEK_CHAT]: 'DeepSeek V3 (¥1) 🔥最便宜',
   [MODELS.GPT_4O_MINI]: 'GPT-4o Mini ($0.15)',
   [MODELS.GEMINI_2_5_FLASH]: 'Gemini 2.5 Flash ($0.30)',
-  [MODELS.GEMINI_3_FLASH_PREVIEW]: 'Gemini 3 Flash Preview ($0.50) ⭐推荐',
+  [MODELS.GEMINI_3_FLASH_PREVIEW]: 'Gemini 3 Flash Preview ($0.50)',
   [MODELS.CLAUDE_HAIKU_4_5]: 'Claude Haiku 4.5 ($1.00)',
-  [MODELS.GEMINI_2_5_PRO]: 'Gemini 2.5 Pro ($1.25) 高质量',
+  [MODELS.GEMINI_2_5_PRO]: 'Gemini 2.5 Pro ($1.25) ⭐推荐',
   [MODELS.GEMINI_3_PRO_PREVIEW]: 'Gemini 3 Pro Preview ($1.25) 思维链',
   [MODELS.GPT_5_MINI]: 'GPT-5 Mini (最新)',
   [MODELS.CLAUDE_SONNET_4_5]: 'Claude Sonnet 4.5 ($3.00) 最强',
@@ -464,10 +464,10 @@ export const MODEL_NAMES: Record<string, string> = {
 
 /**
  * 默认模型配置
- * Gemini 3 Flash Preview 是目前最便宜的高质量模型
+ * Gemini 2.5 Pro 是高质量模型，适合复杂任务
  */
-export const DEFAULT_MODEL = MODELS.GEMINI_3_FLASH_PREVIEW;
-export const DEFAULT_THINKING_MODEL = MODELS.GEMINI_3_FLASH_PREVIEW;
+export const DEFAULT_MODEL = MODELS.GEMINI_2_5_PRO;
+export const DEFAULT_THINKING_MODEL = MODELS.GEMINI_2_5_PRO;
 // Nano Banana Pro - 唯一的图像生成模型
 export const DEFAULT_IMAGE_MODEL = 'google/gemini-3-pro-image-preview';
 

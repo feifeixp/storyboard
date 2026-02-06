@@ -18,6 +18,32 @@
 
 ---
 
+## [2026-02-06 18:30] ⚙️ 配置
+
+**修改内容**：将默认模型从 Gemini 3 Flash Preview 改为 Gemini 2.5 Pro
+
+**影响范围**：
+- 文件/模块：
+  - 修改 `services/openrouter.ts` - 默认模型配置
+
+**修改原因**：
+- 用户要求使用 Gemini 2.5 Pro 作为默认模型
+- Gemini 2.5 Pro 质量更高，适合复杂任务
+- 价格相同（$1.25/$10），但性能更稳定
+
+**预期效果**：
+- ✅ 所有分镜生成默认使用 Gemini 2.5 Pro
+- ✅ 提高生成质量和稳定性
+- ✅ 用户仍可在界面中切换其他模型
+
+**技术要点**：
+- **DEFAULT_MODEL**: `MODELS.GEMINI_2_5_PRO`
+- **DEFAULT_THINKING_MODEL**: `MODELS.GEMINI_2_5_PRO`
+- **模型显示名称**: "Gemini 2.5 Pro ($1.25) ⭐推荐"
+- **价格表更新**: 将推荐标记从 Gemini 3 Flash 移至 Gemini 2.5 Pro
+
+---
+
 ## [2026-02-06 18:00] 📝 文档
 
 **修改内容**：添加 Cloudflare Pages 部署配置和 API Key 安全指南
