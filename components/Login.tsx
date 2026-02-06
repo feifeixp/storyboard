@@ -14,7 +14,9 @@ interface LoginProps {
   onLoginSuccess?: () => void;
 }
 
-export default function Login({ onLoginSuccess }: LoginProps = {}) {
+export default function Login(props: LoginProps) {
+  const { onLoginSuccess } = props;
+
   const [contact, setContact] = useState('');
   const [code, setCode] = useState('');
   const [invitationCode, setInvitationCode] = useState('');
