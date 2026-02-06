@@ -18,12 +18,17 @@ authRoutes.post('/send-code', async (c) => {
     return c.json({ error: 'Phone or email is required' }, 400);
   }
 
+  // 🆕 临时方案：在控制台输出验证码（仅用于测试）
+  const testCode = '123456';
+  console.log(`📧 验证码已生成（测试模式）: ${testCode}`);
+  console.log(`📱 发送到: ${phone || email}`);
+
   // TODO: 集成真实的短信/邮件服务
-  // 这里仅返回成功，实际应该发送验证码
+  // 目前使用固定验证码 123456 用于测试
 
   return c.json({
     success: true,
-    message: 'Verification code sent',
+    message: 'Verification code sent (test mode: use 123456)',
   });
 });
 
@@ -42,8 +47,10 @@ authRoutes.post('/login', async (c) => {
     return c.json({ error: 'Verification code is required' }, 400);
   }
 
+  // 🆕 临时方案：接受任何验证码（仅用于测试）
   // TODO: 验证验证码
-  // 这里简化处理，实际应该验证验证码是否正确
+  // 目前接受任何验证码，生产环境需要验证
+  console.log(`🔐 登录验证码: ${code} (测试模式：接受任何验证码)`);
 
   try {
     // 查找或创建用户
