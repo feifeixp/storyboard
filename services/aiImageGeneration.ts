@@ -3,7 +3,7 @@
  * 基于接口文档: AI图片生成接口文档.md
  */
 
-import { getAccessToken } from './auth';
+import { getAccessToken, getUserInfo } from './auth';
 import { uploadToOSS, generateOSSPath } from './oss';
 
 const API_BASE_URL = 'https://dev.neodomain.cn';
@@ -141,6 +141,18 @@ export async function generateImage(
     throw new Error('未登录，无法生成图片');
   }
 
+  // 获取用户信息
+  const userInfo = getUserInfo();
+  if (!userInfo || !userInfo.userId) {
+    throw new Error('用户信息不完整，无法生成图片');
+  }
+
+  // 添加 userId 到请求参数
+  const requestWithUserId = {
+    ...request,
+    userId: userInfo.userId,
+  };
+
   const response = await fetch(
     `${API_BASE_URL}/agent/ai-image-generation/generate`,
     {
@@ -149,7 +161,7 @@ export async function generateImage(
         'accessToken': accessToken,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify(requestWithUserId),
     }
   );
 
