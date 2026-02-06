@@ -145,7 +145,7 @@ const App: React.FC = () => {
 
   // 如果未登录，显示登录页面
   if (!loggedIn) {
-    return <Login />;
+    return <Login onLoginSuccess={() => setLoggedIn(true)} />;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -155,8 +155,10 @@ const App: React.FC = () => {
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState<number | null>(null);
 
-  // 🆕 加载项目列表和当前项目
+  // 🆕 加载项目列表和当前项目（仅在登录后执行）
   useEffect(() => {
+    if (!loggedIn) return;  // 🆕 只在登录后加载
+
     const loadProjects = async () => {
       const allProjects = await getAllProjects();
       setProjects(allProjects);
@@ -170,7 +172,7 @@ const App: React.FC = () => {
     };
 
     loadProjects();
-  }, []);
+  }, [loggedIn]);  // 🆕 依赖 loggedIn 状态
 
   // ═══════════════════════════════════════════════════════════════
   // 原有状态

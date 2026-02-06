@@ -10,7 +10,11 @@ import {
   validateCode,
 } from '../services/auth';
 
-export default function Login() {
+interface LoginProps {
+  onLoginSuccess?: () => void;
+}
+
+export default function Login({ onLoginSuccess }: LoginProps = {}) {
   const [contact, setContact] = useState('');
   const [code, setCode] = useState('');
   const [invitationCode, setInvitationCode] = useState('');
@@ -77,8 +81,13 @@ export default function Login() {
 
     try {
       await login(contact, code, invitationCode || undefined);
-      // 登录成功后刷新页面
-      window.location.reload();
+      // 🆕 登录成功后调用回调
+      if (onLoginSuccess) {
+        onLoginSuccess();
+      } else {
+        // 如果没有回调，刷新页面（兼容旧代码）
+        window.location.reload();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {
