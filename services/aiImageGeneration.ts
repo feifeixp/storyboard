@@ -143,7 +143,10 @@ export async function generateImage(
 
   // 获取用户信息
   const userInfo = getUserInfo();
+  console.log('[Neodomain] 用户信息:', userInfo);
+
   if (!userInfo || !userInfo.userId) {
+    console.error('[Neodomain] 用户信息不完整:', userInfo);
     throw new Error('用户信息不完整，无法生成图片');
   }
 
@@ -152,6 +155,11 @@ export async function generateImage(
     ...request,
     userId: userInfo.userId,
   };
+
+  console.log('[Neodomain] 图像生成请求参数:', {
+    ...requestWithUserId,
+    prompt: requestWithUserId.prompt.substring(0, 100) + '...',
+  });
 
   const response = await fetch(
     `${API_BASE_URL}/agent/ai-image-generation/generate`,
@@ -167,7 +175,10 @@ export async function generateImage(
 
   const result: ApiResponse<ImageGenerationResult> = await response.json();
 
+  console.log('[Neodomain] 图像生成响应:', result);
+
   if (!result.success || !result.data) {
+    console.error('[Neodomain] 图像生成失败:', result);
     throw new Error(result.errMessage || '图片生成请求失败');
   }
 
