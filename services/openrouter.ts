@@ -468,8 +468,11 @@ export const MODEL_NAMES: Record<string, string> = {
  */
 export const DEFAULT_MODEL = MODELS.GEMINI_2_5_FLASH;
 export const DEFAULT_THINKING_MODEL = MODELS.GEMINI_2_5_FLASH;
-// Nano Banana Pro - 唯一的图像生成模型
+// 注意：DEFAULT_IMAGE_MODEL 是 OpenRouter 的 modelId（用于多模态/图像理解等），不是 Neodomain 生图的 modelName。
 export const DEFAULT_IMAGE_MODEL = 'google/gemini-3-pro-image-preview';
+
+// Neodomain 生图默认模型（modelName）
+export const DEFAULT_NEODOMAIN_IMAGE_MODEL = 'nanobanana-pro';
 
 /**
  * 生成分镜脚本（传统模式）
@@ -3293,7 +3296,7 @@ export async function* chatEditShotListStream(
  */
 async function generateSingleImage(
   prompt: string,
-  imageModel: string = DEFAULT_IMAGE_MODEL,
+  imageModel: string = DEFAULT_NEODOMAIN_IMAGE_MODEL,
   characterRefs: CharacterRef[] = []
 ): Promise<string | null> {
   // 动态导入 neodomain API
@@ -3413,7 +3416,7 @@ export async function generateMergedStoryboardSheet(
   shots: Shot[],
   characterRefs: CharacterRef[],
   mode: 'draft' | 'hq',
-  imageModel: string = DEFAULT_IMAGE_MODEL,
+  imageModel: string = DEFAULT_NEODOMAIN_IMAGE_MODEL,
   style?: StoryboardStyle,
   onProgress?: (current: number, total: number, shotNumber: string) => void,
   onGridComplete?: (gridIndex: number, imageUrl: string) => void,
@@ -3488,7 +3491,7 @@ export async function generateSingleGrid(
   gridIndex: number,
   shots: Shot[],
   characterRefs: CharacterRef[],
-  imageModel: string = DEFAULT_IMAGE_MODEL,
+  imageModel: string = DEFAULT_NEODOMAIN_IMAGE_MODEL,
   style?: StoryboardStyle,
   episodeNumber?: number,
   scenes?: SceneRef[],

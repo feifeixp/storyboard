@@ -259,7 +259,8 @@ const App: React.FC = () => {
   const [analysisModel, setAnalysisModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 剧本分析模型
   const [reviewModel, setReviewModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 审核优化模型
   const [editModel, setEditModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 编辑对话模型
-  const [imageModel, setImageModel] = useState('doubao-seedream-4-0'); // 🆕 生图模型，默认豆包AI绘画4.0
+	// 🆕 生图模型：默认采用 nanobanana-pro（并由服务层在会员限制时自动降级）
+	const [imageModel, setImageModel] = useState('nanobanana-pro');
 
   // 🆕 分镜草图风格选择
   const [selectedStyle, setSelectedStyle] = useState<StoryboardStyle>(STORYBOARD_STYLES[0]);
