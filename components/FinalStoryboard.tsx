@@ -71,9 +71,7 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
   const exportCSV = () => {
     const headers = [
       '编号', '剧情描述', '对话', '景别', '角度朝向', '角度高度', '运镜', '时长',
-      '图片提示词(中文)', '图片提示词(英文)',
-      '尾帧提示词(中文)', '尾帧提示词(英文)',
-      '视频提示词',
+      '图片提示词', '尾帧提示词', '视频提示词',
     ];
     const rows = shots.map(shot => [
       shot.shotNumber,
@@ -85,9 +83,7 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
       shot.cameraMove,
       shot.duration,
       shot.imagePromptCn || '',
-      shot.imagePromptEn || '',
       shot.endImagePromptCn || '',
-      shot.endImagePromptEn || '',
       shot.videoGenPrompt || '',
     ]);
 
@@ -111,17 +107,13 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
     const content = shots.map((shot, idx) => {
       const storyBeat = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event;
 
-      // 构建提示词部分（仅在有内容时输出）
+      // 构建提示词部分（仅在有内容时输出，只保留中文）
       let promptSection = '';
-      if (shot.imagePromptCn || shot.imagePromptEn) {
-        promptSection += `- **图片提示词**:\n`;
-        if (shot.imagePromptCn) promptSection += `  - 中文: ${shot.imagePromptCn}\n`;
-        if (shot.imagePromptEn) promptSection += `  - 英文: ${shot.imagePromptEn}\n`;
+      if (shot.imagePromptCn) {
+        promptSection += `- **图片提示词**: ${shot.imagePromptCn}\n`;
       }
-      if (shot.endImagePromptCn || shot.endImagePromptEn) {
-        promptSection += `- **尾帧提示词**:\n`;
-        if (shot.endImagePromptCn) promptSection += `  - 中文: ${shot.endImagePromptCn}\n`;
-        if (shot.endImagePromptEn) promptSection += `  - 英文: ${shot.endImagePromptEn}\n`;
+      if (shot.endImagePromptCn) {
+        promptSection += `- **尾帧提示词**: ${shot.endImagePromptCn}\n`;
       }
       if (shot.videoGenPrompt) {
         promptSection += `- **视频提示词**: ${shot.videoGenPrompt}\n`;
