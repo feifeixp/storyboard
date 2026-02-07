@@ -81,6 +81,7 @@ interface ChatMessage {
 // 🆕 localStorage 持久化 Key
 const STORAGE_KEYS = {
   CURRENT_STEP: 'storyboard_current_step',
+  CURRENT_EPISODE_NUMBER: 'storyboard_current_episode_number',  // 🔧 新增：当前剧集编号
   SCRIPT: 'storyboard_script',
   SHOTS: 'storyboard_shots',
   CHARACTER_REFS: 'storyboard_character_refs',
@@ -153,7 +154,9 @@ const App: React.FC = () => {
   // ═══════════════════════════════════════════════════════════════
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState<number | null>(null);
+  const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState<number | null>(() =>
+    loadFromStorage(STORAGE_KEYS.CURRENT_EPISODE_NUMBER, null)  // 🔧 从 localStorage 恢复
+  );
 
   // 🆕 加载项目列表和当前项目（仅在登录后执行）
   useEffect(() => {
@@ -379,6 +382,11 @@ const App: React.FC = () => {
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.CLEANING_PROGRESS, cleaningProgress);
   }, [cleaningProgress]);
+
+  // 🔧 自动保存当前剧集编号
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.CURRENT_EPISODE_NUMBER, currentEpisodeNumber);
+  }, [currentEpisodeNumber]);
 
   // 🆕 不再保存 hqUrls 到 localStorage（图片数据太大，会超出配额）
   // hqUrls 是临时数据，刷新页面后重新生成即可

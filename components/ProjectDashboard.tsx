@@ -19,7 +19,7 @@ interface ProjectDashboardProps {
   onBack: () => void;
 }
 
-type TabType = 'overview' | 'characters' | 'scenes' | 'episodes';
+type TabType = 'overview' | 'characters' | 'scenes';  // 🔧 移除 'episodes'，合并到 overview
 type EditType = 'character' | 'scene' | 'episode' | 'form';
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
@@ -30,6 +30,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [expandedCharacter, setExpandedCharacter] = useState<string | null>(null);
+  // 🆕 控制角色卡和场景卡的展开/收起
+  const [showCharacterCards, setShowCharacterCards] = useState(false);
+  const [showSceneCards, setShowSceneCards] = useState(false);
 
   // UI-only style tokens（仅排版/视觉优化：不改变任何功能逻辑）
   const containerClass = 'max-w-7xl mx-auto px-3 sm:px-4 lg:px-6';
@@ -268,18 +271,17 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   };
 
   const tabs: { id: TabType; label: string; icon: string }[] = [
-    { id: 'overview', label: '概览', icon: '📋' },
+    { id: 'overview', label: '概览 & 剧集', icon: '📋' },  // 🔧 合并概览和剧集
     { id: 'characters', label: '角色', icon: '👥' },
     { id: 'scenes', label: '场景', icon: '🏛️' },
-    { id: 'episodes', label: '剧集', icon: '📺' },
   ];
 
-  // 渲染项目概览 - 全页展开版（无滚动条）
+  // 渲染项目概览 - 全页展开版（无滚动条）+ 剧集列表
   const renderOverview = () => (
     <div className="space-y-4">
       {/* 顶部行：基础信息 + 分卷 */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        {/* 基础信息 */}
+        {/* 基础信息 + 🆕 角色卡/场景卡按钮 */}
         <div className={`${cardClass} ${cardPad}`}>
           <h3 className="text-sm font-bold text-white mb-2">📋 项目信息</h3>
           <div className="space-y-1 text-xs">
@@ -291,6 +293,30 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             <div><span className="text-gray-500">剧集:</span> <span className="text-white">{project.episodes?.length || 0}集</span></div>
             <div><span className="text-gray-500">角色:</span> <span className="text-white">{project.characters?.length || 0}个</span></div>
             <div><span className="text-gray-500">场景:</span> <span className="text-white">{project.scenes?.length || 0}个</span></div>
+          </div>
+
+          {/* 🆕 角色卡和场景卡按钮 */}
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => setShowCharacterCards(!showCharacterCards)}
+              className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${
+                showCharacterCards
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              👥 角色卡
+            </button>
+            <button
+              onClick={() => setShowSceneCards(!showSceneCards)}
+              className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${
+                showSceneCards
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              🏛️ 场景卡
+            </button>
           </div>
         </div>
 
@@ -351,6 +377,123 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* 🆕 角色卡详情（可展开/收起） */}
+      {showCharacterCards && (
+        <div className={`${cardClass} ${cardPad}`}>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-bold text-white">👥 角色库 ({project.characters?.length || 0})</h3>
+            <button
+              onClick={() => setShowCharacterCards(false)}
+              className="text-gray-400 hover:text-white text-xs"
+            >
+              ✕ 收起
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            {(project.characters || []).map((char) => {
+              const charCompleteness = charactersCompleteness.find(c => c.character.id === char.id);
+              return (
+                <CharacterCard
+                  key={char.id}
+                  character={char}
+                  isExpanded={expandedCharacter === char.id}
+                  onToggle={() => setExpandedCharacter(expandedCharacter === char.id ? null : char.id)}
+                  onEdit={() => openEditModal('character', char)}
+                  onEditForm={(form) => openEditModal('form', form, char)}
+                  completeness={charCompleteness?.completeness}
+                  missingFields={charCompleteness?.missingFields}
+                  onSupplement={() => handleSupplementCharacter(char.id)}
+                  isSupplementing={isSupplementing && supplementingCharacterId === char.id}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 场景卡详情（可展开/收起） */}
+      {showSceneCards && (
+        <div className={`${cardClass} ${cardPad}`}>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-bold text-white">🏛️ 场景库 ({project.scenes?.length || 0})</h3>
+            <button
+              onClick={() => setShowSceneCards(false)}
+              className="text-gray-400 hover:text-white text-xs"
+            >
+              ✕ 收起
+            </button>
+          </div>
+          <ScenesTab
+            project={project}
+            onEditScene={(scene) => openEditModal('scene', scene)}
+            onSupplementScene={handleSupplementScene}
+            isSupplementing={isSupplementing}
+            supplementingSceneId={supplementingSceneId}
+            onExtractNewScenes={handleExtractNewScenes}
+            isExtracting={isExtractingScenes}
+            extractionProgress={extractionProgress}
+          />
+        </div>
+      )}
+
+      {/* 🆕 剧集列表（合并到概览页） */}
+      <div className={`${cardClass} ${cardPad}`}>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
+          <h3 className="text-sm font-bold text-white">📺 剧集列表 ({project.episodes?.length || 0})</h3>
+          <button className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium">+ 添加</button>
+        </div>
+
+        {/* 书本式卡片：左侧集数色块 + 右侧标题/大纲/状态 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {(project.episodes || []).map((ep) => {
+            // 从 storyOutline 中找到对应集数的大纲
+            const outline = project.storyOutline?.find(o => o.episodeNumber === ep.episodeNumber);
+            const summary = outline?.summary || '暂无大纲';
+
+            return (
+              <div
+                key={ep.id}
+                className="bg-gray-800 rounded-lg border border-gray-700/60 hover:border-gray-600/60 overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:shadow-blue-500/10 group"
+                onClick={() => onSelectEpisode(ep)}
+              >
+                {/* 书本式布局：左侧色块（集数）+ 右侧内容 */}
+                <div className="flex items-stretch">
+                  {/* 左侧：集数色块（模拟书脊） */}
+                  <div className="bg-gradient-to-b from-blue-600 to-blue-700 w-16 shrink-0 flex flex-col items-center justify-center text-white p-2 border-r-2 border-blue-500/30">
+                    <span className="text-xs font-medium opacity-80">第</span>
+                    <span className="text-2xl font-bold">{ep.episodeNumber}</span>
+                    <span className="text-xs font-medium opacity-80">集</span>
+                  </div>
+
+                  {/* 右侧：标题 + 大纲 + 状态 */}
+                  <div className="flex-1 p-3 min-w-0">
+                    {/* 标题 + 状态 */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h4 className="text-white text-sm font-semibold leading-tight flex-1 min-w-0 group-hover:text-blue-300 transition-colors">
+                        {ep.title}
+                      </h4>
+                      <StatusBadge status={ep.status} />
+                    </div>
+
+                    {/* 大纲摘要（最多 3 行） */}
+                    <p className="text-gray-400 text-xs leading-relaxed line-clamp-3 mb-2">
+                      {summary}
+                    </p>
+
+                    {/* 底部元信息 */}
+                    <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                      <span>{ep.shots?.length || 0} 个分镜</span>
+                      <span>·</span>
+                      <span>{new Date(ep.updatedAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 
@@ -434,7 +577,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             extractionProgress={extractionProgress}
           />
         )}
-        {activeTab === 'episodes' && <EpisodesTab project={project} onSelectEpisode={onSelectEpisode} />}
+        {/* 🔧 移除独立的 episodes tab，已合并到 overview */}
       </div>
 
       {/* 编辑模态框 */}
@@ -742,68 +885,7 @@ const ScenesTab: React.FC<{
   );
 };
 
-// 剧集列表标签页 - 书本式卡片（合并大纲内容）
-const EpisodesTab: React.FC<{
-  project: Project;
-  onSelectEpisode: (episode: Episode) => void;
-}> = ({ project, onSelectEpisode }) => (
-  <div className="space-y-2">
-    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-      <h3 className="text-sm font-bold text-white">📺 剧集列表 ({project.episodes?.length || 0})</h3>
-      <button className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium">+ 添加</button>
-    </div>
-
-    {/* 书本式卡片：左侧集数色块 + 右侧标题/大纲/状态 */}
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {(project.episodes || []).map((ep) => {
-        // 从 storyOutline 中找到对应集数的大纲
-        const outline = project.storyOutline?.find(o => o.episodeNumber === ep.episodeNumber);
-        const summary = outline?.summary || '暂无大纲';
-
-        return (
-          <div
-            key={ep.id}
-            className="bg-gray-800 rounded-lg border border-gray-700/60 hover:border-gray-600/60 overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:shadow-blue-500/10 group"
-            onClick={() => onSelectEpisode(ep)}
-          >
-            {/* 书本式布局：左侧色块（集数）+ 右侧内容 */}
-            <div className="flex items-stretch">
-              {/* 左侧：集数色块（模拟书脊） */}
-              <div className="bg-gradient-to-b from-blue-600 to-blue-700 w-16 shrink-0 flex flex-col items-center justify-center text-white p-2 border-r-2 border-blue-500/30">
-                <span className="text-xs font-medium opacity-80">第</span>
-                <span className="text-2xl font-bold">{ep.episodeNumber}</span>
-                <span className="text-xs font-medium opacity-80">集</span>
-              </div>
-
-              {/* 右侧：标题 + 大纲 + 状态 */}
-              <div className="flex-1 p-3 min-w-0">
-                {/* 标题 + 状态 */}
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <h4 className="text-white text-sm font-semibold leading-tight flex-1 min-w-0 group-hover:text-blue-300 transition-colors">
-                    {ep.title}
-                  </h4>
-                  <StatusBadge status={ep.status} />
-                </div>
-
-                {/* 大纲摘要（最多 3 行） */}
-                <p className="text-gray-400 text-xs leading-relaxed line-clamp-3 mb-2">
-                  {summary}
-                </p>
-
-                {/* 底部元信息 */}
-                <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                  <span>{ep.shots?.length || 0} 个分镜</span>
-                  <span>·</span>
-                  <span>{new Date(ep.updatedAt).toLocaleDateString()}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  </div>
-);
+// 🔧 EpisodesTab 已移除，剧集列表已合并到 renderOverview() 中
 
 // 状态徽章 - 紧凑版
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
