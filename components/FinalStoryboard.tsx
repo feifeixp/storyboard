@@ -124,32 +124,79 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
     URL.revokeObjectURL(url);
   };
 
-  // 导出为 PDF（使用 html2canvas + jsPDF）
+  /**
+   * 导出为 PDF（html2canvas + jsPDF）
+   * 说明：
+   * - 支持多页分页（避免长页面只导出一页/被裁切）
+   * - 强依赖图片源 CORS：若九宫格图片域名未正确配置 Access-Control-Allow-Origin，将导致 canvas 被污染，无法导出。
+   */
   const exportPDF = async () => {
     setIsExporting(true);
     try {
-      // 动态导入库
+      // 动态导入库（避免首屏包体积膨胀）
       const html2canvas = (await import('html2canvas')).default;
       const { jsPDF } = await import('jspdf');
 
-      if (!storyboardRef.current) return;
+      if (!storyboardRef.current) {
+        throw new Error('未找到故事板容器节点');
+      }
+
+      // 让浏览器有机会完成图片加载与布局（降低导出空白概率）
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
       const canvas = await html2canvas(storyboardRef.current, {
+        // scale 越大越清晰，但也更吃内存；2 在多数机器上可接受
         scale: 2,
         useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
         logging: false,
       });
 
+      // ⚠️ 若 canvas 被污染（跨域图片无 CORS），此处可能抛错
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`storyboard_ep${episodeNumber || 'unknown'}_${Date.now()}.pdf`);
+      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      // 将整张长图按宽度等比缩放到 PDF 宽度
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      // 分页：通过在不同页用负 y 偏移重复绘制同一张长图
+      let remainingHeight = imgHeight;
+      let y = 0;
+      let pageIndex = 0;
+
+      while (remainingHeight > 0) {
+        if (pageIndex > 0) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, y, pdfWidth, imgHeight);
+        remainingHeight -= pageHeight;
+        y -= pageHeight;
+        pageIndex += 1;
+        // 避免极端情况死循环
+        if (pageIndex > 200) break;
+      }
+
+      const filename = `storyboard_ep${episodeNumber || 'unknown'}_${Date.now()}.pdf`;
+
+      // 用 Blob 触发下载，比 pdf.save 在某些环境更稳定
+      const blob = pdf.output('blob');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('PDF导出失败:', error);
-      alert('PDF导出失败，请重试');
+      const msg = String((error as any)?.message || error);
+      const isCorsLike = /tainted|cross-origin|cors|toDataURL/i.test(msg);
+      alert(
+        isCorsLike
+          ? 'PDF导出失败：图片域名可能未开启 CORS，导致浏览器禁止将图片渲染导出。请为图片存储域名配置 Access-Control-Allow-Origin 后重试。'
+          : 'PDF导出失败，请重试（如内容过长可尝试减少镜头数量或稍后重试）。'
+      );
     } finally {
       setIsExporting(false);
     }
@@ -293,14 +340,26 @@ function GridCellImage({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: num
   const col = cellIndex % 3;
 
   return (
-    <div
-      className="absolute inset-0 overflow-hidden"
-      style={{
-        backgroundImage: `url(${gridUrl})`,
-        backgroundSize: '300% 300%',
-        backgroundPosition: `${col * 50}% ${row * 50}%`,
-      }}
-    />
+    <div className="absolute inset-0 overflow-hidden">
+      {/*
+        使用 <img> 而非 background-image：
+        - html2canvas 对 <img> 的跨域处理更可控（配合 crossOrigin + useCORS）
+        - 同时仍可通过放大 3 倍并位移来实现九宫格虚拟裁切
+      */}
+      <img
+        src={gridUrl}
+        crossOrigin="anonymous"
+        alt=""
+        className="absolute top-0 left-0 select-none"
+        style={{
+          width: '300%',
+          height: '300%',
+          left: `-${col * 100}%`,
+          top: `-${row * 100}%`,
+        }}
+        draggable={false}
+      />
+    </div>
   );
 }
 

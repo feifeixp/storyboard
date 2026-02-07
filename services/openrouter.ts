@@ -3356,7 +3356,7 @@ async function generateSingleImage(
 
     const task = await generateImage({
       prompt: prompt,
-      negativePrompt: 'blurry, low quality, watermark, text, signature, distorted, deformed',
+	      negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
       modelName: preferredModelName,  // ✅ 使用动态获取的 model_name
       numImages: '1',
       aspectRatio: '16:9',  // 九宫格分镜草图使用16:9横版
@@ -3410,7 +3410,7 @@ async function generateSingleImage(
       try {
         const fallbackTask = await generateImage({
           prompt: prompt,
-          negativePrompt: 'blurry, low quality, watermark, text, signature, distorted, deformed',
+	          negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
           modelName: fallbackModel!.model_name,  // ✅ 使用备用模型的 model_name
           numImages: '1',
           aspectRatio: '16:9',
@@ -3596,9 +3596,10 @@ export async function generateSingleGrid(
   }
 }
 
-/**
- * 构建九宫格提示词 - 让AI直接生成一张包含9个分镜的图
- * 使用中文标注（首帧/尾帧），并强调镜头角度
+	/**
+	 * 构建九宫格提示词 - 让AI直接生成一张包含9个分镜的图
+	 * ⚠️ 为了后续切割：整张图禁止任何文字/数字/标题/页码/水印，仅输出画面内容 + 网格。
+	 * 并强调镜头角度（通过英文摄影术语约束生图）。
  * 风格通过 styleSuffix 附加
  * 角色信息通过 characterRefs 提供外观描述
  * 🆕 episodeNumber 用于匹配角色在该集的正确形态
@@ -3678,12 +3679,24 @@ function buildNineGridPrompt(
     'Worm Eye': '(worm eye view:1.4), camera almost at ground level (80-90° below), looking STRAIGHT UP, (extreme foreshortening:1.3)'
   };
 
-  // 构建每个格子的场景描述
-  const panelDescriptions = shots.map((shot, idx) => {
-    const position = idx + 1;
-    const row = Math.floor(idx / 3) + 1;
-    const col = (idx % 3) + 1;
-    const isMotion = shot.shotType === '运动';
+	  // Panel position names (avoid digits like 1-9 to reduce the chance of the model drawing numbers)
+	  const panelPositionNames = [
+	    'top left',
+	    'top center',
+	    'top right',
+	    'middle left',
+	    'center',
+	    'middle right',
+	    'bottom left',
+	    'bottom center',
+	    'bottom right',
+	  ];
+	  const getPanelPositionName = (idx: number) => panelPositionNames[idx] || 'unknown panel';
+
+	// 构建每个格子的场景描述（注意：此处是“提示词文本”，但为了避免生图把这些编号当作需要画出来的文字，尽量不出现镜号/页码/数字标注）
+	const panelDescriptions = shots.map((shot, idx) => {
+		const panelPos = getPanelPositionName(idx);
+		const isMotion = shot.shotType === '运动';
 
     // 获取角度信息（优先使用结构化字段，其次从文本提取）
     const getAngleLabel = (): { cn: string; en: string; preciseEn: string } => {
@@ -3733,9 +3746,8 @@ function buildNineGridPrompt(
       return { cn: '', en: '', preciseEn: '' };
     };
 
-    const angleLabel = getAngleLabel();
-    const angleAnnotation = angleLabel.cn ? `【角度：${angleLabel.cn}】` : '';
-    // 🆕 使用精确角度描述，防止AI生图误解
+		const angleLabel = getAngleLabel();
+		// 🆕 使用精确角度描述，防止AI生图误解
     const angleInstruction = angleLabel.preciseEn
       ? `[CAMERA ANGLE: ${angleLabel.preciseEn}] ← MUST draw from this EXACT angle!`
       : (angleLabel.en ? `[CAMERA: ${angleLabel.en}] ← MUST draw from this angle!` : '');
@@ -3752,30 +3764,27 @@ function buildNineGridPrompt(
         endFrame = startFrame;  // 使用首帧作为尾帧，保证画面一致性
       }
 
-      return `格子 ${position} (第${row}行第${col}列) - 运动镜头:
-  镜号 #${shot.shotNumber} | ${shot.duration || '?s'} | ${shot.shotSize || 'LS'} ${angleAnnotation}
-  ${angleInstruction ? angleInstruction + '\n  ' : ''}[首帧]: ${startFrame}
-  [尾帧]: ${endFrame}
-  → 左半部分画首帧，右半部分画尾帧，中间用箭头 → 连接
-  ⚠️ 格子左上角标注: "#${shot.shotNumber} | ${shot.duration || '?s'} | ${angleLabel.cn || '平视'}"`;
+				return `${panelPos} panel (motion):
+	${angleInstruction ? angleInstruction + '\n' : ''}Left half (start frame): ${startFrame}
+	Right half (end frame): ${endFrame}
+	IMPORTANT: Do NOT draw any text, labels, numbers, arrows, or captions inside the panel.`;
     } else {
       // 静态镜头：单帧
       const sceneDesc = shot.imagePromptEn || shot.promptEn || shot.promptCn || 'empty scene';
 
-      return `格子 ${position} (第${row}行第${col}列) - 静态镜头:
-  镜号 #${shot.shotNumber} | ${shot.duration || '?s'} | ${shot.shotSize || 'LS'} ${angleAnnotation}
-  ${angleInstruction ? angleInstruction + '\n  ' : ''}画面: ${sceneDesc}
-  ⚠️ 格子左上角标注: "#${shot.shotNumber} | ${shot.duration || '?s'} | ${angleLabel.cn || '平视'}"`;
+			return `${panelPos} panel (still):
+	${angleInstruction ? angleInstruction + '\n' : ''}Scene content: ${sceneDesc}
+	IMPORTANT: Do NOT draw any text, labels, numbers, or captions inside the panel.`;
     }
   }).join('\n\n');
 
   // 填充空格子
   const emptyPanels = [];
   for (let i = shots.length; i < 9; i++) {
-    const position = i + 1;
-    const row = Math.floor(i / 3) + 1;
-    const col = (i % 3) + 1;
-    emptyPanels.push(`格子 ${position} (第${row}行第${col}列): 空白格子，显示"完"字`);
+			const positionName = getPanelPositionName(i);
+			emptyPanels.push(
+				`${positionName} panel: leave this panel blank with a plain neutral background (e.g., light gray). Absolutely no text.`
+			);
   }
 
   const allPanels = panelDescriptions + (emptyPanels.length > 0 ? '\n\n' + emptyPanels.join('\n') : '');
@@ -3802,45 +3811,46 @@ ${characterDescriptions.map(c => {
 `
     : '';
 
-  return `生成专业电影分镜表，3x3 九宫格布局。
+		// ⚠️ 关键：为了后续等分切割，必须禁止任何标题/页码/镜号等文字元素，且要求网格边到边均分。
+		return `Create a professional storyboard sheet as a strict three-by-three grid (nine equal panels) on a single wide landscape canvas.
 
-═══════════════════════════════════════════════════════════════
-【布局要求】
-═══════════════════════════════════════════════════════════════
-- 3列 × 3行 网格布局
-- 每个格子用黑色边框清晰分隔
-- 标题: "分镜表 第${pageNum}/${totalPages}页"
-- 每个格子左上角标注镜号（#XX）和时长
+================================================================================
+LAYOUT (MUST FOLLOW)
+================================================================================
+	- The canvas is divided into exactly three columns and three rows.
+	- All panels are EXACTLY the same size (equal width and equal height).
+- The grid must fill the entire canvas edge-to-edge: NO title area, NO page header/footer, NO margins, NO extra whitespace.
+- Use thin, uniform panel separators (optional) to make the grid clear, but do NOT add any labels.
+	- Panel lines must be perfectly straight and axis-aligned (no perspective tilt, no irregular comic panels).
+
+================================================================================
+ABSOLUTE PROHIBITIONS (CRITICAL)
+================================================================================
+- NO text, NO words, NO numbers, NO captions, NO subtitles, NO labels, NO UI overlays.
+- NO watermark, NO signature, NO logo, NO page number, NO frame index.
+- Do not draw any Chinese or English characters anywhere.
+
 ${characterSection}${sceneSection}${artStyleSection}
-═══════════════════════════════════════════════════════════════
-【标注语言】使用中文标注！
-═══════════════════════════════════════════════════════════════
-- 用"首帧"不要用"START FRAME"
-- 用"尾帧"不要用"END FRAME"
-- 镜号格式: "#03 | 3s | 极端仰拍" （必须包含中文角度！）
-- 每个格子左上角必须标注：镜号 + 时长 + 中文角度
-- 角度示例：极端仰拍、俯拍、平视、鸟瞰、仰拍等
 
-═══════════════════════════════════════════════════════════════
-【镜头详情】
-═══════════════════════════════════════════════════════════════
+================================================================================
+PANELS (CONTENT ONLY — DO NOT WRITE ANY TEXT ON THE IMAGE)
+================================================================================
 
 ${allPanels}
 
-═══════════════════════════════════════════════════════════════
-【视觉风格】
-═══════════════════════════════════════════════════════════════
-- 画面风格: ${styleSuffix}
-- 所有格子保持 ${styleName} 风格一致
-- 运动镜头: 左右分割，左边首帧，右边尾帧，中间箭头 →
+================================================================================
+STYLE
+================================================================================
+- Visual style: ${styleSuffix}
+- Keep all panels consistent in ${styleName} style.
+- For motion panels: split the panel vertically into two equal halves (left = start frame, right = end frame). No arrows, no text.
 
-【关键要求】
-- 生成一张包含全部9个格子的图
-- 整体16:9横版比例
-- 专业电影分镜质量
-- 格子之间视觉区分清晰
-- ⚠️ 严格按照每个镜头指定的【角度】绘制！如"极端仰拍"必须从地面向上看的视角
-- ⚠️ 同一角色在不同格子中保持外观一致！`;
+================================================================================
+QUALITY REQUIREMENTS
+================================================================================
+- Professional storyboard quality.
+- Follow each panel's requested camera angle strictly.
+- Keep the same character recognizable and consistent across panels.`;
 }
 
 
