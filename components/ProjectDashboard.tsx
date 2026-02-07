@@ -495,11 +495,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             const outline = project.storyOutline?.find(o => o.episodeNumber === ep.episodeNumber);
             const summary = outline?.summary || '暂无大纲';
 
+            // 检查是否有故事板数据
+            const hasStoryboard = ep.shots && ep.shots.length > 0 && ep.shots.some(s => s.storyboardGridUrl);
+
             return (
               <div
                 key={ep.id}
-                className="bg-gray-800 rounded-lg border border-gray-700/60 hover:border-gray-600/60 overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:shadow-blue-500/10 group"
-                onClick={() => onSelectEpisode(ep)}
+                className="bg-gray-800 rounded-lg border border-gray-700/60 hover:border-gray-600/60 overflow-hidden transition-all hover:shadow-lg hover:shadow-blue-500/10 group"
               >
                 {/* 书本式布局：左侧色块（集数）+ 右侧内容 */}
                 <div className="flex items-stretch">
@@ -514,22 +516,45 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   <div className="flex-1 p-3 min-w-0">
                     {/* 标题 + 状态 */}
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <h4 className="text-white text-sm font-semibold leading-tight flex-1 min-w-0 group-hover:text-blue-300 transition-colors">
+                      <h4
+                        className="text-white text-sm font-semibold leading-tight flex-1 min-w-0 group-hover:text-blue-300 transition-colors cursor-pointer"
+                        onClick={() => onSelectEpisode(ep)}
+                      >
                         {ep.title}
                       </h4>
                       <StatusBadge status={ep.status} />
                     </div>
 
                     {/* 大纲摘要（最多 3 行） */}
-                    <p className="text-gray-400 text-xs leading-relaxed line-clamp-3 mb-2">
+                    <p
+                      className="text-gray-400 text-xs leading-relaxed line-clamp-3 mb-2 cursor-pointer"
+                      onClick={() => onSelectEpisode(ep)}
+                    >
                       {summary}
                     </p>
 
-                    {/* 底部元信息 */}
-                    <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                      <span>{ep.shots?.length || 0} 个分镜</span>
-                      <span>·</span>
-                      <span>{new Date(ep.updatedAt).toLocaleDateString()}</span>
+                    {/* 底部元信息 + 操作按钮 */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                        <span>{ep.shots?.length || 0} 个分镜</span>
+                        <span>·</span>
+                        <span>{new Date(ep.updatedAt).toLocaleDateString()}</span>
+                      </div>
+
+                      {/* 🆕 查看故事板按钮 */}
+                      {hasStoryboard && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectEpisode(ep);
+                            // 需要在 App.tsx 中添加逻辑，检测到有故事板数据时直接跳转到 FINAL_STORYBOARD
+                          }}
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-medium transition-all"
+                          title="查看最终故事板"
+                        >
+                          📋 故事板
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

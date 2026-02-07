@@ -55,6 +55,7 @@ import { Project, Episode, ScriptFile, ProjectAnalysisResult } from './types/pro
 import { ProjectList } from './components/ProjectList';
 import { ProjectWizard } from './components/ProjectWizard';
 import { ProjectDashboard } from './components/ProjectDashboard';
+import { FinalStoryboard } from './components/FinalStoryboard';
 // 🆕 剧本模板导出
 import { exportScriptTemplate } from './services/scriptTemplateExport';
 import {
@@ -2601,9 +2602,8 @@ const App: React.FC = () => {
               <th className="px-2 py-2 border-r border-gray-700 w-[60px] text-center">#</th>
               <th className="px-2 py-2 border-r border-gray-700 w-[18%]">故事</th>
               <th className="px-2 py-2 border-r border-gray-700 w-[32%]">视觉设计</th>
-	              <th className="px-2 py-2 border-r border-gray-700 w-[23%]">首帧</th>
-	              <th className="px-2 py-2 border-r border-gray-700 w-[96px] text-center">草图</th>
-	              <th className="px-2 py-2 w-[23%]">尾帧</th>
+	              <th className="px-2 py-2 border-r border-gray-700 w-[25%]">首帧</th>
+	              <th className="px-2 py-2 w-[25%]">尾帧</th>
             </tr>
           </thead>
           <tbody className="bg-gray-900">
@@ -2728,16 +2728,7 @@ const App: React.FC = () => {
                   )}
                 </td>
 
-	                {/* 🆕 草图列 - 显示九宫格虚拟切割缩略图 */}
-	                <td className="px-2 py-2 border-r border-gray-700 align-middle">
-	                  {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' ? (
-	                    <div className="flex justify-center">
-	                      <GridCellThumbnail gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
-	                    </div>
-	                  ) : (
-	                    <div className="text-gray-600 text-center text-[10px] italic">未应用</div>
-	                  )}
-	                </td>
+
 
                 {/* 尾帧列 - 运动镜头显示尾帧描述，静态镜头留空 */}
                 <td className="px-2 py-2">
@@ -4654,6 +4645,14 @@ const App: React.FC = () => {
 	                    >
 	                      🎨 应用到分镜表
 	                    </button>
+	                    <button
+	                      onClick={() => setCurrentStep(AppStep.FINAL_STORYBOARD)}
+	                      disabled={!shots.some(s => s.storyboardGridUrl)}
+	                      className="px-4 py-2 bg-blue-600 text-white rounded-md font-medium text-xs hover:bg-blue-700 transition-all disabled:opacity-50"
+	                      title="查看最终故事板预览（需要先应用到分镜表）"
+	                    >
+	                      📋 查看最终故事板
+	                    </button>
                     <button
                       onClick={() => {
                         hqUrls.filter(u => u).forEach((url, idx) => {
@@ -4796,6 +4795,17 @@ const App: React.FC = () => {
               </ul>
             </div>
           </div>
+        )}
+
+        {/* 🆕 最终故事板预览 */}
+        {currentStep === AppStep.FINAL_STORYBOARD && (
+          <FinalStoryboard
+            shots={shots}
+            characterRefs={characterRefs}
+            episodeNumber={currentEpisodeNumber}
+            projectName={currentProject?.name}
+            onBack={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
+          />
         )}
       </main>
 

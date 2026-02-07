@@ -314,7 +314,8 @@ export enum AppStep {
   REVIEW_OPTIMIZE = 3,
   MANUAL_EDIT = 4,        // 手动编辑/AI对话精修
   EXTRACT_PROMPTS = 5,    // 提取AI提示词
-  GENERATE_IMAGES = 6
+  GENERATE_IMAGES = 6,
+  FINAL_STORYBOARD = 7    // 🆕 最终故事板预览
 }
 
 /**
