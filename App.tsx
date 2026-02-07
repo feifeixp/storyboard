@@ -566,7 +566,9 @@ const App: React.FC = () => {
         }
       }
 
-      setCurrentStep(AppStep.INPUT_SCRIPT);
+	      // ✅ 如果该集已存在分镜，则直接进入分镜编辑界面，避免用户误以为进度丢失
+	      const hasShots = Array.isArray(fullEpisode.shots) && fullEpisode.shots.length > 0;
+	      setCurrentStep(hasShots ? AppStep.MANUAL_EDIT : AppStep.INPUT_SCRIPT);
     } catch (error) {
       console.error('[handleSelectEpisode] 加载剧集失败:', error);
       // 降级：使用列表数据（可能不完整但不至于报错）
@@ -575,7 +577,8 @@ const App: React.FC = () => {
       if (episode.shots && episode.shots.length > 0) {
         setShots(episode.shots);
       }
-      setCurrentStep(AppStep.INPUT_SCRIPT);
+	      const hasShots = Array.isArray(episode.shots) && episode.shots.length > 0;
+	      setCurrentStep(hasShots ? AppStep.MANUAL_EDIT : AppStep.INPUT_SCRIPT);
     }
   };
 
