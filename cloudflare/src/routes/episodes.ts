@@ -48,7 +48,7 @@ episodeRoutes.get('/', async (c) => {
       title: ep.title,
       script: ep.script,
       cleaningResult: ep.cleaning_result ? JSON.parse(ep.cleaning_result) : null,
-      shots: JSON.parse(ep.shots),
+      shots: ep.shots ? JSON.parse(ep.shots) : [],
       status: ep.status,
       updatedAt: ep.updated_at,
     }));
@@ -87,7 +87,7 @@ episodeRoutes.get('/:id', async (c) => {
       title: episode.title,
       script: episode.script,
       cleaningResult: episode.cleaning_result ? JSON.parse(episode.cleaning_result as string) : null,
-      shots: JSON.parse(episode.shots as string),
+      shots: episode.shots ? JSON.parse(episode.shots as string) : [],
       status: episode.status,
       updatedAt: episode.updated_at,
     });

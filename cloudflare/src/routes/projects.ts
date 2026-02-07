@@ -107,7 +107,7 @@ projectRoutes.get('/:id', async (c) => {
       title: ep.title,
       script: ep.script,
       cleaningResult: ep.cleaning_result ? JSON.parse(ep.cleaning_result) : null,
-      shots: JSON.parse(ep.shots),
+      shots: ep.shots ? JSON.parse(ep.shots) : [],
       status: ep.status,
       updatedAt: ep.updated_at,
     }));
