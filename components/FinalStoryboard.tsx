@@ -334,10 +334,34 @@ function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
 
 /**
  * 九宫格虚拟切割图片组件（用于最终预览）
+ * - 放大 3 倍 + 位移裁切实现虚拟切割
+ * - 添加 max-w-none / max-h-none 覆盖 Tailwind preflight 的 img { max-width:100% }
+ * - CORS 加载失败时自动降级为不带 crossOrigin（保证预览可见，但 PDF 导出可能受限）
  */
 function GridCellImage({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: number }) {
   const row = Math.floor(cellIndex / 3);
   const col = cellIndex % 3;
+  // CORS 降级：首次用 anonymous，加载失败则去掉 crossOrigin 再试一次
+  const [corsMode, setCorsMode] = useState<'anonymous' | 'none'>('anonymous');
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  const handleError = () => {
+    if (corsMode === 'anonymous') {
+      // 第一次失败：去掉 crossOrigin 再试
+      setCorsMode('none');
+    } else {
+      // 彻底失败
+      setLoadFailed(true);
+    }
+  };
+
+  if (loadFailed) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-gray-800 text-gray-400 text-xs">
+        图片加载失败
+      </div>
+    );
+  }
 
   return (
     <div className="absolute inset-0 overflow-hidden">
@@ -345,12 +369,13 @@ function GridCellImage({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: num
         使用 <img> 而非 background-image：
         - html2canvas 对 <img> 的跨域处理更可控（配合 crossOrigin + useCORS）
         - 同时仍可通过放大 3 倍并位移来实现九宫格虚拟裁切
+        - max-w-none / max-h-none 覆盖 Tailwind preflight 的 max-width:100%
       */}
       <img
         src={gridUrl}
-        crossOrigin="anonymous"
+        crossOrigin={corsMode === 'anonymous' ? 'anonymous' : undefined}
         alt=""
-        className="absolute top-0 left-0 select-none"
+        className="absolute top-0 left-0 select-none max-w-none max-h-none"
         style={{
           width: '300%',
           height: '300%',
@@ -358,6 +383,7 @@ function GridCellImage({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: num
           top: `-${row * 100}%`,
         }}
         draggable={false}
+        onError={handleError}
       />
     </div>
   );

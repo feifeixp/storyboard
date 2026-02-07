@@ -2624,7 +2624,7 @@ const App: React.FC = () => {
 	        src={gridUrl}
 	        alt={`grid-cell-${safeIndex}`}
 	        loading="lazy"
-	        className="block"
+	        className="block max-w-none max-h-none"
 	        style={{
 	          width: '300%',
 	          height: '300%',
@@ -4538,14 +4538,24 @@ const App: React.FC = () => {
                   )}
                 </button>
 
-                {/* 🆕 P1修复：导出剧本模板按钮（不依赖九宫格生成） */}
+                {/* 应用到分镜表（从结果区移到顶部） */}
                 <button
-                  onClick={handleExportScriptTemplate}
-                  disabled={!currentProject || !currentEpisodeNumber || shots.length === 0}
+                  onClick={applyGridsToShots}
+                  disabled={isLoading || hqUrls.filter(u => u).length === 0}
                   className="px-6 py-2.5 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-all text-sm flex items-center gap-2 disabled:opacity-50 shadow-lg"
-                  title="导出剧本模板（包含剧集信息、角色、场景、故事梗概、分镜内容、AI提示词）"
+                  title="将九宫格按序映射为每个镜头的草图（虚拟切割），并保存到云端"
                 >
-                  📄 导出剧本模板
+                  🎨 应用到分镜表
+                </button>
+
+                {/* 查看最终故事板（从结果区移到顶部） */}
+                <button
+                  onClick={() => setCurrentStep(AppStep.FINAL_STORYBOARD)}
+                  disabled={!shots.some(s => s.storyboardGridUrl)}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all text-sm flex items-center gap-2 disabled:opacity-50 shadow-lg"
+                  title="查看最终故事板预览（需要先应用到分镜表）"
+                >
+                  📋 查看最终故事板
                 </button>
               </div>
 
@@ -4683,22 +4693,6 @@ const App: React.FC = () => {
                     {isLoading ? '⏳ 正在生成...' : '✅ 九宫格生成完成'} ({hqUrls.filter(u => u).length}/{Math.ceil(shots.length / 9)} 张)
                   </h3>
                   <div className="flex gap-2">
-	                    <button
-	                      onClick={applyGridsToShots}
-	                      disabled={isLoading || hqUrls.filter(u => u).length === 0}
-	                      className="px-4 py-2 bg-purple-600 text-white rounded-md font-medium text-xs hover:bg-purple-700 transition-all disabled:opacity-50"
-	                      title="将九宫格按序映射为每个镜头的草图（虚拟切割），并保存到云端"
-	                    >
-	                      🎨 应用到分镜表
-	                    </button>
-	                    <button
-	                      onClick={() => setCurrentStep(AppStep.FINAL_STORYBOARD)}
-	                      disabled={!shots.some(s => s.storyboardGridUrl)}
-	                      className="px-4 py-2 bg-blue-600 text-white rounded-md font-medium text-xs hover:bg-blue-700 transition-all disabled:opacity-50"
-	                      title="查看最终故事板预览（需要先应用到分镜表）"
-	                    >
-	                      📋 查看最终故事板
-	                    </button>
                     <button
                       onClick={() => {
                         hqUrls.filter(u => u).forEach((url, idx) => {
@@ -4710,14 +4704,7 @@ const App: React.FC = () => {
                     >
                       📥 下载全部 ({hqUrls.filter(u => u).length}张)
                     </button>
-                    <button
-                      onClick={handleExportScriptTemplate}
-                      disabled={!currentProject || !currentEpisodeNumber || shots.length === 0}
-                      className="px-4 py-2 bg-emerald-600 text-white rounded-md font-medium text-xs hover:bg-emerald-700 transition-all disabled:opacity-50"
-                      title="导出剧本模板（包含剧集信息、角色、场景、故事梗概、分镜内容、AI提示词）"
-                    >
-                      📄 导出剧本模板
-                    </button>
+
                     <button
                       onClick={() => setHqUrls([])}
                       className="px-4 py-2 bg-gray-600 text-white font-medium text-xs rounded-md hover:bg-gray-500"
