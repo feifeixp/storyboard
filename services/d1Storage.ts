@@ -11,28 +11,61 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.yourdomain.com
 
 /**
  * 通用 API 请求函数
+ * 🔧 支持超时控制和自动重试
  */
 async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retries: number = 3,
+  timeout: number = 30000 // 30秒超时
 ): Promise<T> {
   const accessToken = getAccessToken();
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'accessToken': accessToken || '',
-      ...options.headers,
-    },
-  });
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // 创建超时控制器
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'accessToken': accessToken || '',
+          ...options.headers,
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      const isLastAttempt = attempt === retries;
+      const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('timeout'));
+      const isNetworkError = error instanceof Error && error.message.includes('Failed to fetch');
+
+      console.warn(`[API请求] ${endpoint} 第${attempt}次尝试失败:`, error);
+
+      // 如果是超时或网络错误，且不是最后一次尝试，则重试
+      if ((isTimeout || isNetworkError) && !isLastAttempt) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // 指数退避，最多5秒
+        console.log(`[API请求] ${delay}ms 后重试 (${attempt + 1}/${retries})...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      // 最后一次尝试失败，或非网络错误，直接抛出
+      throw error;
+    }
   }
 
-  return response.json();
+  throw new Error('请求失败：已达到最大重试次数');
 }
 
 // ============================================
