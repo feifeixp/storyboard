@@ -3289,23 +3289,31 @@ export async function* chatEditShotListStream(
 /**
  * 🆕 使用 Neodomain API 生成单张图像
  * 替代原有的 OpenRouter 图像生成
+ * 🔧 支持模型降级：nanobanana-pro → doubao-seedream-4.5
  */
 async function generateSingleImage(
   prompt: string,
   imageModel: string = DEFAULT_IMAGE_MODEL,
   characterRefs: CharacterRef[] = []
 ): Promise<string | null> {
+  // 动态导入 neodomain API
+  const { generateImage, pollGenerationResult, TaskStatus } = await import('./aiImageGeneration');
+
+  // 🔧 模型降级配置
+  const PRIMARY_MODEL = 'nanobanana-pro';
+  const FALLBACK_MODEL = 'doubao-seedream-4.5';
+
+  // 优先使用 nanobanana-pro，如果用户指定了其他模型则使用指定的模型
+  const preferredModel = imageModel || PRIMARY_MODEL;
+
+  // 🔧 尝试使用首选模型
   try {
-    console.log(`[Neodomain] 图像生成请求: ${prompt.substring(0, 100)}...`);
+    console.log(`[Neodomain] 图像生成请求 (模型: ${preferredModel}): ${prompt.substring(0, 100)}...`);
 
-    // 动态导入 neodomain API
-    const { generateImage, pollGenerationResult, TaskStatus } = await import('./aiImageGeneration');
-
-    // 提交生成请求
     const task = await generateImage({
       prompt: prompt,
       negativePrompt: 'blurry, low quality, watermark, text, signature, distorted, deformed',
-      modelName: imageModel || 'doubao-seedream-4-0', // 使用豆包AI绘画4.0作为默认模型
+      modelName: preferredModel,
       numImages: '1',
       aspectRatio: '16:9',  // 九宫格分镜草图使用16:9横版
       size: '2K',           // 2K分辨率，平衡质量和速度
@@ -3327,16 +3335,70 @@ async function generateSingleImage(
     // 检查生成结果
     if (result.status === TaskStatus.SUCCESS && result.image_urls && result.image_urls.length > 0) {
       const imageUrl = result.image_urls[0];
-      console.log('[Neodomain] 图像生成成功');
+      console.log(`[Neodomain] 图像生成成功 (模型: ${preferredModel})`);
       return imageUrl;
     } else if (result.status === TaskStatus.FAILED) {
-      console.error('[Neodomain] 图像生成失败:', result.failure_reason);
+      console.error(`[Neodomain] 图像生成失败 (模型: ${preferredModel}):`, result.failure_reason);
+
+      // 🔧 如果是会员限制错误且使用的是 nanobanana-pro，尝试降级
+      const isMembershipError = result.failure_reason?.includes('会员') ||
+                                result.failure_reason?.includes('membership') ||
+                                result.failure_reason?.includes('权限');
+
+      if (isMembershipError && preferredModel === PRIMARY_MODEL) {
+        console.warn(`[Neodomain] ${PRIMARY_MODEL} 会员限制，降级到 ${FALLBACK_MODEL}`);
+        throw new Error('MEMBERSHIP_REQUIRED'); // 触发降级逻辑
+      }
+
       return null;
     } else {
       console.warn('[Neodomain] 未获取到生成的图片');
       return null;
     }
   } catch (error) {
+    // 🔧 如果是会员限制错误且使用的是 nanobanana-pro，尝试降级到 doubao-seedream-4.5
+    const isMembershipError = error instanceof Error && error.message === 'MEMBERSHIP_REQUIRED';
+    const shouldFallback = isMembershipError && preferredModel === PRIMARY_MODEL;
+
+    if (shouldFallback) {
+      console.warn(`[Neodomain] 降级到备用模型: ${FALLBACK_MODEL}`);
+
+      try {
+        const fallbackTask = await generateImage({
+          prompt: prompt,
+          negativePrompt: 'blurry, low quality, watermark, text, signature, distorted, deformed',
+          modelName: FALLBACK_MODEL,
+          numImages: '1',
+          aspectRatio: '16:9',
+          size: '2K',
+          outputFormat: 'jpeg',
+          guidanceScale: 7.5,
+          showPrompt: false,
+        });
+
+        console.log(`[Neodomain] 备用模型任务已提交: ${fallbackTask.task_code}`);
+
+        const fallbackResult = await pollGenerationResult(
+          fallbackTask.task_code,
+          (status, attempt) => {
+            console.log(`[Neodomain] 备用模型生成状态: ${status}, 第${attempt}次查询`);
+          }
+        );
+
+        if (fallbackResult.status === TaskStatus.SUCCESS && fallbackResult.image_urls && fallbackResult.image_urls.length > 0) {
+          const imageUrl = fallbackResult.image_urls[0];
+          console.log(`[Neodomain] 备用模型生成成功 (${FALLBACK_MODEL})`);
+          return imageUrl;
+        } else {
+          console.error(`[Neodomain] 备用模型生成失败:`, fallbackResult.failure_reason);
+          return null;
+        }
+      } catch (fallbackError) {
+        console.error(`[Neodomain] 备用模型生成失败:`, fallbackError);
+        return null;
+      }
+    }
+
     console.error('[Neodomain] 图像生成失败:', error);
     return null;
   }
