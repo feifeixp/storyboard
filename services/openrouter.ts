@@ -3293,6 +3293,7 @@ export async function* chatEditShotListStream(
  * 🆕 使用 Neodomain API 生成单张图像
  * 替代原有的 OpenRouter 图像生成
  * 🔧 支持模型降级：nanobanana-pro → doubao-seedream-4.5
+ * ✅ 动态获取模型名称，符合 Neodomain API 规范
  */
 async function generateSingleImage(
   prompt: string,
@@ -3300,26 +3301,63 @@ async function generateSingleImage(
   characterRefs: CharacterRef[] = []
 ): Promise<string | null> {
   // 动态导入 neodomain API
-  const { generateImage, pollGenerationResult, TaskStatus } = await import('./aiImageGeneration');
+  const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
 
-  // 🔧 模型降级配置
-  const PRIMARY_MODEL = 'nanobanana-pro';
-  const FALLBACK_MODEL = 'doubao-seedream-4.5';
+  // 🔧 模型降级配置（使用关键词匹配，不区分大小写）
+  const PRIMARY_MODEL_KEYWORDS = ['nano', 'banana'];  // 匹配 "Nano Banana Pro"
+  const FALLBACK_MODEL_KEYWORDS = ['seedream'];  // 匹配 "Seedream 4.5" 或 "doubao-seedream-4-5"
 
-  // ✅ 强制锁定生图模型：始终使用 nanobanana-pro
-  // 说明：UI/调用方可能仍会传入 imageModel（历史兼容/日志用途），但这里会忽略该值。
-  const requestedModel = imageModel;
-  const preferredModel = PRIMARY_MODEL;
+  // ✅ 动态获取分镜场景下的可用模型列表
+  console.log('[Neodomain] 获取分镜场景可用模型列表...');
+  let availableModels;
+  try {
+    availableModels = await getModelsByScenario(ScenarioType.STORYBOARD);
+    console.log(`[Neodomain] 获取到 ${availableModels.length} 个可用模型:`, availableModels.map(m => ({
+      name: m.model_name,
+      display: m.model_display_name,
+      desc: m.model_description
+    })));
+  } catch (error) {
+    console.error('[Neodomain] 获取模型列表失败:', error);
+    throw new Error('无法获取可用模型列表，请稍后重试');
+  }
+
+  // 🔍 查找目标模型（通过关键词匹配 model_display_name）
+  const findModelByKeywords = (keywords: string[]) => {
+    return availableModels.find(m => {
+      const displayNameLower = m.model_display_name.toLowerCase();
+      const modelNameLower = m.model_name.toLowerCase();
+      // 所有关键词都必须在 display_name 或 model_name 中出现
+      return keywords.every(keyword =>
+        displayNameLower.includes(keyword.toLowerCase()) ||
+        modelNameLower.includes(keyword.toLowerCase())
+      );
+    });
+  };
+
+  const primaryModel = findModelByKeywords(PRIMARY_MODEL_KEYWORDS);
+  const fallbackModel = findModelByKeywords(FALLBACK_MODEL_KEYWORDS);
+
+  if (!primaryModel && !fallbackModel) {
+    console.error('[Neodomain] 未找到可用的生图模型');
+    console.error('[Neodomain] 可用模型列表:', availableModels.map(m => m.model_display_name));
+    throw new Error('未找到可用的生图模型，请联系管理员');
+  }
+
+  // ✅ 优先使用 Nano Banana Pro，如果不可用则使用降级模型
+  const preferredModel = primaryModel || fallbackModel;
+  const preferredModelName = preferredModel!.model_name;
+
+  console.log(`[Neodomain] ✅ 使用模型: ${preferredModelName} (显示名: ${preferredModel!.model_display_name})`);
 
   // 🔧 尝试使用首选模型
   try {
-    const ignoredHint = requestedModel && requestedModel !== preferredModel ? `, 忽略请求模型: ${requestedModel}` : '';
-    console.log(`[Neodomain] 图像生成请求 (锁定模型: ${preferredModel}${ignoredHint}): ${prompt.substring(0, 100)}...`);
+    console.log(`[Neodomain] 图像生成请求 (模型: ${preferredModelName}): ${prompt.substring(0, 100)}...`);
 
     const task = await generateImage({
       prompt: prompt,
       negativePrompt: 'blurry, low quality, watermark, text, signature, distorted, deformed',
-      modelName: preferredModel,
+      modelName: preferredModelName,  // ✅ 使用动态获取的 model_name
       numImages: '1',
       aspectRatio: '16:9',  // 九宫格分镜草图使用16:9横版
       size: '2K',           // 2K分辨率，平衡质量和速度
@@ -3341,39 +3379,39 @@ async function generateSingleImage(
     // 检查生成结果
     if (result.status === TaskStatus.SUCCESS && result.image_urls && result.image_urls.length > 0) {
       const imageUrl = result.image_urls[0];
-      console.log(`[Neodomain] 图像生成成功 (模型: ${preferredModel})`);
+      console.log(`[Neodomain] ✅ 图像生成成功 (模型: ${preferredModelName})`);
       return imageUrl;
     } else if (result.status === TaskStatus.FAILED) {
-      console.error(`[Neodomain] 图像生成失败 (模型: ${preferredModel}):`, result.failure_reason);
+      console.error(`[Neodomain] ❌ 图像生成失败 (模型: ${preferredModelName}):`, result.failure_reason);
 
-      // 🔧 如果是会员限制错误且使用的是 nanobanana-pro，尝试降级
+      // 🔧 如果是会员限制错误且使用的是主模型，尝试降级
       const isMembershipError = result.failure_reason?.includes('会员') ||
                                 result.failure_reason?.includes('membership') ||
                                 result.failure_reason?.includes('权限');
 
-      if (isMembershipError && preferredModel === PRIMARY_MODEL) {
-        console.warn(`[Neodomain] ${PRIMARY_MODEL} 会员限制，降级到 ${FALLBACK_MODEL}`);
+      if (isMembershipError && primaryModel && preferredModel === primaryModel && fallbackModel) {
+        console.warn(`[Neodomain] ${preferredModel.model_display_name} 会员限制，降级到 ${fallbackModel.model_display_name}`);
         throw new Error('MEMBERSHIP_REQUIRED'); // 触发降级逻辑
       }
 
       return null;
     } else {
-      console.warn('[Neodomain] 未获取到生成的图片');
+      console.warn('[Neodomain] ⚠️ 未获取到生成的图片');
       return null;
     }
   } catch (error) {
-    // 🔧 如果是会员限制错误且使用的是 nanobanana-pro，尝试降级到 doubao-seedream-4.5
+    // 🔧 如果是会员限制错误且使用的是主模型，尝试降级到备用模型
     const isMembershipError = error instanceof Error && error.message === 'MEMBERSHIP_REQUIRED';
-    const shouldFallback = isMembershipError && preferredModel === PRIMARY_MODEL;
+    const shouldFallback = isMembershipError && primaryModel && preferredModel === primaryModel && fallbackModel;
 
     if (shouldFallback) {
-      console.warn(`[Neodomain] 降级到备用模型: ${FALLBACK_MODEL}`);
+      console.warn(`[Neodomain] 🔄 降级到备用模型: ${fallbackModel!.model_display_name} (${fallbackModel!.model_name})`);
 
       try {
         const fallbackTask = await generateImage({
           prompt: prompt,
           negativePrompt: 'blurry, low quality, watermark, text, signature, distorted, deformed',
-          modelName: FALLBACK_MODEL,
+          modelName: fallbackModel!.model_name,  // ✅ 使用备用模型的 model_name
           numImages: '1',
           aspectRatio: '16:9',
           size: '2K',
@@ -3393,10 +3431,10 @@ async function generateSingleImage(
 
         if (fallbackResult.status === TaskStatus.SUCCESS && fallbackResult.image_urls && fallbackResult.image_urls.length > 0) {
           const imageUrl = fallbackResult.image_urls[0];
-          console.log(`[Neodomain] 备用模型生成成功 (${FALLBACK_MODEL})`);
+          console.log(`[Neodomain] ✅ 备用模型生成成功 (${fallbackModel!.model_display_name})`);
           return imageUrl;
         } else {
-          console.error(`[Neodomain] 备用模型生成失败:`, fallbackResult.failure_reason);
+          console.error(`[Neodomain] ❌ 备用模型生成失败:`, fallbackResult.failure_reason);
           return null;
         }
       } catch (fallbackError) {

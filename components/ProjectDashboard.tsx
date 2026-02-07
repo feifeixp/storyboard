@@ -19,7 +19,7 @@ interface ProjectDashboardProps {
   onBack: () => void;
 }
 
-type TabType = 'overview' | 'characters' | 'scenes' | 'outline' | 'episodes';
+type TabType = 'overview' | 'characters' | 'scenes' | 'episodes';
 type EditType = 'character' | 'scene' | 'episode' | 'form';
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
@@ -30,6 +30,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [expandedCharacter, setExpandedCharacter] = useState<string | null>(null);
+
+  // UI-only style tokens（仅排版/视觉优化：不改变任何功能逻辑）
+  const containerClass = 'max-w-7xl mx-auto px-3 sm:px-4 lg:px-6';
+  const cardClass = 'bg-gray-800 rounded-lg border border-gray-700/60';
+  const cardPad = 'p-3';
+  const primaryBtnClass = 'bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium';
 
   // 构建剧本数据
   const scripts: ScriptFile[] = useMemo(() => {
@@ -265,7 +271,6 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     { id: 'overview', label: '概览', icon: '📋' },
     { id: 'characters', label: '角色', icon: '👥' },
     { id: 'scenes', label: '场景', icon: '🏛️' },
-    { id: 'outline', label: '大纲', icon: '📖' },
     { id: 'episodes', label: '剧集', icon: '📺' },
   ];
 
@@ -273,9 +278,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const renderOverview = () => (
     <div className="space-y-4">
       {/* 顶部行：基础信息 + 分卷 */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
         {/* 基础信息 */}
-        <div className="bg-gray-800 rounded p-3">
+        <div className={`${cardClass} ${cardPad}`}>
           <h3 className="text-sm font-bold text-white mb-2">📋 项目信息</h3>
           <div className="space-y-1 text-xs">
             {project.settings?.mediaType && (
@@ -291,11 +296,15 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
         {/* 分卷结构 - 横向展示 */}
         {project.volumes && project.volumes.length > 0 && (
-          <div className="bg-gray-800 rounded p-3 col-span-3">
+          <div className={`${cardClass} ${cardPad} lg:col-span-3`}>
             <h3 className="text-sm font-bold text-white mb-2">📖 分卷 ({project.volumes.length})</h3>
             <div className="flex flex-wrap gap-2">
               {project.volumes.map((vol) => (
-                <div key={vol.id} className="flex items-center gap-2 text-xs border-l-2 pl-2 bg-gray-750 rounded-r pr-2 py-1" style={{ borderColor: vol.color || '#22c55e' }}>
+                <div
+                  key={vol.id}
+                  className="flex items-center gap-2 text-xs border-l-2 pl-2 bg-gray-750 rounded-r pr-2 py-1"
+                  style={{ borderColor: vol.color || '#22c55e' }}
+                >
                   <span className="text-white font-medium">V{vol.volumeNumber}</span>
                   <span className="text-gray-500">Ep{vol.episodeRange[0]}-{vol.episodeRange[1]}</span>
                   <span className="text-gray-400">{vol.title}</span>
@@ -307,7 +316,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       </div>
 
       {/* 世界观 - 全宽展开 */}
-      <div className="bg-gray-800 rounded p-3">
+      <div className={`${cardClass} ${cardPad}`}>
         <h3 className="text-sm font-bold text-white mb-2">🌍 世界观</h3>
         <p className="text-gray-300 text-xs leading-relaxed whitespace-pre-wrap">
           {project.settings?.worldView || '未设置'}
@@ -316,7 +325,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       {/* 专有名词 - 全宽展开 */}
       {project.settings?.keyTerms && project.settings.keyTerms.length > 0 && (
-        <div className="bg-gray-800 rounded p-3">
+        <div className={`${cardClass} ${cardPad}`}>
           <h3 className="text-sm font-bold text-white mb-2">📚 名词 ({project.settings.keyTerms.length})</h3>
           <div className="flex flex-wrap gap-1.5">
             {project.settings.keyTerms.map((term, i) => (
@@ -330,7 +339,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       {/* BOSS档案 - 全宽横向展示 */}
       {project.antagonists && project.antagonists.length > 0 && (
-        <div className="bg-gray-800 rounded p-3">
+        <div className={`${cardClass} ${cardPad}`}>
           <h3 className="text-sm font-bold text-white mb-2">👹 BOSS ({project.antagonists.length})</h3>
           <div className="flex flex-wrap gap-2">
             {project.antagonists.map((boss) => (
@@ -348,9 +357,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 渲染角色库 - 紧凑版
   const renderCharacters = () => (
     <div className="space-y-2">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <h3 className="text-sm font-bold text-white">👥 角色库 ({project.characters?.length || 0})</h3>
-        <button className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs">+ 添加</button>
+        <button className={primaryBtnClass}>+ 添加</button>
       </div>
 
       <div className="grid grid-cols-1 gap-2">
@@ -378,32 +387,39 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   return (
     <div className="min-h-screen bg-gray-900">
       {/* 顶部导航 - 紧凑 */}
-      <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-gray-400 hover:text-white text-sm">← 返回</button>
-          <h1 className="text-base font-bold text-white">{project.name}</h1>
-          <span className="text-gray-500 text-xs">{project.settings?.genre || ''}</span>
-        </div>
-        {/* 标签页导航 - 内联 */}
-        <div className="flex gap-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors rounded ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
+      <div className="sticky top-0 z-20 bg-gray-800/95 backdrop-blur border-b border-gray-700">
+        <div className={`${containerClass} py-2 flex items-center justify-between gap-3`}>
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={onBack} className="text-gray-400 hover:text-white text-sm shrink-0">← 返回</button>
+            <h1 className="text-base font-bold text-white truncate">{project.name}</h1>
+            {project.settings?.genre && (
+              <span className="text-gray-500 text-xs bg-gray-900/40 border border-gray-700/60 px-2 py-0.5 rounded-full shrink-0">
+                {project.settings.genre}
+              </span>
+            )}
+          </div>
+
+          {/* 标签页导航 - 小屏横向滚动（不改变交互，仅排版更稳） */}
+          <div className="flex gap-1 overflow-x-auto max-w-[60%] sm:max-w-none">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors rounded whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                }`}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* 内容区域 - 紧凑padding */}
-      <div className="p-3">
+      <div className={`${containerClass} py-3`}>
         {activeTab === 'overview' && renderOverview()}
         {activeTab === 'characters' && renderCharacters()}
         {activeTab === 'scenes' && (
@@ -418,7 +434,6 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             extractionProgress={extractionProgress}
           />
         )}
-        {activeTab === 'outline' && <OutlineTab project={project} onEditEpisode={(ep) => openEditModal('episode', ep)} />}
         {activeTab === 'episodes' && <EpisodesTab project={project} onSelectEpisode={onSelectEpisode} />}
       </div>
 
@@ -612,7 +627,7 @@ const ScenesTab: React.FC<{
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <h3 className="text-sm font-bold text-white">🏛️ 场景库 ({project.scenes?.length || 0})</h3>
         <div className="flex gap-2">
           {/* 🆕 重新提取按钮 */}
@@ -636,17 +651,19 @@ const ScenesTab: React.FC<{
               )}
             </button>
           )}
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs">+ 添加</button>
+          <button className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium">+ 添加</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
         {(project.scenes || []).map((scene) => {
           const isExpanded = expandedScene === scene.id;
           return (
             <div
               key={scene.id}
-              className={`bg-gray-800 rounded p-2 cursor-pointer transition-all hover:bg-gray-750 group ${isExpanded ? 'col-span-3 ring-1 ring-blue-500' : ''}`}
+              className={`bg-gray-800 rounded-lg border border-gray-700/60 p-3 cursor-pointer transition-all hover:bg-gray-750 hover:border-gray-600/60 group ${
+                isExpanded ? 'col-span-1 md:col-span-2 xl:col-span-3 ring-1 ring-blue-500/70' : ''
+              }`}
               onClick={() => setExpandedScene(isExpanded ? null : scene.id)}
             >
               <div className="flex justify-between items-start">
@@ -725,62 +742,65 @@ const ScenesTab: React.FC<{
   );
 };
 
-// 剧情大纲标签页 - 紧凑版
-const OutlineTab: React.FC<{ project: Project; onEditEpisode: (ep: EpisodeSummary) => void }> = ({ project, onEditEpisode }) => (
-  <div className="space-y-2">
-    <h3 className="text-sm font-bold text-white">📖 剧情大纲 ({project.storyOutline.length}集)</h3>
-
-    <div className="grid grid-cols-2 gap-2">
-      {project.storyOutline.map((ep) => (
-        <div key={ep.episodeNumber} className="bg-gray-800 rounded p-2 flex items-start gap-2 group">
-          <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-xs font-bold shrink-0">Ep{ep.episodeNumber}</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <h4 className="text-white text-sm font-medium truncate">{ep.title}</h4>
-              <button
-                onClick={() => onEditEpisode(ep)}
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-400 text-xs"
-                title="编辑概要"
-              >
-                ✏️
-              </button>
-            </div>
-            <p className="text-gray-400 text-xs mt-0.5 line-clamp-2">{ep.summary}</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-// 剧集列表标签页 - 紧凑版
+// 剧集列表标签页 - 书本式卡片（合并大纲内容）
 const EpisodesTab: React.FC<{
   project: Project;
   onSelectEpisode: (episode: Episode) => void;
 }> = ({ project, onSelectEpisode }) => (
   <div className="space-y-2">
-    <div className="flex justify-between items-center">
+    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
       <h3 className="text-sm font-bold text-white">📺 剧集列表 ({project.episodes?.length || 0})</h3>
-      <button className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs">+ 添加</button>
+      <button className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium">+ 添加</button>
     </div>
 
-    <div className="grid grid-cols-4 gap-2">
-      {(project.episodes || []).map((ep) => (
-        <div
-          key={ep.id}
-          className="bg-gray-800 rounded p-2 cursor-pointer hover:bg-gray-750 transition-colors"
-          onClick={() => onSelectEpisode(ep)}
-        >
-          <div className="flex items-center justify-between">
-            <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-xs font-bold">第{ep.episodeNumber}集</span>
-            <StatusBadge status={ep.status} />
+    {/* 书本式卡片：左侧集数色块 + 右侧标题/大纲/状态 */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {(project.episodes || []).map((ep) => {
+        // 从 storyOutline 中找到对应集数的大纲
+        const outline = project.storyOutline?.find(o => o.episodeNumber === ep.episodeNumber);
+        const summary = outline?.summary || '暂无大纲';
+
+        return (
+          <div
+            key={ep.id}
+            className="bg-gray-800 rounded-lg border border-gray-700/60 hover:border-gray-600/60 overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:shadow-blue-500/10 group"
+            onClick={() => onSelectEpisode(ep)}
+          >
+            {/* 书本式布局：左侧色块（集数）+ 右侧内容 */}
+            <div className="flex items-stretch">
+              {/* 左侧：集数色块（模拟书脊） */}
+              <div className="bg-gradient-to-b from-blue-600 to-blue-700 w-16 shrink-0 flex flex-col items-center justify-center text-white p-2 border-r-2 border-blue-500/30">
+                <span className="text-xs font-medium opacity-80">第</span>
+                <span className="text-2xl font-bold">{ep.episodeNumber}</span>
+                <span className="text-xs font-medium opacity-80">集</span>
+              </div>
+
+              {/* 右侧：标题 + 大纲 + 状态 */}
+              <div className="flex-1 p-3 min-w-0">
+                {/* 标题 + 状态 */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h4 className="text-white text-sm font-semibold leading-tight flex-1 min-w-0 group-hover:text-blue-300 transition-colors">
+                    {ep.title}
+                  </h4>
+                  <StatusBadge status={ep.status} />
+                </div>
+
+                {/* 大纲摘要（最多 3 行） */}
+                <p className="text-gray-400 text-xs leading-relaxed line-clamp-3 mb-2">
+                  {summary}
+                </p>
+
+                {/* 底部元信息 */}
+                <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                  <span>{ep.shots?.length || 0} 个分镜</span>
+                  <span>·</span>
+                  <span>{new Date(ep.updatedAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <h4 className="text-white text-sm font-medium mt-1 truncate">{ep.title}</h4>
-          <p className="text-gray-500 text-[10px] mt-1">
-            {ep.shots?.length || 0} 个分镜 · 更新于 {new Date(ep.updatedAt).toLocaleDateString()}
-          </p>
-        </div>
-      ))}
+        );
+      })}
     </div>
   </div>
 );

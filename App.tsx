@@ -535,7 +535,8 @@ const App: React.FC = () => {
         }
       }
 
-      setScript(fullEpisode.script || '');
+      // 🔧 确保 script 始终是字符串
+      setScript(typeof fullEpisode.script === 'string' ? fullEpisode.script : '');
       setCurrentEpisodeNumber(fullEpisode.episodeNumber);
       if (fullEpisode.shots && fullEpisode.shots.length > 0) {
         setShots(fullEpisode.shots);
@@ -594,10 +595,13 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('[handleSelectEpisode] 加载剧集失败:', error);
       // 降级：使用列表数据（可能不完整但不至于报错）
-      setScript(episode.script || '');
+      // 🔧 确保 script 始终是字符串
+      setScript(typeof episode.script === 'string' ? episode.script : '');
       setCurrentEpisodeNumber(episode.episodeNumber);
-      if (episode.shots && episode.shots.length > 0) {
+      if (episode.shots && Array.isArray(episode.shots) && episode.shots.length > 0) {
         setShots(episode.shots);
+      } else {
+        setShots([]);
       }
 
 	      const hasShots = Array.isArray(episode.shots) && episode.shots.length > 0;
@@ -3281,12 +3285,14 @@ const App: React.FC = () => {
                                   </div>
                                   {/* 🆕 外观描述全部显示（不截断） */}
                                   {(() => {
+                                    // 🔧 确保 appearance 是字符串后再调用 .includes()
+                                    const appearanceStr = typeof ref.appearance === 'string' ? ref.appearance : '';
                                     // 如果appearance是"默认形态见forms数组"之类的描述，且有forms，显示第一个form的描述
-                                    const isPlaceholder = ref.appearance?.includes('forms') || ref.appearance?.includes('默认形态');
+                                    const isPlaceholder = appearanceStr.includes('forms') || appearanceStr.includes('默认形态');
                                     const firstForm = (ref as any).forms?.[0];
                                     const displayAppearance = isPlaceholder && firstForm?.description
                                       ? `📋 ${firstForm.name || '默认形态'}\n${firstForm.description}`
-                                      : ref.appearance;
+                                      : appearanceStr;
 
                                     return displayAppearance ? (
                                       <p className="text-xs text-gray-400 leading-snug whitespace-pre-wrap">{displayAppearance}</p>
