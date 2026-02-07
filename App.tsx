@@ -547,10 +547,29 @@ const App: React.FC = () => {
       // 🔧 确保 script 始终是字符串
       setScript(typeof fullEpisode.script === 'string' ? fullEpisode.script : '');
       setCurrentEpisodeNumber(fullEpisode.episodeNumber);
-      if (fullEpisode.shots && fullEpisode.shots.length > 0) {
-        setShots(fullEpisode.shots);
-      } else {
+	      if (fullEpisode.shots && fullEpisode.shots.length > 0) {
+	        setShots(fullEpisode.shots);
+
+	        // 🆕 从 shots 中恢复九宫格 URLs（用于“绘制”步骤展示与下载）
+	        // 注意：storyboardGridCellIndex 仅为 0-8 的格子索引，不能用来推回 gridIndex。
+	        // 这里按 shot 在数组中的顺序恢复：每 9 个镜头对应一张九宫格。
+	        const gridUrls: string[] = [];
+	        fullEpisode.shots.forEach((shot, shotIndex) => {
+	          const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
+	          if (!url) return;
+	          const gridIndex = Math.floor(shotIndex / 9);
+	          if (!gridUrls[gridIndex]) gridUrls[gridIndex] = url;
+	        });
+	        const restored = gridUrls.filter(Boolean);
+	        if (restored.length > 0) {
+	          setHqUrls(gridUrls);
+	          console.log(`[handleSelectEpisode] ✅ 恢复了 ${restored.length} 张九宫格图片`);
+	        } else {
+	          setHqUrls([]);
+	        }
+	      } else {
         setShots([]);
+        setHqUrls([]);
       }
 
       // 加载当集出现的角色
@@ -578,9 +597,12 @@ const App: React.FC = () => {
       }
 
 
-	      // ✅ 根据剧集完成进度，跳转到最远的已完成步骤
-	      // 说明：九宫格图片(hqUrls)目前为临时数据不落库，因此这里只能根据“是否已提取提示词”判断到 EXTRACT_PROMPTS
+		      // ✅ 根据剧集完成进度，跳转到最远的已完成步骤
+		      // 优先级：最终故事板(九宫格已回填到 shots) > 提示词 > 精修 > 导入
 	      const hasShots = Array.isArray(fullEpisode.shots) && fullEpisode.shots.length > 0;
+		      const hasStoryboard =
+		        hasShots &&
+		        fullEpisode.shots!.some(s => typeof s.storyboardGridUrl === 'string' && s.storyboardGridUrl.trim());
 	      const hasExtractedPrompts =
 	        hasShots &&
 	        fullEpisode.shots!.some(s =>
@@ -595,9 +617,11 @@ const App: React.FC = () => {
 
 	      const targetStep = !hasShots
 	        ? AppStep.INPUT_SCRIPT
-	        : hasExtractedPrompts
-	          ? AppStep.EXTRACT_PROMPTS
-	          : AppStep.MANUAL_EDIT;
+		        : hasStoryboard
+		          ? AppStep.FINAL_STORYBOARD
+		          : hasExtractedPrompts
+		            ? AppStep.EXTRACT_PROMPTS
+		            : AppStep.MANUAL_EDIT;
 
 	      setCurrentStep(targetStep);
 	      console.log(`[handleSelectEpisode] ✅ 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
@@ -607,13 +631,33 @@ const App: React.FC = () => {
       // 🔧 确保 script 始终是字符串
       setScript(typeof episode.script === 'string' ? episode.script : '');
       setCurrentEpisodeNumber(episode.episodeNumber);
-      if (episode.shots && Array.isArray(episode.shots) && episode.shots.length > 0) {
+	      if (episode.shots && Array.isArray(episode.shots) && episode.shots.length > 0) {
         setShots(episode.shots);
+
+	        // 🆕 从 shots 中恢复九宫格 URLs（fallback 逻辑同上）
+	        const gridUrls: string[] = [];
+	        episode.shots.forEach((shot, shotIndex) => {
+	          const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
+	          if (!url) return;
+	          const gridIndex = Math.floor(shotIndex / 9);
+	          if (!gridUrls[gridIndex]) gridUrls[gridIndex] = url;
+	        });
+	        const restored = gridUrls.filter(Boolean);
+	        if (restored.length > 0) {
+	          setHqUrls(gridUrls);
+	          console.log(`[handleSelectEpisode fallback] ✅ 恢复了 ${restored.length} 张九宫格图片`);
+	        } else {
+	          setHqUrls([]);
+	        }
       } else {
         setShots([]);
+        setHqUrls([]);
       }
 
-	      const hasShots = Array.isArray(episode.shots) && episode.shots.length > 0;
+		      const hasShots = Array.isArray(episode.shots) && episode.shots.length > 0;
+		      const hasStoryboard =
+		        hasShots &&
+		        episode.shots!.some(s => typeof s.storyboardGridUrl === 'string' && s.storyboardGridUrl.trim());
 	      const hasExtractedPrompts =
 	        hasShots &&
 	        episode.shots!.some(s =>
@@ -628,9 +672,11 @@ const App: React.FC = () => {
 
 	      const targetStep = !hasShots
 	        ? AppStep.INPUT_SCRIPT
-	        : hasExtractedPrompts
-	          ? AppStep.EXTRACT_PROMPTS
-	          : AppStep.MANUAL_EDIT;
+		        : hasStoryboard
+		          ? AppStep.FINAL_STORYBOARD
+		          : hasExtractedPrompts
+		            ? AppStep.EXTRACT_PROMPTS
+		            : AppStep.MANUAL_EDIT;
 
 	      setCurrentStep(targetStep);
 	      console.log(`[handleSelectEpisode] ✅ (fallback) 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);

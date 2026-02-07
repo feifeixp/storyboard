@@ -12,7 +12,8 @@ const steps = [
   "自检",
   "精修",
   "提示词",
-  "绘制"
+  "绘制",
+  "故事板"  // 🆕 最终故事板预览
 ];
 
 export const StepTracker: React.FC<StepTrackerProps> = ({ currentStep }) => {
