@@ -566,9 +566,30 @@ const App: React.FC = () => {
         }
       }
 
-	      // ✅ 如果该集已存在分镜，则直接进入分镜编辑界面，避免用户误以为进度丢失
+
+	      // ✅ 根据剧集完成进度，跳转到最远的已完成步骤
+	      // 说明：九宫格图片(hqUrls)目前为临时数据不落库，因此这里只能根据“是否已提取提示词”判断到 EXTRACT_PROMPTS
 	      const hasShots = Array.isArray(fullEpisode.shots) && fullEpisode.shots.length > 0;
-	      setCurrentStep(hasShots ? AppStep.MANUAL_EDIT : AppStep.INPUT_SCRIPT);
+	      const hasExtractedPrompts =
+	        hasShots &&
+	        fullEpisode.shots!.some(s =>
+	          Boolean(
+	            (s.imagePromptCn && s.imagePromptCn.trim()) ||
+	              (s.imagePromptEn && s.imagePromptEn.trim()) ||
+	              (s.endImagePromptCn && s.endImagePromptCn.trim()) ||
+	              (s.endImagePromptEn && s.endImagePromptEn.trim()) ||
+	              (s.videoGenPrompt && s.videoGenPrompt.trim())
+	          )
+	        );
+
+	      const targetStep = !hasShots
+	        ? AppStep.INPUT_SCRIPT
+	        : hasExtractedPrompts
+	          ? AppStep.EXTRACT_PROMPTS
+	          : AppStep.MANUAL_EDIT;
+
+	      setCurrentStep(targetStep);
+	      console.log(`[handleSelectEpisode] ✅ 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
     } catch (error) {
       console.error('[handleSelectEpisode] 加载剧集失败:', error);
       // 降级：使用列表数据（可能不完整但不至于报错）
@@ -577,8 +598,28 @@ const App: React.FC = () => {
       if (episode.shots && episode.shots.length > 0) {
         setShots(episode.shots);
       }
+
 	      const hasShots = Array.isArray(episode.shots) && episode.shots.length > 0;
-	      setCurrentStep(hasShots ? AppStep.MANUAL_EDIT : AppStep.INPUT_SCRIPT);
+	      const hasExtractedPrompts =
+	        hasShots &&
+	        episode.shots!.some(s =>
+	          Boolean(
+	            (s.imagePromptCn && s.imagePromptCn.trim()) ||
+	              (s.imagePromptEn && s.imagePromptEn.trim()) ||
+	              (s.endImagePromptCn && s.endImagePromptCn.trim()) ||
+	              (s.endImagePromptEn && s.endImagePromptEn.trim()) ||
+	              (s.videoGenPrompt && s.videoGenPrompt.trim())
+	          )
+	        );
+
+	      const targetStep = !hasShots
+	        ? AppStep.INPUT_SCRIPT
+	        : hasExtractedPrompts
+	          ? AppStep.EXTRACT_PROMPTS
+	          : AppStep.MANUAL_EDIT;
+
+	      setCurrentStep(targetStep);
+	      console.log(`[handleSelectEpisode] ✅ (fallback) 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
     }
   };
 
@@ -3967,6 +4008,31 @@ const App: React.FC = () => {
 
                       setShots(updatedShots);
                       setExtractProgress(`✅ 提取完成！已更新 ${extracted.length} 个镜头的AI提示词`);
+
+	                      // 🆕 保存提取的提示词到 D1（跨设备/跨成员可见，便于恢复进度）
+	                      if (currentProject && currentEpisodeNumber !== null) {
+	                        const currentEpisode = currentProject.episodes?.find(
+	                          ep => ep.episodeNumber === currentEpisodeNumber
+	                        );
+	                        if (currentEpisode) {
+	                          try {
+	                            const updatedEpisode: Episode = {
+	                              ...currentEpisode,
+	                              script: script || '',
+	                              shots: updatedShots,
+	                              updatedAt: new Date().toISOString(),
+	                            };
+
+	                            await saveEpisode(currentProject.id, updatedEpisode);
+	                            console.log(`[D1存储] 第${currentEpisodeNumber}集提示词保存成功`);
+	                            setExtractProgress(prev => (prev.includes('✅') ? `${prev}（已保存到云端）` : prev));
+	                          } catch (error) {
+	                            console.error('[D1存储] 保存提示词失败:', error);
+	                          }
+	                        } else {
+	                          console.warn('[D1存储] 未找到当前剧集元信息，跳过保存提示词');
+	                        }
+	                      }
 
                       // 🆕 自动进行提示词校验（图片+视频）
                       setTimeout(async () => {
