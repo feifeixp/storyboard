@@ -30,9 +30,6 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [expandedCharacter, setExpandedCharacter] = useState<string | null>(null);
-  // 🆕 控制角色卡和场景卡的展开/收起
-  const [showCharacterCards, setShowCharacterCards] = useState(false);
-  const [showSceneCards, setShowSceneCards] = useState(false);
 
   // UI-only style tokens（仅排版/视觉优化：不改变任何功能逻辑）
   const containerClass = 'max-w-7xl mx-auto px-3 sm:px-4 lg:px-6';
@@ -295,25 +292,17 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             <div><span className="text-gray-500">场景:</span> <span className="text-white">{project.scenes?.length || 0}个</span></div>
           </div>
 
-          {/* 🆕 角色卡和场景卡按钮 */}
+          {/* 🆕 角色卡和场景卡按钮 - 跳转到对应Tab */}
           <div className="mt-3 flex gap-2">
             <button
-              onClick={() => setShowCharacterCards(!showCharacterCards)}
-              className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${
-                showCharacterCards
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
+              onClick={() => setActiveTab('characters')}
+              className="flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors bg-gray-700 text-gray-300 hover:bg-gray-600"
             >
               👥 角色卡
             </button>
             <button
-              onClick={() => setShowSceneCards(!showSceneCards)}
-              className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${
-                showSceneCards
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
+              onClick={() => setActiveTab('scenes')}
+              className="flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors bg-gray-700 text-gray-300 hover:bg-gray-600"
             >
               🏛️ 场景卡
             </button>
@@ -378,64 +367,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         </div>
       )}
 
-      {/* 🆕 角色卡详情（可展开/收起） */}
-      {showCharacterCards && (
-        <div className={`${cardClass} ${cardPad}`}>
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="text-sm font-bold text-white">👥 角色库 ({project.characters?.length || 0})</h3>
-            <button
-              onClick={() => setShowCharacterCards(false)}
-              className="text-gray-400 hover:text-white text-xs"
-            >
-              ✕ 收起
-            </button>
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            {(project.characters || []).map((char) => {
-              const charCompleteness = charactersCompleteness.find(c => c.character.id === char.id);
-              return (
-                <CharacterCard
-                  key={char.id}
-                  character={char}
-                  isExpanded={expandedCharacter === char.id}
-                  onToggle={() => setExpandedCharacter(expandedCharacter === char.id ? null : char.id)}
-                  onEdit={() => openEditModal('character', char)}
-                  onEditForm={(form) => openEditModal('form', form, char)}
-                  completeness={charCompleteness?.completeness}
-                  missingFields={charCompleteness?.missingFields}
-                  onSupplement={() => handleSupplementCharacter(char.id)}
-                  isSupplementing={isSupplementing && supplementingCharacterId === char.id}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
 
-      {/* 🆕 场景卡详情（可展开/收起） */}
-      {showSceneCards && (
-        <div className={`${cardClass} ${cardPad}`}>
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="text-sm font-bold text-white">🏛️ 场景库 ({project.scenes?.length || 0})</h3>
-            <button
-              onClick={() => setShowSceneCards(false)}
-              className="text-gray-400 hover:text-white text-xs"
-            >
-              ✕ 收起
-            </button>
-          </div>
-          <ScenesTab
-            project={project}
-            onEditScene={(scene) => openEditModal('scene', scene)}
-            onSupplementScene={handleSupplementScene}
-            isSupplementing={isSupplementing}
-            supplementingSceneId={supplementingSceneId}
-            onExtractNewScenes={handleExtractNewScenes}
-            isExtracting={isExtractingScenes}
-            extractionProgress={extractionProgress}
-          />
-        </div>
-      )}
 
       {/* 🆕 剧集列表（合并到概览页） */}
       <div className={`${cardClass} ${cardPad}`}>
