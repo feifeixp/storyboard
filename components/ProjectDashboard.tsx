@@ -3,7 +3,7 @@
  * 一页可以看到更多内容
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Project, Episode, StoryVolume, Antagonist, EpisodeSummary, SceneRef, PROJECT_MEDIA_TYPES, ScriptFile } from '../types/project';
 import { CharacterRef, CharacterForm } from '../types';
 import { EditModal } from './EditModal';
@@ -11,6 +11,7 @@ import { calculateAllCharactersCompleteness, getCompletenessLevel } from '../ser
 import { supplementCharacterDetails } from '../services/characterSupplement';
 import { supplementSceneDetails } from '../services/sceneSupplement';
 import { extractNewScenes } from '../services/sceneExtraction';
+import mammoth from 'mammoth';
 
 interface ProjectDashboardProps {
   project: Project;
@@ -30,6 +31,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [expandedCharacter, setExpandedCharacter] = useState<string | null>(null);
+
+  // 🆕 剧集上传相关状态
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingEpisodes, setIsUploadingEpisodes] = useState(false);
 
   // UI-only style tokens（仅排版/视觉优化：不改变任何功能逻辑）
   const containerClass = 'max-w-7xl mx-auto px-3 sm:px-4 lg:px-6';
@@ -267,6 +272,98 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
   };
 
+  // 🆕 从文件名推断集数
+  const parseEpisodeNumber = (fileName: string): number | undefined => {
+    const patterns = [
+      /第(\d+)集/,
+      /第(\d+)话/,
+      /[Ee][Pp][\s_-]?(\d+)/,
+      /[Ee]pisode[\s_-]?(\d+)/i,
+      /[\s_-](\d+)\.(?:txt|ini|docx)/i,
+      /^(\d+)[_\s-]/,
+      /^(\d+)\.(?:txt|ini|docx)$/i,
+    ];
+    for (const pattern of patterns) {
+      const match = fileName.match(pattern);
+      if (match) {
+        return parseInt(match[1]);
+      }
+    }
+    return undefined;
+  };
+
+  // 🆕 读取文件内容（支持 .txt, .ini, .docx）
+  const readFileContent = async (file: File): Promise<string> => {
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (ext === 'docx') {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value;
+    } else {
+      return await file.text();
+    }
+  };
+
+  // 🆕 处理剧集文件上传
+  const handleEpisodeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingEpisodes(true);
+
+    try {
+      const newEpisodes: Episode[] = [];
+      const fileArray = Array.from(files) as File[];
+
+      for (const file of fileArray) {
+        try {
+          const content = await readFileContent(file);
+          const episodeNumber = parseEpisodeNumber(file.name) || (project.episodes?.length || 0) + newEpisodes.length + 1;
+
+          newEpisodes.push({
+            id: `ep-${Date.now()}-${episodeNumber}`,
+            episodeNumber,
+            title: `第${episodeNumber}集`,
+            script: content,
+            shots: [],
+            status: 'draft',
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (error) {
+          console.error(`读取文件失败: ${file.name}`, error);
+          alert(`读取文件失败: ${file.name}\n请确保文件格式正确`);
+        }
+      }
+
+      if (newEpisodes.length === 0) {
+        alert('没有成功读取任何剧集文件');
+        return;
+      }
+
+      // 合并新剧集到项目，按集数排序
+      const allEpisodes = [...(project.episodes || []), ...newEpisodes].sort(
+        (a, b) => a.episodeNumber - b.episodeNumber
+      );
+
+      const updatedProject = {
+        ...project,
+        episodes: allEpisodes,
+      };
+
+      onUpdateProject(updatedProject);
+      alert(`成功上传 ${newEpisodes.length} 个剧集！`);
+    } catch (error: any) {
+      console.error('上传剧集失败:', error);
+      alert(`上传剧集失败: ${error.message}`);
+    } finally {
+      setIsUploadingEpisodes(false);
+      // 清空文件输入，允许重复上传相同文件
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   const tabs: { id: TabType; label: string; icon: string }[] = [
     { id: 'overview', label: '概览 & 剧集', icon: '📋' },  // 🔧 合并概览和剧集
     { id: 'characters', label: '角色', icon: '👥' },
@@ -373,7 +470,22 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       <div className={`${cardClass} ${cardPad}`}>
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
           <h3 className="text-sm font-bold text-white">📺 剧集列表 ({project.episodes?.length || 0})</h3>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium">+ 添加</button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingEpisodes}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2.5 py-1.5 rounded text-xs font-medium"
+          >
+            {isUploadingEpisodes ? '⏳ 上传中...' : '📤 上传剧集'}
+          </button>
+          {/* 隐藏的文件输入 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.ini,.docx"
+            multiple
+            onChange={handleEpisodeUpload}
+            className="hidden"
+          />
         </div>
 
         {/* 书本式卡片：左侧集数色块 + 右侧标题/大纲/状态 */}
