@@ -3306,12 +3306,15 @@ async function generateSingleImage(
   const PRIMARY_MODEL = 'nanobanana-pro';
   const FALLBACK_MODEL = 'doubao-seedream-4.5';
 
-  // 优先使用 nanobanana-pro，如果用户指定了其他模型则使用指定的模型
-  const preferredModel = imageModel || PRIMARY_MODEL;
+  // ✅ 强制锁定生图模型：始终使用 nanobanana-pro
+  // 说明：UI/调用方可能仍会传入 imageModel（历史兼容/日志用途），但这里会忽略该值。
+  const requestedModel = imageModel;
+  const preferredModel = PRIMARY_MODEL;
 
   // 🔧 尝试使用首选模型
   try {
-    console.log(`[Neodomain] 图像生成请求 (模型: ${preferredModel}): ${prompt.substring(0, 100)}...`);
+    const ignoredHint = requestedModel && requestedModel !== preferredModel ? `, 忽略请求模型: ${requestedModel}` : '';
+    console.log(`[Neodomain] 图像生成请求 (锁定模型: ${preferredModel}${ignoredHint}): ${prompt.substring(0, 100)}...`);
 
     const task = await generateImage({
       prompt: prompt,
@@ -3426,7 +3429,11 @@ export async function generateMergedStoryboardSheet(
 ): Promise<string[]> {
   const styleName = style?.name || '粗略线稿';
   const styleSuffix = style?.promptSuffix || 'rough sketch, black and white, storyboard style';
-  console.log(`[OpenRouter] 九宫格AI生成请求: ${shots.length} 个镜头, 模型: ${imageModel}, 风格: ${styleName}${episodeNumber ? `, 第${episodeNumber}集` : ''}${artStyleType ? `, 美术风格: ${artStyleType}` : ''}`);
+  // ✅ 强制锁定生图模型：始终使用 nanobanana-pro（降级逻辑在 generateSingleImage 内处理）
+  const requestedModel = imageModel;
+  const effectiveModel = 'nanobanana-pro';
+  const ignoredHint = requestedModel && requestedModel !== effectiveModel ? `, 忽略请求模型: ${requestedModel}` : '';
+  console.log(`[OpenRouter] 九宫格AI生成请求: ${shots.length} 个镜头, 锁定模型: ${effectiveModel}${ignoredHint}, 风格: ${styleName}${episodeNumber ? `, 第${episodeNumber}集` : ''}${artStyleType ? `, 美术风格: ${artStyleType}` : ''}`);
 
   const GRID_SIZE = 9; // 每张图9个镜头 (3x3)
   const totalGrids = Math.ceil(shots.length / GRID_SIZE);
@@ -3456,7 +3463,7 @@ export async function generateMergedStoryboardSheet(
 
     // 调用AI生成九宫格图
     // 注意：大多数图像生成模型不支持图片参考，所以角色信息以文字形式写入提示词
-    const imageUrl = await generateSingleImage(gridPrompt, imageModel, []);
+    const imageUrl = await generateSingleImage(gridPrompt, effectiveModel, []);
 
     if (imageUrl) {
       results.push(imageUrl);
@@ -3509,7 +3516,11 @@ export async function generateSingleGrid(
   const styleName = style?.name || '粗略线稿';
   const styleSuffix = style?.promptSuffix || 'rough sketch, black and white, storyboard style';
 
-  console.log(`[OpenRouter] 单独生成第 ${gridIndex + 1}/${totalGrids} 张九宫格, 模型: ${imageModel}, 风格: ${styleName}`);
+  // ✅ 强制锁定生图模型：始终使用 nanobanana-pro
+  const requestedModel = imageModel;
+  const effectiveModel = 'nanobanana-pro';
+  const ignoredHint = requestedModel && requestedModel !== effectiveModel ? `, 忽略请求模型: ${requestedModel}` : '';
+  console.log(`[OpenRouter] 单独生成第 ${gridIndex + 1}/${totalGrids} 张九宫格, 锁定模型: ${effectiveModel}${ignoredHint}, 风格: ${styleName}`);
 
   // 计算该九宫格包含的镜头范围
   const startIdx = gridIndex * GRID_SIZE;
@@ -3536,7 +3547,7 @@ export async function generateSingleGrid(
   );
 
   // 调用AI生成九宫格图
-  const imageUrl = await generateSingleImage(gridPrompt, imageModel, []);
+  const imageUrl = await generateSingleImage(gridPrompt, effectiveModel, []);
 
   if (imageUrl) {
     console.log(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成成功`);

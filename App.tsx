@@ -45,7 +45,6 @@ import {
   generateAngleDistributionReport
 } from './services/angleValidation';
 import { ModelSelector, IMAGE_GENERATION_MODELS, MODEL_CAPABILITIES, getModelCapabilityHint } from './components/ModelSelector';
-import { AIImageModelSelector } from './components/AIImageModelSelector';
 import { SuggestionDetailModal } from './components/SuggestionDetailModal';
 // 思维链类型
 import type { ScriptAnalysis, VisualStrategy, ShotPlanning, ShotDesign, QualityCheck } from './prompts/chain-of-thought/types';
@@ -259,8 +258,9 @@ const App: React.FC = () => {
   const [analysisModel, setAnalysisModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 剧本分析模型
   const [reviewModel, setReviewModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 审核优化模型
   const [editModel, setEditModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 编辑对话模型
-	// 🆕 生图模型：默认采用 nanobanana-pro（并由服务层在会员限制时自动降级）
-	const [imageModel, setImageModel] = useState('nanobanana-pro');
+	// ✅ 生图模型：强制锁定 nanobanana-pro（服务层在会员限制时自动降级）
+	// 说明：UI 不再允许切换；服务层也会忽略传入模型并锁定到 nanobanana-pro。
+	const imageModel = 'nanobanana-pro';
 
   // 🆕 分镜草图风格选择
   const [selectedStyle, setSelectedStyle] = useState<StoryboardStyle>(STORYBOARD_STYLES[0]);
@@ -2170,6 +2170,67 @@ const App: React.FC = () => {
     }
   };
 
+	/**
+	 * 🎨 B1：将“九宫格图片URL”按序映射到每个镜头（虚拟切割，不生成独立小图文件）
+	 * - 映射规则：每 9 个镜头对应一张九宫格；cellIndex = idx % 9
+	 * - 显示规则：在分镜表新增“草图”列，通过 CSS 平移实现裁切
+	 * - 持久化：将 mapping 写入 shots 并 saveEpisode 落库到 D1，便于下次恢复
+	 */
+	const applyGridsToShots = async () => {
+	  const availableCount = hqUrls.filter(Boolean).length;
+	  if (availableCount === 0) {
+	    alert('⚠️ 当前没有可用的九宫格图片，请先生成完成后再应用。');
+	    return;
+	  }
+
+	  const GRID_SIZE = 9;
+	  const updatedShots = shots.map((shot, idx) => {
+	    const gridIndex = Math.floor(idx / GRID_SIZE);
+	    const cellIndex = idx % GRID_SIZE;
+	    const gridUrl = hqUrls[gridIndex];
+
+	    if (!gridUrl) return shot;
+	    return {
+	      ...shot,
+	      storyboardGridUrl: gridUrl,
+	      storyboardGridCellIndex: cellIndex,
+	    };
+	  });
+
+	  setShots(updatedShots);
+
+	  // 保存到 D1（跨设备/跨成员可恢复）
+	  if (!currentProject || currentEpisodeNumber === null) {
+	    alert('⚠️ 未选择项目/剧集，已在本地应用草图映射，但无法保存到云端。');
+	    return;
+	  }
+
+	  const currentEpisode = currentProject.episodes?.find(
+	    ep => ep.episodeNumber === currentEpisodeNumber
+	  );
+	  if (!currentEpisode) {
+	    alert('⚠️ 未找到当前剧集元信息，已在本地应用草图映射，但无法保存到云端。');
+	    return;
+	  }
+
+	  setIsLoading(true);
+	  setProgressMsg('正在将九宫格草图应用到分镜表并保存到云端...');
+	  try {
+	    await saveEpisode(currentProject.id, {
+	      ...currentEpisode,
+	      script: script || '',
+	      shots: updatedShots,
+	      updatedAt: new Date().toISOString(),
+	    });
+	    setProgressMsg('✅ 九宫格草图已应用到分镜表，并已保存到云端。');
+	  } catch (error) {
+	    console.error('[D1存储] 保存九宫格草图映射失败:', error);
+	    alert('❌ 已应用到本地分镜表，但保存到云端失败，请稍后重试。');
+	  } finally {
+	    setIsLoading(false);
+	  }
+	};
+
   const downloadImage = (url: string, filename: string) => {
     const link = document.createElement('a');
     link.download = filename;
@@ -2489,7 +2550,34 @@ const App: React.FC = () => {
     );
   };
 
-  const renderShotTable = (editable: boolean, fullHeight: boolean = false) => (
+	// 🆕 九宫格虚拟切割缩略图（B1）：通过 CSS 平移显示 3×3 中的某一格
+	const GridCellThumbnail = ({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: number }) => {
+	  const safeIndex = Math.min(8, Math.max(0, Math.floor(cellIndex)));
+	  const row = Math.floor(safeIndex / 3);
+	  const col = safeIndex % 3;
+
+	  return (
+	    <div
+	      className="w-20 h-20 overflow-hidden rounded border border-gray-700 bg-gray-800"
+	      title={`九宫格格子 #${safeIndex + 1}`}
+	    >
+	      <img
+	        src={gridUrl}
+	        alt={`grid-cell-${safeIndex}`}
+	        loading="lazy"
+	        className="block"
+	        style={{
+	          width: '300%',
+	          height: '300%',
+	          transform: `translate(-${col * 33.333}%, -${row * 33.333}%)`,
+	          transformOrigin: 'top left',
+	        }}
+	      />
+	    </div>
+	  );
+	};
+
+	const renderShotTable = (editable: boolean, fullHeight: boolean = false) => (
     <div className={`${fullHeight ? '' : 'max-h-[70vh] overflow-y-auto'}`}>
       {/* 🆕 场景空间布局信息 - 表格顶部单独显示 */}
       {renderSceneSpaceHeader()}
@@ -2501,8 +2589,9 @@ const App: React.FC = () => {
               <th className="px-2 py-2 border-r border-gray-700 w-[60px] text-center">#</th>
               <th className="px-2 py-2 border-r border-gray-700 w-[18%]">故事</th>
               <th className="px-2 py-2 border-r border-gray-700 w-[32%]">视觉设计</th>
-              <th className="px-2 py-2 border-r border-gray-700 w-[25%]">首帧</th>
-              <th className="px-2 py-2 w-[25%]">尾帧</th>
+	              <th className="px-2 py-2 border-r border-gray-700 w-[23%]">首帧</th>
+	              <th className="px-2 py-2 border-r border-gray-700 w-[96px] text-center">草图</th>
+	              <th className="px-2 py-2 w-[23%]">尾帧</th>
             </tr>
           </thead>
           <tbody className="bg-gray-900">
@@ -2627,6 +2716,17 @@ const App: React.FC = () => {
                   )}
                 </td>
 
+	                {/* 🆕 草图列 - 显示九宫格虚拟切割缩略图 */}
+	                <td className="px-2 py-2 border-r border-gray-700 align-middle">
+	                  {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' ? (
+	                    <div className="flex justify-center">
+	                      <GridCellThumbnail gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
+	                    </div>
+	                  ) : (
+	                    <div className="text-gray-600 text-center text-[10px] italic">未应用</div>
+	                  )}
+	                </td>
+
                 {/* 尾帧列 - 运动镜头显示尾帧描述，静态镜头留空 */}
                 <td className="px-2 py-2">
                   {isMotion ? (
@@ -2647,7 +2747,7 @@ const App: React.FC = () => {
           })}
           {isLoading && progressMsg.includes('修改') && (
             <tr className="bg-blue-900/20">
-              <td colSpan={5} className="p-4 text-center text-blue-400 font-medium animate-pulse text-sm">
+	              <td colSpan={6} className="p-4 text-center text-blue-400 font-medium animate-pulse text-sm">
                 正在重写分镜表...
               </td>
             </tr>
@@ -4362,14 +4462,12 @@ const App: React.FC = () => {
                   <span className="text-xs text-gray-400">{showStyleCards ? '▲' : '▼'}</span>
                 </button>
 
-                {/* 🆕 AI图片生成模型选择器 */}
-                <AIImageModelSelector
-                  value={imageModel}
-                  onChange={setImageModel}
-                  scenarioType={5} // 5 = 分镜场景
-                  className="flex-shrink-0"
-                  label="生图模型"
-                />
+	              {/* ✅ 生图模型：锁定 nanobanana-pro（不允许在 UI 切换） */}
+	              <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-900/30 border border-purple-700 rounded-lg">
+	                <span className="text-xs text-purple-300 font-medium">生图模型:</span>
+	                <span className="text-sm font-bold text-purple-200">{imageModel}</span>
+	                <span className="text-[10px] text-purple-400">(已锁定)</span>
+	              </div>
 
                 <div className="flex-1" />
 
@@ -4534,6 +4632,14 @@ const App: React.FC = () => {
                     {isLoading ? '⏳ 正在生成...' : '✅ 九宫格生成完成'} ({hqUrls.filter(u => u).length}/{Math.ceil(shots.length / 9)} 张)
                   </h3>
                   <div className="flex gap-2">
+	                    <button
+	                      onClick={applyGridsToShots}
+	                      disabled={isLoading || hqUrls.filter(u => u).length === 0}
+	                      className="px-4 py-2 bg-purple-600 text-white rounded-md font-medium text-xs hover:bg-purple-700 transition-all disabled:opacity-50"
+	                      title="将九宫格按序映射为每个镜头的草图（虚拟切割），并保存到云端"
+	                    >
+	                      🎨 应用到分镜表
+	                    </button>
                     <button
                       onClick={() => {
                         hqUrls.filter(u => u).forEach((url, idx) => {

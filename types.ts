@@ -241,6 +241,11 @@ export interface Shot {
   assignedCharacterIds?: string[]; // 关联的角色ID
   startFrameUrl?: string;   // 生成的首帧图片URL
   endFrameUrl?: string;     // 生成的尾帧图片URL
+
+  // ═══════════ 🆕 九宫格草图映射（虚拟切割，不生成独立小图文件） ═══════════
+  storyboardGridUrl?: string;        // 九宫格图片URL（该镜头所属页）
+  storyboardGridCellIndex?: number;  // 该镜头在九宫格中的格子索引（0-8，按行优先）
+
   status: 'pending' | 'generating' | 'completed' | 'error';
 }
 
