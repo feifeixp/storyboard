@@ -67,9 +67,14 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
     URL.revokeObjectURL(url);
   };
 
-  // 导出为 CSV
+  // 导出为 CSV（含图片提示词和视频提示词）
   const exportCSV = () => {
-    const headers = ['编号', '剧情描述', '对话', '景别', '角度朝向', '角度高度', '运镜', '时长'];
+    const headers = [
+      '编号', '剧情描述', '对话', '景别', '角度朝向', '角度高度', '运镜', '时长',
+      '图片提示词(中文)', '图片提示词(英文)',
+      '尾帧提示词(中文)', '尾帧提示词(英文)',
+      '视频提示词',
+    ];
     const rows = shots.map(shot => [
       shot.shotNumber,
       typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event,
@@ -79,6 +84,11 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
       shot.angleHeight,
       shot.cameraMove,
       shot.duration,
+      shot.imagePromptCn || '',
+      shot.imagePromptEn || '',
+      shot.endImagePromptCn || '',
+      shot.endImagePromptEn || '',
+      shot.videoGenPrompt || '',
     ]);
 
     const csvContent = [
@@ -95,11 +105,28 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
     URL.revokeObjectURL(url);
   };
 
-  // 导出为 Markdown
+  // 导出为 Markdown（含图片提示词和视频提示词）
   const exportMarkdown = () => {
     const title = `# 故事板 - ${projectName || '未命名项目'} - 第${episodeNumber || '?'}集\n\n`;
     const content = shots.map((shot, idx) => {
       const storyBeat = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event;
+
+      // 构建提示词部分（仅在有内容时输出）
+      let promptSection = '';
+      if (shot.imagePromptCn || shot.imagePromptEn) {
+        promptSection += `- **图片提示词**:\n`;
+        if (shot.imagePromptCn) promptSection += `  - 中文: ${shot.imagePromptCn}\n`;
+        if (shot.imagePromptEn) promptSection += `  - 英文: ${shot.imagePromptEn}\n`;
+      }
+      if (shot.endImagePromptCn || shot.endImagePromptEn) {
+        promptSection += `- **尾帧提示词**:\n`;
+        if (shot.endImagePromptCn) promptSection += `  - 中文: ${shot.endImagePromptCn}\n`;
+        if (shot.endImagePromptEn) promptSection += `  - 英文: ${shot.endImagePromptEn}\n`;
+      }
+      if (shot.videoGenPrompt) {
+        promptSection += `- **视频提示词**: ${shot.videoGenPrompt}\n`;
+      }
+
       return `## 镜头 ${shot.shotNumber}\n\n` +
         `- **剧情**: ${storyBeat}\n` +
         `- **对话**: ${shot.dialogue || '无'}\n` +
@@ -111,8 +138,9 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
         `  - 前景: ${shot.foreground}\n` +
         `  - 中景: ${shot.midground}\n` +
         `  - 后景: ${shot.background}\n` +
-        `- **光影**: ${shot.lighting}\n\n` +
-        `---\n\n`;
+        `- **光影**: ${shot.lighting}\n` +
+        (promptSection ? `\n### 提示词\n\n${promptSection}` : '') +
+        `\n---\n\n`;
     }).join('');
 
     const blob = new Blob([title + content], { type: 'text/markdown;charset=utf-8;' });
