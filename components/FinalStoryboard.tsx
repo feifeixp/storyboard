@@ -1,9 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { Shot, CharacterRef } from '../types';
+import { SceneRef } from '../types/project';
 
 interface FinalStoryboardProps {
   shots: Shot[];
   characterRefs: CharacterRef[];
+  scenes: SceneRef[];
   episodeNumber: number | null;
   projectName?: string;
   onBack: () => void;
@@ -15,7 +17,7 @@ interface FinalStoryboardProps {
  * - 美观的卡片布局展示
  * - 支持导出 JSON、CSV、MD、PDF
  */
-export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectName, onBack }: FinalStoryboardProps) {
+export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, projectName, onBack }: FinalStoryboardProps) {
   const [isExporting, setIsExporting] = useState(false);
   const storyboardRef = useRef<HTMLDivElement>(null);
 
@@ -101,9 +103,45 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
     URL.revokeObjectURL(url);
   };
 
-  // 导出为 Markdown（含图片提示词和视频提示词）
+  // 导出为 Markdown（含角色设定、场景设定、图片提示词和视频提示词）
   const exportMarkdown = () => {
     const title = `# 故事板 - ${projectName || '未命名项目'} - 第${episodeNumber || '?'}集\n\n`;
+
+    // 角色设定部分
+    let characterSection = '';
+    if (characterRefs.length > 0) {
+      characterSection = `## 角色设定\n\n`;
+      characterSection += characterRefs.map(char => {
+        let charInfo = `### ${char.name}`;
+        if (char.gender && char.gender !== '未知') charInfo += `（${char.gender}）`;
+        charInfo += `\n\n`;
+        if (char.appearance) charInfo += `- **外貌**: ${char.appearance}\n`;
+        if (char.ageGroup) charInfo += `- **年龄段**: ${char.ageGroup}\n`;
+        if (char.quote) charInfo += `- **经典台词**: ${char.quote}\n`;
+        if (char.identityEvolution) charInfo += `- **身份演变**: ${char.identityEvolution}\n`;
+        if (char.abilities && char.abilities.length > 0) charInfo += `- **核心能力**: ${char.abilities.join('、')}\n`;
+        return charInfo;
+      }).join('\n');
+      characterSection += `\n---\n\n`;
+    }
+
+    // 场景设定部分
+    let sceneSection = '';
+    if (scenes.length > 0) {
+      sceneSection = `## 场景设定\n\n`;
+      sceneSection += scenes.map(scene => {
+        let sceneInfo = `### ${scene.name}\n\n`;
+        if (scene.description) sceneInfo += `- **描述**: ${scene.description}\n`;
+        if (scene.visualPromptCn) sceneInfo += `- **视觉提示**: ${scene.visualPromptCn}\n`;
+        if (scene.atmosphere) sceneInfo += `- **氛围**: ${scene.atmosphere}\n`;
+        if (scene.appearsInEpisodes && scene.appearsInEpisodes.length > 0) {
+          sceneInfo += `- **出现集数**: 第${scene.appearsInEpisodes.join('、')}集\n`;
+        }
+        return sceneInfo;
+      }).join('\n');
+      sceneSection += `\n---\n\n`;
+    }
+
     const content = shots.map((shot, idx) => {
       const storyBeat = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event;
 
@@ -135,7 +173,7 @@ export function FinalStoryboard({ shots, characterRefs, episodeNumber, projectNa
         `\n---\n\n`;
     }).join('');
 
-    const blob = new Blob([title + content], { type: 'text/markdown;charset=utf-8;' });
+    const blob = new Blob([title + characterSection + sceneSection + content], { type: 'text/markdown;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

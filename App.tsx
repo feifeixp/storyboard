@@ -4835,6 +4835,7 @@ const App: React.FC = () => {
           <FinalStoryboard
             shots={shots}
             characterRefs={characterRefs}
+            scenes={currentProject?.scenes || []}
             episodeNumber={currentEpisodeNumber}
             projectName={currentProject?.name}
             onBack={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
