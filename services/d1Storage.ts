@@ -127,46 +127,29 @@ export async function getProject(projectId: string): Promise<Project | null> {
 }
 
 /**
- * 保存项目
+ * 保存项目（UPSERT 模式）
+ * 🔧 直接使用 POST（后端已实现 UPSERT），不再先调用 getProject
+ *    避免 getProject 超时返回 null 导致重复创建项目
  */
 export async function saveProject(project: Project): Promise<void> {
-  // 检查项目是否已存在
-  const existing = await getProject(project.id);
-
-  if (existing) {
-    // 更新现有项目
-    await apiRequest(`/api/projects/${project.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        name: project.name,
-        settings: project.settings,
-        characters: project.characters,
-        scenes: project.scenes,
-        volumes: project.volumes,
-        antagonists: project.antagonists,
-        storyOutline: project.storyOutline,
-      }),
-    });
-  } else {
-    // 🔧 核心修复：创建新项目时传入前端生成的 ID，避免 ID 不一致
-    await apiRequest('/api/projects', {
-      method: 'POST',
-      body: JSON.stringify({
-        id: project.id,  // 🆕 传入前端生成的 ID
-        name: project.name,
-        settings: project.settings,
-        characters: project.characters,
-        scenes: project.scenes,
-        volumes: project.volumes,
-        antagonists: project.antagonists,
-        storyOutline: project.storyOutline,
-      }),
-    });
-  }
+  // 🔧 直接 POST，后端会自动判断是 INSERT 还是 UPDATE
+  await apiRequest('/api/projects', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: project.id,
+      name: project.name,
+      settings: project.settings,
+      characters: project.characters,
+      scenes: project.scenes,
+      volumes: project.volumes,
+      antagonists: project.antagonists,
+      storyOutline: project.storyOutline,
+    }),
+  });
 
   console.log(`[D1存储] 项目保存成功: ${project.name}`);
 
-  // 🔧 核心修复：同时保存所有剧集到 episodes 表
+  // 🔧 同时保存所有剧集到 episodes 表
   if (project.episodes && Array.isArray(project.episodes) && project.episodes.length > 0) {
     console.log(`[D1存储] 开始保存 ${project.episodes.length} 个剧集...`);
 

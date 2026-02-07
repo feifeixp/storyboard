@@ -61,11 +61,12 @@ import { exportScriptTemplate } from './services/scriptTemplateExport';
 import {
   getAllProjects,
   saveProject,
-  saveEpisode,  // 🆕 添加 saveEpisode 导入
+  saveEpisode,
   deleteProject,
   getCurrentProjectId,
   setCurrentProjectId,
-  getProject
+  getProject,
+  getEpisode,  // 🔧 获取单个剧集完整数据
 } from './services/d1Storage';
 import { analyzeProjectScriptsWithProgress, analyzeProjectScripts } from './services/projectAnalysis';
 import { BatchAnalysisProgress } from './types/project';
@@ -515,44 +516,67 @@ const App: React.FC = () => {
     setCurrentStep(AppStep.PROJECT_LIST);
   };
 
-  // 🆕 从项目主界面选择剧集进入编辑
-  const handleSelectEpisode = (episode: Episode) => {
-    setScript(episode.script);
-    setCurrentEpisodeNumber(episode.episodeNumber);
-    if (episode.shots && episode.shots.length > 0) {
-      setShots(episode.shots);
-    }
+  // 🔧 从项目主界面选择剧集进入编辑（异步获取完整数据）
+  const handleSelectEpisode = async (episode: Episode) => {
+    try {
+      console.log(`[handleSelectEpisode] 加载第${episode.episodeNumber}集完整数据, id=${episode.id}`);
 
-    // 🆕 只加载当集出现的角色
-    if (currentProject) {
-      // 从 storyOutline 中找到当集的角色状态
-      const episodeSummary = currentProject.storyOutline.find(
-        s => s.episodeNumber === episode.episodeNumber
-      );
-
-      if (episodeSummary && episodeSummary.characterStates.length > 0) {
-        // 获取当集出现的角色名称
-        const episodeCharNames = new Set(
-          episodeSummary.characterStates.map(cs => cs.characterName)
-        );
-        // 只选择当集出现的角色
-        const episodeChars = (currentProject.characters || []).filter(
-          c => episodeCharNames.has(c.name)
-        );
-        if (episodeChars.length > 0) {
-          setCharacterRefs(episodeChars);
-          console.log(`[剧集${episode.episodeNumber}] 加载${episodeChars.length}个角色:`, episodeChars.map(c => c.name));
+      // 🔧 从后端获取完整的 episode 数据（包含 script 和 shots）
+      // 列表 API 返回的 episode 可能不包含 script 和 shots
+      let fullEpisode = episode;
+      if (episode.id) {
+        const fetched = await getEpisode(episode.id);
+        if (fetched) {
+          fullEpisode = fetched;
+          console.log(`[handleSelectEpisode] 获取完整数据成功, script长度=${fullEpisode.script?.length || 0}, shots数量=${fullEpisode.shots?.length || 0}`);
         } else {
-          // 如果没有匹配到角色，加载全部项目角色
+          console.warn(`[handleSelectEpisode] 无法获取完整数据，使用列表数据`);
+        }
+      }
+
+      setScript(fullEpisode.script || '');
+      setCurrentEpisodeNumber(fullEpisode.episodeNumber);
+      if (fullEpisode.shots && fullEpisode.shots.length > 0) {
+        setShots(fullEpisode.shots);
+      } else {
+        setShots([]);
+      }
+
+      // 加载当集出现的角色
+      if (currentProject) {
+        const episodeSummary = currentProject.storyOutline?.find(
+          s => s.episodeNumber === fullEpisode.episodeNumber
+        );
+
+        if (episodeSummary && episodeSummary.characterStates?.length > 0) {
+          const episodeCharNames = new Set(
+            episodeSummary.characterStates.map(cs => cs.characterName)
+          );
+          const episodeChars = (currentProject.characters || []).filter(
+            c => episodeCharNames.has(c.name)
+          );
+          if (episodeChars.length > 0) {
+            setCharacterRefs(episodeChars);
+            console.log(`[剧集${fullEpisode.episodeNumber}] 加载${episodeChars.length}个角色:`, episodeChars.map(c => c.name));
+          } else {
+            if (currentProject.characters) setCharacterRefs(currentProject.characters);
+          }
+        } else {
           if (currentProject.characters) setCharacterRefs(currentProject.characters);
         }
-      } else {
-        // 如果没有角色状态信息，加载全部项目角色
-        if (currentProject.characters) setCharacterRefs(currentProject.characters);
       }
-    }
 
-    setCurrentStep(AppStep.INPUT_SCRIPT);
+      setCurrentStep(AppStep.INPUT_SCRIPT);
+    } catch (error) {
+      console.error('[handleSelectEpisode] 加载剧集失败:', error);
+      // 降级：使用列表数据（可能不完整但不至于报错）
+      setScript(episode.script || '');
+      setCurrentEpisodeNumber(episode.episodeNumber);
+      if (episode.shots && episode.shots.length > 0) {
+        setShots(episode.shots);
+      }
+      setCurrentStep(AppStep.INPUT_SCRIPT);
+    }
   };
 
   // 🆕 更新项目

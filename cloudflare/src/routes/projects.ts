@@ -120,53 +120,82 @@ projectRoutes.get('/:id', async (c) => {
 });
 
 /**
- * 创建项目
+ * 创建或更新项目（UPSERT 模式）
  * POST /api/projects
+ * 🔧 如果项目 ID 已存在则更新，避免网络超时导致重复创建
  */
 projectRoutes.post('/', async (c) => {
   const user = getCurrentUser(c);
   const body = await c.req.json();
 
-  console.log('[Projects] Creating project for user:', user.id);
+  console.log('[Projects] Upsert project for user:', user.id);
   console.log('[Projects] Project name:', body.name);
 
-  // 🔧 核心修复：接受前端传入的 ID，避免 ID 不一致导致刷新后找不到项目
   const projectId = body.id || `proj-${Date.now()}`;
   console.log('[Projects] Project ID:', projectId);
 
   const now = Date.now();
 
   try {
-    console.log('[Projects] Inserting project into database...');
-
-    const result = await c.env.DB.prepare(
-      `INSERT INTO projects (
-        id, user_id, name, created_at, updated_at,
-        settings, characters, scenes, volumes, antagonists, story_outline
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    // 🔧 先检查项目是否已存在（避免重复创建）
+    const existing = await c.env.DB.prepare(
+      'SELECT id, created_at FROM projects WHERE id = ? AND user_id = ?'
     )
-      .bind(
-        projectId,
-        user.id,
-        body.name,
-        now,
-        now,
-        JSON.stringify(body.settings || {}),
-        JSON.stringify(body.characters || []),
-        JSON.stringify(body.scenes || []),
-        JSON.stringify(body.volumes || []),
-        JSON.stringify(body.antagonists || []),
-        JSON.stringify(body.storyOutline || [])
-      )
-      .run();
+      .bind(projectId, user.id)
+      .first();
 
-    console.log('[Projects] Insert result:', JSON.stringify(result));
-    console.log('[Projects] Project created successfully:', projectId);
+    if (existing) {
+      // 项目已存在，执行更新（保留原始 created_at）
+      console.log('[Projects] Project exists, updating:', projectId);
+      await c.env.DB.prepare(
+        `UPDATE projects SET
+          name = ?, settings = ?, characters = ?, scenes = ?,
+          volumes = ?, antagonists = ?, story_outline = ?, updated_at = ?
+        WHERE id = ?`
+      )
+        .bind(
+          body.name,
+          JSON.stringify(body.settings || {}),
+          JSON.stringify(body.characters || []),
+          JSON.stringify(body.scenes || []),
+          JSON.stringify(body.volumes || []),
+          JSON.stringify(body.antagonists || []),
+          JSON.stringify(body.storyOutline || []),
+          now,
+          projectId
+        )
+        .run();
+    } else {
+      // 项目不存在，创建新项目
+      console.log('[Projects] Creating new project:', projectId);
+      await c.env.DB.prepare(
+        `INSERT INTO projects (
+          id, user_id, name, created_at, updated_at,
+          settings, characters, scenes, volumes, antagonists, story_outline
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          projectId,
+          user.id,
+          body.name,
+          now,
+          now,
+          JSON.stringify(body.settings || {}),
+          JSON.stringify(body.characters || []),
+          JSON.stringify(body.scenes || []),
+          JSON.stringify(body.volumes || []),
+          JSON.stringify(body.antagonists || []),
+          JSON.stringify(body.storyOutline || [])
+        )
+        .run();
+    }
+
+    console.log('[Projects] Project saved successfully:', projectId);
 
     return c.json({
       id: projectId,
       name: body.name,
-      createdAt: now,
+      createdAt: existing ? existing.created_at : now,
       updatedAt: now,
       settings: body.settings || {},
       characters: body.characters || [],
@@ -177,9 +206,8 @@ projectRoutes.post('/', async (c) => {
       episodes: [],
     });
   } catch (error) {
-    console.error('[Projects] Create project error:', error);
-    console.error('[Projects] Error details:', JSON.stringify(error, null, 2));
-    return c.json({ error: 'Failed to create project', details: error instanceof Error ? error.message : String(error) }, 500);
+    console.error('[Projects] Save project error:', error);
+    return c.json({ error: 'Failed to save project', details: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
 
