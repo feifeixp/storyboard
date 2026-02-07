@@ -3304,7 +3304,7 @@ async function generateSingleImage(
   const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
 
   // 🔧 模型降级配置（使用关键词匹配，不区分大小写）
-  const PRIMARY_MODEL_KEYWORDS = ['nano', 'banana'];  // 匹配 "Nano Banana Pro"
+  const PRIMARY_MODEL_KEYWORDS = ['nano', 'banana', 'pro'];  // 匹配 "Nano Banana Pro"（必须包含 pro）
   const FALLBACK_MODEL_KEYWORDS = ['seedream'];  // 匹配 "Seedream 4.5" 或 "doubao-seedream-4-5"
 
   // ✅ 动态获取分镜场景下的可用模型列表
