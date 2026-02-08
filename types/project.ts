@@ -149,6 +149,16 @@ export interface SceneRef {
   visualPromptEn: string;    // 英文视觉提示词
   atmosphere: string;        // 氛围，如 "冷蓝+金色暖光"
   appearsInEpisodes: number[]; // 出现在哪些集
+
+  // 🆕 场景设定图（单张 16:9 设定图，通常为 2×2 四分屏：多角度 + 关键特写）
+  imageSheetUrl?: string;
+
+  // 🆕 生图元信息（用于追溯使用的模型/风格）
+  imageGenerationMeta?: {
+    modelName: string;
+    styleName: string;
+    generatedAt: string; // ISO 时间字符串
+  };
 }
 
 // ============================================

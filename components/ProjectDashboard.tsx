@@ -5,12 +5,14 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { Project, Episode, StoryVolume, Antagonist, EpisodeSummary, SceneRef, PROJECT_MEDIA_TYPES, ScriptFile } from '../types/project';
-import { CharacterRef, CharacterForm } from '../types';
+import { CharacterRef, CharacterForm, STORYBOARD_STYLES, type StoryboardStyle } from '../types';
 import { EditModal } from './EditModal';
 import { calculateAllCharactersCompleteness, getCompletenessLevel } from '../services/characterCompleteness';
 import { supplementCharacterDetails } from '../services/characterSupplement';
 import { supplementSceneDetails } from '../services/sceneSupplement';
 import { extractNewScenes } from '../services/sceneExtraction';
+import AIImageModelSelector from './AIImageModelSelector';
+import { ScenarioType, generateAndUploadImage } from '../services/aiImageGeneration';
 import mammoth from 'mammoth';
 
 interface ProjectDashboardProps {
@@ -32,6 +34,30 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [expandedCharacter, setExpandedCharacter] = useState<string | null>(null);
 
+  // =============================
+  // 🆕 角色/场景设定图生成（模型 + 风格）
+  // 说明：仅在用户点击按钮时才会调用生图接口（会消耗积分）。
+  // =============================
+  const [characterImageModel, setCharacterImageModel] = useState<string>('');
+  const [sceneImageModel, setSceneImageModel] = useState<string>('');
+
+  const [characterStyleId, setCharacterStyleId] = useState<string>(STORYBOARD_STYLES[0]?.id || '');
+  const [sceneStyleId, setSceneStyleId] = useState<string>(STORYBOARD_STYLES[0]?.id || '');
+
+  const characterStyle: StoryboardStyle = useMemo(() => {
+    return STORYBOARD_STYLES.find(s => s.id === characterStyleId) || STORYBOARD_STYLES[0];
+  }, [characterStyleId]);
+
+  const sceneStyle: StoryboardStyle = useMemo(() => {
+    return STORYBOARD_STYLES.find(s => s.id === sceneStyleId) || STORYBOARD_STYLES[0];
+  }, [sceneStyleId]);
+
+  const [generatingCharacterId, setGeneratingCharacterId] = useState<string | null>(null);
+  const [characterGenProgress, setCharacterGenProgress] = useState<{ stage: string; percent: number } | null>(null);
+
+  const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
+  const [sceneGenProgress, setSceneGenProgress] = useState<{ stage: string; percent: number } | null>(null);
+
   // 🆕 剧集上传相关状态
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingEpisodes, setIsUploadingEpisodes] = useState(false);
@@ -41,6 +67,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const cardClass = 'bg-gray-800 rounded-lg border border-gray-700/60';
   const cardPad = 'p-3';
   const primaryBtnClass = 'bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium';
+
+  // 统一负向提示词：抑制水印/文字/Logo 等（避免设定图出现标注）
+  const NEGATIVE_PROMPT = 'watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay';
 
   // 构建剧本数据
   const scripts: ScriptFile[] = useMemo(() => {
@@ -160,6 +189,186 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     } finally {
       setIsSupplementing(false);
       setSupplementingCharacterId(null);
+    }
+  };
+
+  // =============================
+  // 🆕 生成角色设定图（单张 16:9，通常为 2×2 四分屏：正/侧/背 + 面部特写）
+  // =============================
+  const handleGenerateCharacterImageSheet = async (characterId: string) => {
+    const character = (project.characters || []).find(c => c.id === characterId);
+    if (!character) return;
+
+    if (!characterImageModel) {
+      alert('请先选择生图模型');
+      return;
+    }
+
+    if (generatingCharacterId) {
+      alert('正在生成其他角色图片，请稍后');
+      return;
+    }
+
+    const confirmGenerate = confirm(
+      `将为角色「${character.name}」生成 1 张设定图（会消耗积分）。\n\n是否继续？`
+    );
+    if (!confirmGenerate) return;
+
+    setGeneratingCharacterId(characterId);
+    setCharacterGenProgress({ stage: '准备中', percent: 0 });
+
+    try {
+      const styleSuffix = characterStyle?.promptSuffix || '';
+      const projectVisualStyle = project.settings?.visualStyle || '';
+
+      const baseInfoCn = [
+        `角色设定图`,
+        `角色：${character.name}`,
+        character.appearance ? `外观：${character.appearance}` : '',
+        character.gender ? `性别：${character.gender}` : '',
+        character.ageGroup ? `年龄段：${character.ageGroup}` : '',
+        projectVisualStyle ? `项目视觉风格：${projectVisualStyle}` : '',
+      ].filter(Boolean).join('；');
+
+      const prompt = [
+        baseInfoCn,
+        '16:9 canvas, 2x2 grid layout with 4 equal panels, edge-to-edge, clean background, consistent character, consistent outfit, consistent face.',
+        'Panels: (1) front full-body standing, (2) side profile full-body, (3) back full-body, (4) face close-up portrait.',
+        'NO text, NO labels, NO numbers, NO watermark, NO logo.',
+        styleSuffix,
+      ].filter(Boolean).join(' ');
+
+      const ossUrls = await generateAndUploadImage(
+        {
+          prompt,
+          negativePrompt: NEGATIVE_PROMPT,
+          modelName: characterImageModel,
+          aspectRatio: '16:9',
+          numImages: '1',
+          outputFormat: 'jpg',
+        },
+        project.id,
+        `character_sheet_${characterId}`,
+        (stage, percent) => setCharacterGenProgress({ stage, percent })
+      );
+
+      const sheetUrl = ossUrls?.[0];
+      if (!sheetUrl) throw new Error('未获取到生成图片URL');
+
+      const updatedProject: Project = {
+        ...project,
+        updatedAt: new Date().toISOString(),
+        characters: (project.characters || []).map(c => {
+          if (c.id !== characterId) return c;
+          return {
+            ...c,
+            imageSheetUrl: sheetUrl,
+            imageGenerationMeta: {
+              modelName: characterImageModel,
+              styleName: characterStyle?.name || '未知风格',
+              generatedAt: new Date().toISOString(),
+            },
+          };
+        }),
+      };
+
+      await Promise.resolve(onUpdateProject(updatedProject));
+    } catch (error: any) {
+      console.error('生成角色设定图失败:', error);
+      alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
+    } finally {
+      setGeneratingCharacterId(null);
+      setCharacterGenProgress(null);
+    }
+  };
+
+  // =============================
+  // 🆕 生成场景设定图（单张 16:9，通常为 2×2 四分屏：多角度 + 关键特写）
+  // =============================
+  const handleGenerateSceneImageSheet = async (sceneId: string) => {
+    const scene = (project.scenes || []).find(s => s.id === sceneId);
+    if (!scene) return;
+
+    if (!sceneImageModel) {
+      alert('请先选择生图模型');
+      return;
+    }
+
+    if (generatingSceneId) {
+      alert('正在生成其他场景图片，请稍后');
+      return;
+    }
+
+    const confirmGenerate = confirm(
+      `将为场景「${scene.name}」生成 1 张设定图（会消耗积分）。\n\n是否继续？`
+    );
+    if (!confirmGenerate) return;
+
+    setGeneratingSceneId(sceneId);
+    setSceneGenProgress({ stage: '准备中', percent: 0 });
+
+    try {
+      const styleSuffix = sceneStyle?.promptSuffix || '';
+      const projectVisualStyle = project.settings?.visualStyle || '';
+
+      const baseInfoCn = [
+        `场景设定图`,
+        `场景：${scene.name}`,
+        scene.description ? `描述：${scene.description}` : '',
+        scene.visualPromptCn ? `中文视觉提示词：${scene.visualPromptCn}` : '',
+        scene.atmosphere ? `氛围：${scene.atmosphere}` : '',
+        projectVisualStyle ? `项目视觉风格：${projectVisualStyle}` : '',
+      ].filter(Boolean).join('；');
+
+      const prompt = [
+        baseInfoCn,
+        '16:9 canvas, 2x2 grid layout with 4 equal panels, edge-to-edge.',
+        'Panels: (1) wide establishing shot, (2) second angle (left 3/4 view), (3) third angle (right 3/4 view), (4) key detail close-up.',
+        'NO text, NO labels, NO numbers, NO watermark, NO logo.',
+        styleSuffix,
+      ].filter(Boolean).join(' ');
+
+      const ossUrls = await generateAndUploadImage(
+        {
+          prompt,
+          negativePrompt: NEGATIVE_PROMPT,
+          modelName: sceneImageModel,
+          aspectRatio: '16:9',
+          numImages: '1',
+          outputFormat: 'jpg',
+        },
+        project.id,
+        `scene_sheet_${sceneId}`,
+        (stage, percent) => setSceneGenProgress({ stage, percent })
+      );
+
+      const sheetUrl = ossUrls?.[0];
+      if (!sheetUrl) throw new Error('未获取到生成图片URL');
+
+      const updatedProject: Project = {
+        ...project,
+        updatedAt: new Date().toISOString(),
+        scenes: (project.scenes || []).map(s => {
+          if (s.id !== sceneId) return s;
+          return {
+            ...s,
+            imageSheetUrl: sheetUrl,
+            imageGenerationMeta: {
+              modelName: sceneImageModel,
+              styleName: sceneStyle?.name || '未知风格',
+              generatedAt: new Date().toISOString(),
+            },
+          };
+        }),
+      };
+
+      await Promise.resolve(onUpdateProject(updatedProject));
+    } catch (error: any) {
+      console.error('生成场景设定图失败:', error);
+      alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
+    } finally {
+      setGeneratingSceneId(null);
+      setSceneGenProgress(null);
     }
   };
 
@@ -569,9 +778,43 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 渲染角色库 - 紧凑版
   const renderCharacters = () => (
     <div className="space-y-2">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-        <h3 className="text-sm font-bold text-white">👥 角色库 ({project.characters?.length || 0})</h3>
-        <button className={primaryBtnClass}>+ 添加</button>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+          <h3 className="text-sm font-bold text-white">👥 角色库 ({project.characters?.length || 0})</h3>
+          <button className={primaryBtnClass}>+ 添加</button>
+        </div>
+
+        {/* 🆕 顶部控制栏：模型 + 风格 */}
+        <div className={`${cardClass} ${cardPad}`}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <AIImageModelSelector
+              value={characterImageModel}
+              onChange={setCharacterImageModel}
+              scenarioType={ScenarioType.DESIGN}
+              label="角色生图模型"
+            />
+
+            <div>
+              <label className="model-selector-label">角色风格</label>
+              <select
+                value={characterStyleId}
+                onChange={(e) => setCharacterStyleId(e.target.value)}
+                className="model-selector-select"
+              >
+                {STORYBOARD_STYLES.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <div className="mt-2 text-[11px] text-gray-400">
+                说明：点击角色卡的“🖼️”按钮才会生图（消耗积分）。
+              </div>
+            </div>
+
+            <div className="text-[11px] text-gray-400 leading-relaxed">
+              生成内容：单张 16:9 角色设定图（通常为 2×2 四分屏：正/侧/背 + 面部特写）。
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-2">
@@ -589,6 +832,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               missingFields={charCompleteness?.missingFields}
               onSupplement={() => handleSupplementCharacter(char.id)}
               isSupplementing={isSupplementing && supplementingCharacterId === char.id}
+              onGenerateImage={() => handleGenerateCharacterImageSheet(char.id)}
+              isGenerating={generatingCharacterId === char.id}
+              generationProgress={generatingCharacterId === char.id ? characterGenProgress : null}
             />
           );
         })}
@@ -644,6 +890,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             onExtractNewScenes={handleExtractNewScenes}
             isExtracting={isExtractingScenes}
             extractionProgress={extractionProgress}
+            sceneImageModel={sceneImageModel}
+            onChangeSceneImageModel={setSceneImageModel}
+            sceneStyleId={sceneStyleId}
+            onChangeSceneStyleId={setSceneStyleId}
+            onGenerateSceneImageSheet={handleGenerateSceneImageSheet}
+            generatingSceneId={generatingSceneId}
+            generationProgress={sceneGenProgress}
           />
         )}
         {/* 🔧 移除独立的 episodes tab，已合并到 overview */}
@@ -673,7 +926,23 @@ const CharacterCard: React.FC<{
   missingFields?: { field: string; label: string; weight: number }[];
   onSupplement?: () => void;
   isSupplementing?: boolean;
-}> = ({ character, isExpanded, onToggle, onEdit, onEditForm, completeness, missingFields, onSupplement, isSupplementing }) => {
+  onGenerateImage?: () => void;
+  isGenerating?: boolean;
+  generationProgress?: { stage: string; percent: number } | null;
+}> = ({
+  character,
+  isExpanded,
+  onToggle,
+  onEdit,
+  onEditForm,
+  completeness,
+  missingFields,
+  onSupplement,
+  isSupplementing,
+  onGenerateImage,
+  isGenerating,
+  generationProgress,
+}) => {
   const completenessInfo = completeness !== undefined ? getCompletenessLevel(completeness) : null;
 
   return (
@@ -725,8 +994,56 @@ const CharacterCard: React.FC<{
           ✏️
         </button>
 
+        {/* 🆕 生成角色设定图 */}
+        {onGenerateImage && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onGenerateImage();
+            }}
+            disabled={!!isGenerating}
+            className="text-gray-500 hover:text-emerald-400 disabled:text-gray-600 disabled:cursor-not-allowed text-xs px-1"
+            title={character.imageSheetUrl ? '重新生成角色设定图' : '生成角色设定图'}
+          >
+            {isGenerating ? '⏳' : '🖼️'}
+          </button>
+        )}
+
         <span className="text-gray-500 text-xs">{isExpanded ? '▼' : '▶'}</span>
       </div>
+
+      {/* 🆕 生成进度 */}
+      {isGenerating && generationProgress && (
+        <div className="border-t border-gray-700 p-2 text-[11px] text-gray-300 bg-gray-850">
+          <div className="flex items-center justify-between gap-2">
+            <span>⏳ {generationProgress.stage}</span>
+            <span className="text-gray-500">{Math.round(generationProgress.percent)}%</span>
+          </div>
+          <div className="mt-1 h-1.5 bg-gray-700 rounded overflow-hidden">
+            <div
+              className="h-full bg-emerald-500"
+              style={{ width: `${Math.max(0, Math.min(100, generationProgress.percent))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 设定图预览（直接展示整张设定图，不做切割） */}
+      {character.imageSheetUrl && (
+        <div className="border-t border-gray-700 p-2 bg-gray-850">
+          <img
+            src={character.imageSheetUrl}
+            alt={`${character.name} 设定图`}
+            className="w-full rounded bg-gray-900/40 border border-gray-700/60 object-contain max-h-[320px]"
+            loading="lazy"
+          />
+          {character.imageGenerationMeta && (
+            <div className="mt-1 text-[10px] text-gray-500">
+              模型：{character.imageGenerationMeta.modelName} · 风格：{character.imageGenerationMeta.styleName}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 缺失字段提示和智能补充按钮 */}
       {missingFields && missingFields.length > 0 && completeness !== undefined && (
@@ -825,6 +1142,13 @@ const ScenesTab: React.FC<{
   onExtractNewScenes?: () => void;
   isExtracting?: boolean;
   extractionProgress?: { current: number; total: number };
+  sceneImageModel: string;
+  onChangeSceneImageModel: (modelName: string) => void;
+  sceneStyleId: string;
+  onChangeSceneStyleId: (styleId: string) => void;
+  onGenerateSceneImageSheet: (sceneId: string) => void;
+  generatingSceneId: string | null;
+  generationProgress: { stage: string; percent: number } | null;
 }> = ({
   project,
   onEditScene,
@@ -834,6 +1158,13 @@ const ScenesTab: React.FC<{
   onExtractNewScenes,
   isExtracting,
   extractionProgress,
+  sceneImageModel,
+  onChangeSceneImageModel,
+  sceneStyleId,
+  onChangeSceneStyleId,
+  onGenerateSceneImageSheet,
+  generatingSceneId,
+  generationProgress,
 }) => {
   const [expandedScene, setExpandedScene] = React.useState<string | null>(null);
 
@@ -867,6 +1198,38 @@ const ScenesTab: React.FC<{
         </div>
       </div>
 
+      {/* 🆕 顶部控制栏：模型 + 风格 */}
+      <div className="bg-gray-800 rounded-lg border border-gray-700/60 p-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <AIImageModelSelector
+            value={sceneImageModel}
+            onChange={onChangeSceneImageModel}
+            scenarioType={ScenarioType.DESIGN}
+            label="场景生图模型"
+          />
+
+          <div>
+            <label className="model-selector-label">场景风格</label>
+            <select
+              value={sceneStyleId}
+              onChange={(e) => onChangeSceneStyleId(e.target.value)}
+              className="model-selector-select"
+            >
+              {STORYBOARD_STYLES.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <div className="mt-2 text-[11px] text-gray-400">
+              说明：点击场景卡的“🖼️”按钮才会生图（消耗积分）。
+            </div>
+          </div>
+
+          <div className="text-[11px] text-gray-400 leading-relaxed">
+            生成内容：单张 16:9 场景设定图（通常为 2×2 四分屏：多角度 + 关键特写）。
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
         {(project.scenes || []).map((scene) => {
           const isExpanded = expandedScene === scene.id;
@@ -881,6 +1244,18 @@ const ScenesTab: React.FC<{
               <div className="flex justify-between items-start">
                 <h4 className="text-white font-medium text-sm">{scene.name}</h4>
                 <div className="flex items-center gap-1">
+                  {/* 🆕 生成场景设定图 */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGenerateSceneImageSheet(scene.id);
+                    }}
+                    disabled={generatingSceneId === scene.id}
+                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-emerald-400 disabled:text-gray-600 disabled:cursor-not-allowed text-xs"
+                    title={scene.imageSheetUrl ? '重新生成场景设定图' : '生成场景设定图'}
+                  >
+                    {generatingSceneId === scene.id ? '⏳' : '🖼️'}
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); onEditScene(scene); }}
                     className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-400 text-xs"
@@ -894,6 +1269,39 @@ const ScenesTab: React.FC<{
               <p className={`text-gray-400 text-xs mt-0.5 ${isExpanded ? '' : 'line-clamp-2'}`}>
                 {scene.description}
               </p>
+
+              {/* 🆕 生成进度（仅当前场景显示） */}
+              {generatingSceneId === scene.id && generationProgress && (
+                <div className="mt-2 text-[11px] text-gray-300">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>⏳ {generationProgress.stage}</span>
+                    <span className="text-gray-500">{Math.round(generationProgress.percent)}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 bg-gray-700 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500"
+                      style={{ width: `${Math.max(0, Math.min(100, generationProgress.percent))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 🆕 设定图预览（直接展示整张设定图，不做切割） */}
+              {scene.imageSheetUrl && (
+                <div className="mt-2">
+                  <img
+                    src={scene.imageSheetUrl}
+                    alt={`${scene.name} 设定图`}
+                    className="w-full rounded bg-gray-900/40 border border-gray-700/60 object-contain max-h-[320px]"
+                    loading="lazy"
+                  />
+                  {scene.imageGenerationMeta && (
+                    <div className="mt-1 text-[10px] text-gray-500">
+                      模型：{scene.imageGenerationMeta.modelName} · 风格：{scene.imageGenerationMeta.styleName}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 🆕 智能补充按钮 - 始终显示（如果缺少信息） */}
               {onSupplementScene && (!scene.visualPromptCn || !scene.atmosphere) && (

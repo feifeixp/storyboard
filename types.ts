@@ -21,6 +21,21 @@ export interface CharacterRef {
   gender?: '男' | '女' | '未知';
   ageGroup?: '儿童' | '少年' | '青年' | '中年' | '老年';
 
+  // 🆕 角色设定图（单张设定图：三视图 + 面部特写，通常为 2×2 四分屏）
+  // 说明：仅保存整张设定图的 OSS URL；UI 可直接展示整图。
+  imageSheetUrl?: string;
+
+  // 🆕 兼容字段：若未来仍需要保存拆分后的多张独立图，可使用该字段。
+  // 顺序约定：0=正面全身, 1=侧面全身, 2=背面全身, 3=面部特写
+  imageUrls?: string[];
+
+  // 🆕 生图元信息（用于追溯使用的模型/风格）
+  imageGenerationMeta?: {
+    modelName: string;
+    styleName: string;
+    generatedAt: string; // ISO 时间字符串
+  };
+
   // 🆕 角色经典台词/座右铭
   quote?: string;
 
