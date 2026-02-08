@@ -216,8 +216,8 @@ export async function getGenerationResult(
  * 轮询查询图片生成结果，直到成功或失败
  * @param taskCode 任务编码
  * @param onProgress 进度回调
- * @param maxRetries 最大重试次数，默认60次（约3分钟）
- * @param retryInterval 重试间隔（毫秒），默认3000ms
+ * @param maxRetries 最大重试次数：用于计算总超时预算（maxRetries * retryInterval），默认约3分钟
+ * @param retryInterval 初始重试间隔（毫秒），默认3000ms（后续将按 2 倍指数退避增长）
  */
 export async function pollGenerationResult(
   taskCode: string,
@@ -225,11 +225,23 @@ export async function pollGenerationResult(
   maxRetries: number = 60,
   retryInterval: number = 3000
 ): Promise<ImageGenerationResult> {
-  let attempt = 0;
+  // 说明：采用指数退避（strict doubling）以减少请求次数。
+  // 首次查询将等待 retryInterval（默认3秒），之后等待时间每次翻倍：3s → 6s → 12s → ...
+  // 同时保持总超时预算约为 maxRetries * retryInterval（默认 60 * 3000ms ≈ 180s）。
+  let attempt = 0; // 实际查询次数（不是等待次数）
+  let elapsedMs = 0;
+  let delayMs = retryInterval;
+  const totalTimeoutMs = Math.max(0, maxRetries * retryInterval);
 
-  while (attempt < maxRetries) {
+  while (elapsedMs < totalTimeoutMs) {
+    const remainingMs = totalTimeoutMs - elapsedMs;
+    const waitMs = Math.min(delayMs, remainingMs);
+
+    // 等待后再查询（满足“3秒开始查询”的需求）
+    await new Promise(resolve => setTimeout(resolve, waitMs));
+    elapsedMs += waitMs;
+
     attempt++;
-
     const result = await getGenerationResult(taskCode);
 
     if (onProgress) {
@@ -241,11 +253,11 @@ export async function pollGenerationResult(
       return result;
     }
 
-    // 等待后继续轮询
-    await new Promise(resolve => setTimeout(resolve, retryInterval));
+    // 未完成则指数退避（严格翻倍）
+    delayMs *= 2;
   }
 
-  throw new Error(`图片生成超时（已重试${maxRetries}次）`);
+  throw new Error(`图片生成超时（已查询${attempt}次，等待约${Math.ceil(elapsedMs / 1000)}秒）`);
 }
 
 
