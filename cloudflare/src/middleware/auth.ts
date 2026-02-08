@@ -4,13 +4,7 @@
  */
 
 import { Context, Next } from 'hono';
-import { Env } from '../index';
-
-export interface AuthUser {
-  id: string;
-  phone?: string;
-  email?: string;
-}
+import type { AppEnv, AuthUser } from '../index';
 
 /**
  * 解析 JWT Token（简单版本，不验证签名）
@@ -37,7 +31,7 @@ function parseJWT(token: string): any {
  * 验证访问令牌
  * 🆕 支持 Neodomain JWT Token
  */
-export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+export async function authMiddleware(c: Context<AppEnv>, next: Next) {
   const accessToken = c.req.header('accessToken') || c.req.header('Authorization')?.replace('Bearer ', '');
 
   if (!accessToken) {
@@ -128,7 +122,11 @@ async function ensureUserExists(db: D1Database, user: { id: string; phone?: stri
 /**
  * 获取当前用户
  */
-export function getCurrentUser(c: Context): AuthUser {
-  return c.get('user');
+export function getCurrentUser(c: Context<AppEnv>): AuthUser {
+  // 说明：user 由 authMiddleware 写入 context variables
+  // 若这里拿不到，说明路由未正确挂载 authMiddleware
+  const user = c.get('user');
+  if (!user) throw new Error('Unauthorized: missing user in context');
+  return user;
 }
 

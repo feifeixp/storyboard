@@ -4,9 +4,9 @@
  */
 
 import { Hono } from 'hono';
-import { Env } from '../index';
+import type { AppEnv } from '../index';
 
-export const authRoutes = new Hono<{ Bindings: Env }>();
+export const authRoutes = new Hono<AppEnv>();
 
 /**
  * 健康检查

@@ -3,7 +3,7 @@
  * 一页可以看到更多内容
  */
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Project, Episode, StoryVolume, Antagonist, EpisodeSummary, SceneRef, PROJECT_MEDIA_TYPES, ScriptFile } from '../types/project';
 import { CharacterRef, CharacterForm, STORYBOARD_STYLES, type StoryboardStyle } from '../types';
 import { EditModal } from './EditModal';
@@ -12,13 +12,14 @@ import { supplementCharacterDetails } from '../services/characterSupplement';
 import { supplementSceneDetails } from '../services/sceneSupplement';
 import { extractNewScenes } from '../services/sceneExtraction';
 import AIImageModelSelector from './AIImageModelSelector';
-import { ScenarioType, generateAndUploadImage } from '../services/aiImageGeneration';
+import { ScenarioType, generateAndUploadImage, pollAndUploadFromTask } from '../services/aiImageGeneration';
+import { patchProject } from '../services/d1Storage';
 import mammoth from 'mammoth';
 
 interface ProjectDashboardProps {
   project: Project;
   onSelectEpisode: (episode: Episode) => void;
-  onUpdateProject: (project: Project) => void;
+  onUpdateProject: (project: Project, options?: { persist?: boolean }) => void | Promise<void>;
   onBack: () => void;
 }
 
@@ -61,6 +62,15 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 🆕 剧集上传相关状态
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingEpisodes, setIsUploadingEpisodes] = useState(false);
+
+	// =============================
+	// 🆕 生图任务恢复（自动续跑）
+	// 说明：用于“任务已创建/可能已完成，但因断网导致结果未写回 D1”的场景。
+	// =============================
+	// 记录本次页面会话中已尝试自动恢复的 taskCode，避免重复触发
+	const autoResumeAttemptedTaskCodesRef = useRef<Set<string>>(new Set());
+	// 记录上一次执行自动恢复的项目ID（切换项目时清空尝试记录）
+	const autoResumeProjectIdRef = useRef<string | null>(null);
 
   // UI-only style tokens（仅排版/视觉优化：不改变任何功能逻辑）
   const containerClass = 'max-w-7xl mx-auto px-3 sm:px-4 lg:px-6';
@@ -218,6 +228,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setCharacterGenProgress({ stage: '准备中', percent: 0 });
 
     try {
+	      let createdTaskCode: string | null = null;
+	      let createdTaskAt: string | null = null;
+
       const styleSuffix = characterStyle?.promptSuffix || '';
       const projectVisualStyle = project.settings?.visualStyle || '';
 
@@ -238,7 +251,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         styleSuffix,
       ].filter(Boolean).join(' ');
 
-      const ossUrls = await generateAndUploadImage(
+	      const imageUrls = await generateAndUploadImage(
         {
           prompt,
           negativePrompt: NEGATIVE_PROMPT,
@@ -249,11 +262,49 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         },
         project.id,
         `character_sheet_${characterId}`,
-        (stage, percent) => setCharacterGenProgress({ stage, percent })
-      );
+	        (stage, percent) => setCharacterGenProgress({ stage, percent }),
+	        async (taskCode) => {
+	          // ✅ 任务创建后立即持久化 taskCode（断网/刷新后可恢复）
+	          createdTaskCode = taskCode;
+	          createdTaskAt = new Date().toISOString();
+	          setCharacterGenProgress({ stage: '保存任务信息', percent: 15 });
 
-      const sheetUrl = ossUrls?.[0];
-      if (!sheetUrl) throw new Error('未获取到生成图片URL');
+	          const updatedProject: Project = {
+	            ...project,
+	            updatedAt: new Date().toISOString(),
+	            characters: (project.characters || []).map(c => {
+	              if (c.id !== characterId) return c;
+	              return {
+	                ...c,
+	                // 注意：不清空 imageSheetUrl（如果此前已有图，生成中仍保留旧图，避免“生成失败导致空白”）
+	                imageGenerationMeta: {
+	                  modelName: characterImageModel,
+	                  styleName: characterStyle?.name || '未知风格',
+	                  // generatedAt 历史上用于“生成时间”；此处用任务创建时间占位，最终成功后会再写一次
+	                  generatedAt: createdTaskAt,
+	                  taskCode,
+	                  taskCreatedAt: createdTaskAt,
+	                },
+	              };
+	            }),
+	          };
+
+	          // 1) 先更新本地 UI（不触发全量保存）
+	          await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+	          // 2) 再做最小化持久化（PATCH 只更新 characters 字段）
+	          try {
+	            await patchProject(project.id, { characters: updatedProject.characters });
+	          } catch (err) {
+	            console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
+	            await Promise.resolve(onUpdateProject(updatedProject));
+	          }
+	        },
+	        // S3：设定图直接保存 Neodomain 的永久 image_urls，跳过 OSS
+	        { skipOSSUpload: true }
+	      );
+
+	      const sheetUrl = imageUrls?.[0];
+	      if (!sheetUrl) throw new Error('未获取到生成图片URL');
 
       const updatedProject: Project = {
         ...project,
@@ -267,12 +318,22 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               modelName: characterImageModel,
               styleName: characterStyle?.name || '未知风格',
               generatedAt: new Date().toISOString(),
+	              taskCode: createdTaskCode || c.imageGenerationMeta?.taskCode,
+	              taskCreatedAt: createdTaskAt || c.imageGenerationMeta?.taskCreatedAt,
             },
           };
         }),
       };
 
-      await Promise.resolve(onUpdateProject(updatedProject));
+	      // 1) 先更新本地 UI（不触发全量保存）
+	      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+	      // 2) 再做最小化持久化（PATCH 只更新 characters 字段）
+	      try {
+	        await patchProject(project.id, { characters: updatedProject.characters });
+	      } catch (err) {
+	        console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
+	        await Promise.resolve(onUpdateProject(updatedProject));
+	      }
     } catch (error: any) {
       console.error('生成角色设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
@@ -307,7 +368,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setGeneratingSceneId(sceneId);
     setSceneGenProgress({ stage: '准备中', percent: 0 });
 
-    try {
+	    try {
+		      let createdTaskCode: string | null = null;
+		      let createdTaskAt: string | null = null;
+
       const styleSuffix = sceneStyle?.promptSuffix || '';
       const projectVisualStyle = project.settings?.visualStyle || '';
 
@@ -328,7 +392,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         styleSuffix,
       ].filter(Boolean).join(' ');
 
-      const ossUrls = await generateAndUploadImage(
+		      const imageUrls = await generateAndUploadImage(
         {
           prompt,
           negativePrompt: NEGATIVE_PROMPT,
@@ -339,11 +403,46 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         },
         project.id,
         `scene_sheet_${sceneId}`,
-        (stage, percent) => setSceneGenProgress({ stage, percent })
-      );
+	        (stage, percent) => setSceneGenProgress({ stage, percent }),
+		        async (taskCode) => {
+	          createdTaskCode = taskCode;
+	          createdTaskAt = new Date().toISOString();
+	          setSceneGenProgress({ stage: '保存任务信息', percent: 15 });
 
-      const sheetUrl = ossUrls?.[0];
-      if (!sheetUrl) throw new Error('未获取到生成图片URL');
+	          const updatedProject: Project = {
+	            ...project,
+	            updatedAt: new Date().toISOString(),
+	            scenes: (project.scenes || []).map(s => {
+	              if (s.id !== sceneId) return s;
+	              return {
+	                ...s,
+	                imageGenerationMeta: {
+	                  modelName: sceneImageModel,
+	                  styleName: sceneStyle?.name || '未知风格',
+	                  generatedAt: createdTaskAt,
+	                  taskCode,
+	                  taskCreatedAt: createdTaskAt,
+	                },
+	              };
+	            }),
+	          };
+
+		          // 1) 先更新本地 UI（不触发全量保存）
+		          await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+		          // 2) 再做最小化持久化（PATCH 只更新 scenes 字段）
+		          try {
+		            await patchProject(project.id, { scenes: updatedProject.scenes });
+		          } catch (err) {
+		            console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
+		            await Promise.resolve(onUpdateProject(updatedProject));
+		          }
+		        },
+		        // S3：设定图直接保存 Neodomain 的永久 image_urls，跳过 OSS
+		        { skipOSSUpload: true }
+	      );
+
+	      const sheetUrl = imageUrls?.[0];
+	      if (!sheetUrl) throw new Error('未获取到生成图片URL');
 
       const updatedProject: Project = {
         ...project,
@@ -357,12 +456,22 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               modelName: sceneImageModel,
               styleName: sceneStyle?.name || '未知风格',
               generatedAt: new Date().toISOString(),
+	              taskCode: createdTaskCode || s.imageGenerationMeta?.taskCode,
+	              taskCreatedAt: createdTaskAt || s.imageGenerationMeta?.taskCreatedAt,
             },
           };
         }),
       };
 
-      await Promise.resolve(onUpdateProject(updatedProject));
+	      // 1) 先更新本地 UI（不触发全量保存）
+	      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+	      // 2) 再做最小化持久化（PATCH 只更新 scenes 字段）
+	      try {
+	        await patchProject(project.id, { scenes: updatedProject.scenes });
+	      } catch (err) {
+	        console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
+	        await Promise.resolve(onUpdateProject(updatedProject));
+	      }
     } catch (error: any) {
       console.error('生成场景设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
@@ -371,6 +480,203 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       setSceneGenProgress(null);
     }
   };
+
+	// =============================
+	// 🆕 恢复角色/场景设定图任务（使用已保存的 taskCode 继续轮询并上传）
+	// =============================
+	const handleResumeCharacterImageSheet = async (
+	  characterId: string,
+	  options?: { silent?: boolean }
+	) => {
+	  const silent = !!options?.silent;
+	  const character = (project.characters || []).find(c => c.id === characterId);
+	  if (!character) return;
+	  const taskCode = character.imageGenerationMeta?.taskCode;
+	
+	  if (!taskCode) {
+	    if (!silent) alert('该角色没有可恢复的生成任务（缺少 taskCode）');
+	    return;
+	  }
+	
+	  if (generatingCharacterId && generatingCharacterId !== characterId) {
+	    if (!silent) alert('正在恢复/生成其他角色图片，请稍后');
+	    return;
+	  }
+	
+	  setGeneratingCharacterId(characterId);
+	  setCharacterGenProgress({ stage: '恢复任务中', percent: 0 });
+	
+		  try {
+		    const imageUrls = await pollAndUploadFromTask(
+	      taskCode,
+	      project.id,
+	      `character_sheet_${characterId}`,
+		      (stage, percent) => setCharacterGenProgress({ stage, percent }),
+		      // S3：恢复时同样跳过 OSS，直接拿 Neodomain 永久链接
+		      { skipOSSUpload: true }
+	    );
+	
+		    const sheetUrl = imageUrls?.[0];
+	    if (!sheetUrl) throw new Error('未获取到生成图片URL');
+	
+	    const updatedProject: Project = {
+	      ...project,
+	      updatedAt: new Date().toISOString(),
+	      characters: (project.characters || []).map(c => {
+	        if (c.id !== characterId) return c;
+	        return {
+	          ...c,
+	          imageSheetUrl: sheetUrl,
+	          imageGenerationMeta: c.imageGenerationMeta
+	            ? { ...c.imageGenerationMeta, generatedAt: new Date().toISOString() }
+	            : {
+	                modelName: characterImageModel || '未知模型',
+	                styleName: characterStyle?.name || '未知风格',
+	                generatedAt: new Date().toISOString(),
+	                taskCode,
+	                taskCreatedAt: new Date().toISOString(),
+	              },
+	        };
+	      }),
+	    };
+		
+		    // 1) 先更新本地 UI（不触发全量保存）
+		    await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+		    // 2) 再做最小化持久化（PATCH 只更新 characters 字段）
+		    try {
+		      await patchProject(project.id, { characters: updatedProject.characters });
+		    } catch (err) {
+		      console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
+		      await Promise.resolve(onUpdateProject(updatedProject));
+		    }
+	  } catch (error: any) {
+	    console.warn('恢复角色设定图失败:', error);
+	    if (!silent) {
+	      alert(`❌ 恢复失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
+	    }
+	  } finally {
+	    setGeneratingCharacterId(null);
+	    setCharacterGenProgress(null);
+	  }
+	};
+
+	const handleResumeSceneImageSheet = async (
+	  sceneId: string,
+	  options?: { silent?: boolean }
+	) => {
+	  const silent = !!options?.silent;
+	  const scene = (project.scenes || []).find(s => s.id === sceneId);
+	  if (!scene) return;
+	  const taskCode = scene.imageGenerationMeta?.taskCode;
+	
+	  if (!taskCode) {
+	    if (!silent) alert('该场景没有可恢复的生成任务（缺少 taskCode）');
+	    return;
+	  }
+	
+	  if (generatingSceneId && generatingSceneId !== sceneId) {
+	    if (!silent) alert('正在恢复/生成其他场景图片，请稍后');
+	    return;
+	  }
+	
+	  setGeneratingSceneId(sceneId);
+	  setSceneGenProgress({ stage: '恢复任务中', percent: 0 });
+	
+		  try {
+		    const imageUrls = await pollAndUploadFromTask(
+	      taskCode,
+	      project.id,
+	      `scene_sheet_${sceneId}`,
+		      (stage, percent) => setSceneGenProgress({ stage, percent }),
+		      // S3：恢复时同样跳过 OSS，直接拿 Neodomain 永久链接
+		      { skipOSSUpload: true }
+	    );
+	
+		    const sheetUrl = imageUrls?.[0];
+	    if (!sheetUrl) throw new Error('未获取到生成图片URL');
+	
+	    const updatedProject: Project = {
+	      ...project,
+	      updatedAt: new Date().toISOString(),
+	      scenes: (project.scenes || []).map(s => {
+	        if (s.id !== sceneId) return s;
+	        return {
+	          ...s,
+	          imageSheetUrl: sheetUrl,
+	          imageGenerationMeta: s.imageGenerationMeta
+	            ? { ...s.imageGenerationMeta, generatedAt: new Date().toISOString() }
+	            : {
+	                modelName: sceneImageModel || '未知模型',
+	                styleName: sceneStyle?.name || '未知风格',
+	                generatedAt: new Date().toISOString(),
+	                taskCode,
+	                taskCreatedAt: new Date().toISOString(),
+	              },
+	        };
+	      }),
+	    };
+		
+		    // 1) 先更新本地 UI（不触发全量保存）
+		    await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+		    // 2) 再做最小化持久化（PATCH 只更新 scenes 字段）
+		    try {
+		      await patchProject(project.id, { scenes: updatedProject.scenes });
+		    } catch (err) {
+		      console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
+		      await Promise.resolve(onUpdateProject(updatedProject));
+		    }
+	  } catch (error: any) {
+	    console.warn('恢复场景设定图失败:', error);
+	    if (!silent) {
+	      alert(`❌ 恢复失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
+	    }
+	  } finally {
+	    setGeneratingSceneId(null);
+	    setSceneGenProgress(null);
+	  }
+	};
+
+	// =============================
+	// 🆕 自动续跑：页面加载/项目切换时，自动恢复未完成的生图任务
+	// =============================
+	useEffect(() => {
+	  if (!project?.id) return;
+
+	  // 切换项目时清空尝试记录
+	  if (autoResumeProjectIdRef.current !== project.id) {
+	    autoResumeProjectIdRef.current = project.id;
+	    autoResumeAttemptedTaskCodesRef.current = new Set();
+	  }
+
+	  const run = async () => {
+	    // 1) 角色任务恢复
+	    for (const c of project.characters || []) {
+	      const taskCode = c.imageGenerationMeta?.taskCode;
+	      if (!taskCode) continue;
+	      if (c.imageSheetUrl) continue;
+	      if (autoResumeAttemptedTaskCodesRef.current.has(taskCode)) continue;
+
+	      autoResumeAttemptedTaskCodesRef.current.add(taskCode);
+	      console.log(`🔄 自动恢复角色设定图任务: ${c.name} (${taskCode})`);
+	      await handleResumeCharacterImageSheet(c.id, { silent: true });
+	    }
+
+	    // 2) 场景任务恢复
+	    for (const s of project.scenes || []) {
+	      const taskCode = s.imageGenerationMeta?.taskCode;
+	      if (!taskCode) continue;
+	      if (s.imageSheetUrl) continue;
+	      if (autoResumeAttemptedTaskCodesRef.current.has(taskCode)) continue;
+
+	      autoResumeAttemptedTaskCodesRef.current.add(taskCode);
+	      console.log(`🔄 自动恢复场景设定图任务: ${s.name} (${taskCode})`);
+	      await handleResumeSceneImageSheet(s.id, { silent: true });
+	    }
+	  };
+
+	  void run();
+	  // 仅在 project.id 变化时触发（避免 project 对象频繁更新导致重复恢复）
+	}, [project.id]);
 
   // 智能补充场景细节
   const handleSupplementScene = async (sceneId: string) => {

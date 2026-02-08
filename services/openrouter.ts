@@ -3298,7 +3298,8 @@ export async function* chatEditShotListStream(
 async function generateSingleImage(
   prompt: string,
   imageModel: string = DEFAULT_NEODOMAIN_IMAGE_MODEL,
-  characterRefs: CharacterRef[] = []
+  characterRefs: CharacterRef[] = [],
+  onTaskCreated?: (taskCode: string) => void | Promise<void>
 ): Promise<string | null> {
   // 动态导入 neodomain API
   const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
@@ -3368,6 +3369,15 @@ async function generateSingleImage(
 
     console.log(`[Neodomain] 任务已提交: ${task.task_code}`);
 
+			// 🆕 任务创建后立即回调（用于把 taskCode 持久化到 D1，支持断网/刷新自动恢复）
+			if (onTaskCreated) {
+				try {
+					await Promise.resolve(onTaskCreated(task.task_code));
+				} catch (err) {
+					console.warn('[Neodomain] onTaskCreated 回调执行失败（忽略，不影响继续轮询）:', err);
+				}
+			}
+
     // 轮询查询结果
     const result = await pollGenerationResult(
       task.task_code,
@@ -3422,6 +3432,15 @@ async function generateSingleImage(
 
         console.log(`[Neodomain] 备用模型任务已提交: ${fallbackTask.task_code}`);
 
+				// 🆕 若发生降级，则以备用任务的 taskCode 覆盖持久化（确保恢复时拿到真实可用任务）
+				if (onTaskCreated) {
+					try {
+						await Promise.resolve(onTaskCreated(fallbackTask.task_code));
+					} catch (err) {
+						console.warn('[Neodomain] onTaskCreated(备用任务) 回调执行失败（忽略）:', err);
+					}
+				}
+
         const fallbackResult = await pollGenerationResult(
           fallbackTask.task_code,
           (status, attempt) => {
@@ -3461,6 +3480,7 @@ export async function generateMergedStoryboardSheet(
   style?: StoryboardStyle,
   onProgress?: (current: number, total: number, shotNumber: string) => void,
   onGridComplete?: (gridIndex: number, imageUrl: string) => void,
+  onTaskCreated?: (taskCode: string, gridIndex: number) => void | Promise<void>,
   episodeNumber?: number,  // 🆕 当前集数，用于匹配角色形态
   scenes?: SceneRef[],     // 🆕 场景库，用于匹配场景描述
   artStyleType?: ArtStyleType  // 🆕 美术风格类型，用于调整提示词
@@ -3501,7 +3521,12 @@ export async function generateMergedStoryboardSheet(
 
     // 调用AI生成九宫格图
     // 注意：大多数图像生成模型不支持图片参考，所以角色信息以文字形式写入提示词
-    const imageUrl = await generateSingleImage(gridPrompt, effectiveModel, []);
+    const imageUrl = await generateSingleImage(
+				gridPrompt,
+				effectiveModel,
+				[],
+				(taskCode) => onTaskCreated ? onTaskCreated(taskCode, gridIndex) : undefined
+			);
 
     if (imageUrl) {
       results.push(imageUrl);
@@ -3540,7 +3565,8 @@ export async function generateSingleGrid(
   style?: StoryboardStyle,
   episodeNumber?: number,
   scenes?: SceneRef[],
-  artStyleType?: ArtStyleType
+  artStyleType?: ArtStyleType,
+	onTaskCreated?: (taskCode: string) => void | Promise<void>
 ): Promise<string | null> {
   const GRID_SIZE = 9; // 每张图9个镜头 (3x3)
   const totalGrids = Math.ceil(shots.length / GRID_SIZE);
@@ -3585,7 +3611,7 @@ export async function generateSingleGrid(
   );
 
   // 调用AI生成九宫格图
-  const imageUrl = await generateSingleImage(gridPrompt, effectiveModel, []);
+  const imageUrl = await generateSingleImage(gridPrompt, effectiveModel, [], onTaskCreated);
 
   if (imageUrl) {
     console.log(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成成功`);

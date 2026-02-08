@@ -3,10 +3,10 @@
  */
 
 import { Hono } from 'hono';
-import { Env } from '../index';
+import type { AppEnv } from '../index';
 import { authMiddleware, getCurrentUser } from '../middleware/auth';
 
-export const projectRoutes = new Hono<{ Bindings: Env }>();
+export const projectRoutes = new Hono<AppEnv>();
 
 // 所有项目路由都需要认证
 projectRoutes.use('/*', authMiddleware);
@@ -80,8 +80,8 @@ projectRoutes.get('/:id', async (c) => {
       return c.json({ error: 'Project not found' }, 404);
     }
 
-    // 解析 JSON 字段
-    const projectData = {
+	    // 解析 JSON 字段
+	    const projectData = {
       id: project.id,
       name: project.name,
       createdAt: project.created_at,
@@ -92,6 +92,8 @@ projectRoutes.get('/:id', async (c) => {
       volumes: JSON.parse(project.volumes as string || '[]'),
       antagonists: JSON.parse(project.antagonists as string || '[]'),
       storyOutline: JSON.parse(project.story_outline as string),
+	      // episodes 在下方查询后填充
+	      episodes: [] as any[],
     };
 
     // 获取剧集列表
@@ -208,6 +210,86 @@ projectRoutes.post('/', async (c) => {
   } catch (error) {
     console.error('[Projects] Save project error:', error);
     return c.json({ error: 'Failed to save project', details: error instanceof Error ? error.message : String(error) }, 500);
+  }
+});
+
+/**
+ * 局部更新项目（仅更新请求体中出现的字段）
+ * PATCH /api/projects/:id
+ *
+ * 设计目的：避免前端每次都全量保存（尤其是只更新 taskCode/taskCreatedAt 等小字段时）。
+ * 注意：仅允许更新白名单字段，且必须通过所有权校验。
+ */
+projectRoutes.patch('/:id', async (c) => {
+  const user = getCurrentUser(c);
+  const projectId = c.req.param('id');
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch (error) {
+    console.error('[Projects] Patch project invalid JSON:', error);
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  try {
+    // 验证项目所有权
+    const project = await c.env.DB.prepare(
+      'SELECT id FROM projects WHERE id = ? AND user_id = ?'
+    )
+      .bind(projectId, user.id)
+      .first();
+
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+
+    const now = Date.now();
+
+    // 仅允许更新这些字段
+    const updates: Array<{ col: string; value: any }> = [];
+
+    if (typeof body.name === 'string') {
+      updates.push({ col: 'name', value: body.name });
+    }
+    if (body.settings !== undefined) {
+      updates.push({ col: 'settings', value: JSON.stringify(body.settings ?? {}) });
+    }
+    if (body.characters !== undefined) {
+      updates.push({ col: 'characters', value: JSON.stringify(body.characters ?? []) });
+    }
+    if (body.scenes !== undefined) {
+      updates.push({ col: 'scenes', value: JSON.stringify(body.scenes ?? []) });
+    }
+    if (body.volumes !== undefined) {
+      updates.push({ col: 'volumes', value: JSON.stringify(body.volumes ?? []) });
+    }
+    if (body.antagonists !== undefined) {
+      updates.push({ col: 'antagonists', value: JSON.stringify(body.antagonists ?? []) });
+    }
+    if (body.storyOutline !== undefined) {
+      updates.push({ col: 'story_outline', value: JSON.stringify(body.storyOutline ?? []) });
+    }
+
+    // 没有任何可更新字段：仍然返回 success（避免前端报错）
+    if (updates.length === 0) {
+      return c.json({ success: true, updatedAt: now, noOp: true });
+    }
+
+    const setClause = `${updates.map(u => `${u.col} = ?`).join(', ')}, updated_at = ?`;
+    const bindValues = [...updates.map(u => u.value), now, projectId];
+
+    await c.env.DB.prepare(`UPDATE projects SET ${setClause} WHERE id = ?`)
+      .bind(...bindValues)
+      .run();
+
+    return c.json({ success: true, updatedAt: now });
+  } catch (error) {
+    console.error('[Projects] Patch project error:', error);
+    return c.json({
+      error: 'Failed to patch project',
+      details: error instanceof Error ? error.message : String(error),
+    }, 500);
   }
 });
 

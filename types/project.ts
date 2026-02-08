@@ -158,6 +158,11 @@ export interface SceneRef {
     modelName: string;
     styleName: string;
     generatedAt: string; // ISO 时间字符串
+
+		// 🆕 任务编码（用于断网/刷新后重试获取结果）
+		// 说明：任务创建成功后即可写入；当 imageSheetUrl 为空但 taskCode 存在时，可尝试恢复该任务。
+		taskCode?: string;
+		taskCreatedAt?: string; // ISO 时间字符串
   };
 }
 

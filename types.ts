@@ -34,6 +34,11 @@ export interface CharacterRef {
     modelName: string;
     styleName: string;
     generatedAt: string; // ISO 时间字符串
+
+		// 🆕 任务编码（用于断网/刷新后重试获取结果）
+		// 说明：任务创建成功后即可写入；当 imageSheetUrl 为空但 taskCode 存在时，可尝试恢复该任务。
+		taskCode?: string;
+		taskCreatedAt?: string; // ISO 时间字符串
   };
 
   // 🆕 角色经典台词/座右铭
@@ -260,6 +265,16 @@ export interface Shot {
   // ═══════════ 🆕 九宫格草图映射（虚拟切割，不生成独立小图文件） ═══════════
   storyboardGridUrl?: string;        // 九宫格图片URL（该镜头所属页）
   storyboardGridCellIndex?: number;  // 该镜头在九宫格中的格子索引（0-8，按行优先）
+
+	// 🆕 九宫格生图任务元信息（用于断网/刷新后自动恢复）
+	// 说明：九宫格生成时会先提交任务并获得 taskCode；我们把它持久化到 shots 内，
+	//      之后即便刷新/断网，也能通过 taskCode 再次轮询拿回永久 image_urls。
+	// 注意：该字段不等同于 storyboardGridUrl（后者是“已应用到分镜表”的最终结果）。
+	storyboardGridGenerationMeta?: {
+		taskCode: string;
+		taskCreatedAt: string; // ISO 时间字符串
+		gridIndex: number;     // 九宫格索引（0-based）
+	};
 
   status: 'pending' | 'generating' | 'completed' | 'error';
 }

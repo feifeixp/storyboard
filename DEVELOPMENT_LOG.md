@@ -18,6 +18,55 @@
 
 ---
 
+## [2026-02-08 20:12] ✨ 新功能 + 🐛 问题修复
+
+**修改内容**：为九宫格分镜图生成增加 task_code 持久化与断网/刷新自动恢复；新增 episodes 局部更新（PATCH）用于仅更新 shots，并在应用九宫格后清理任务元信息，避免重复生成与多余写入。
+
+**影响范围**：
+- 文件/模块：
+  - types.ts（Shot 增加 storyboardGridGenerationMeta）
+  - services/openrouter.ts（九宫格生图支持 onTaskCreated 回调暴露 task_code）
+  - services/d1Storage.ts（新增 patchEpisode）
+  - cloudflare/src/routes/episodes.ts（新增 PATCH /api/episodes/:id）
+  - App.tsx（创建任务即写入 taskCode；加载剧集时自动恢复；应用后清理 meta 并用 patchEpisode 保存）
+
+**修改原因**：
+- 九宫格生成过程中断网/刷新会丢失任务上下文，导致用户被迫重新生成，浪费时间与成本。
+
+**预期效果**：
+- ✅ 九宫格任务创建后立即持久化 taskCode/taskCreatedAt/gridIndex 到 D1
+- ✅ 刷新/重进剧集后自动轮询恢复未完成任务的九宫格预览
+- ✅ 应用九宫格到分镜表后清理任务元信息，避免长期堆积与误恢复
+- ✅ 使用 PATCH 最小化单集 shots 更新的数据传输与写入
+
+**相关文档**：无
+
+## [2026-02-08 11:20] ⚡ 性能优化 + 🐛 问题修复
+
+**修改内容**：优化项目保存链路，避免日常保存触发全量重写所有剧集（episodes）；新增项目局部更新（PATCH）能力，用于仅持久化角色/场景设定图的 taskCode/taskCreatedAt 与最终 imageSheetUrl；设定图直接保存 Neodomain 返回的永久图片链接，跳过“下载→上传 OSS”链路以提升稳定性并降低丢图风险。
+
+**影响范围**：
+- 文件/模块：
+  - services/d1Storage.ts（saveProject 默认不再保存 episodes；新增 patchProject）
+  - cloudflare/src/index.ts（CORS 允许 PATCH；补充 AppEnv 类型以支持 context variables）
+  - cloudflare/src/middleware/auth.ts（context variables 类型收敛；getCurrentUser 强类型化）
+  - cloudflare/src/routes/projects.ts（新增 PATCH /api/projects/:id；GET/POST 返回结构补全 episodes 字段）
+  - cloudflare/src/routes/episodes.ts、cloudflare/src/routes/auth.ts（路由类型与 AppEnv 对齐）
+  - App.tsx（创建项目完成时显式保存 episodes；更新项目支持仅更新 UI 不落库的模式）
+  - services/aiImageGeneration.ts（支持 skipOSSUpload：直接返回 Neodomain image_urls）
+  - components/ProjectDashboard.tsx（角色/场景设定图与自动恢复：使用 PATCH + 跳过 OSS）
+
+**修改原因**：
+- 原保存机制每次全量保存项目数据并额外重写全部 episodes，导致不必要的数据传输与 D1 写入成本。
+- 设定图“下载再上传 OSS”链路在网络波动时容易失败，导致已生成结果无法及时写回。
+
+**预期效果**：
+- ✅ 小字段更新（如 taskCode/taskCreatedAt）不再触发全量 episodes 重写，显著降低写入与带宽成本
+- ✅ 设定图生成任务可先写入 taskCode，断网/刷新后可自动恢复并最终写回 imageSheetUrl
+- ✅ 设定图直接使用 Neodomain 永久链接，规避前端直连 OSS 的不稳定因素
+
+**相关文档**：无
+
 ## [2026-02-08 10:40] ⚡ 性能优化
 
 **修改内容**：优化 AI 图片生成结果轮询策略：从固定 3 秒间隔改为指数退避（3 秒起步、每次严格翻倍），在总超时仍约 3 分钟的前提下显著减少查询次数，降低接口请求压力并减少控制台噪声。

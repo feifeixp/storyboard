@@ -15,13 +15,35 @@ export interface Env {
   ENVIRONMENT: string;
 }
 
+/**
+ * 认证后的用户信息（写入 Hono Context Variables）
+ */
+export interface AuthUser {
+  id: string;
+  phone?: string;
+  email?: string;
+}
+
+/**
+ * Hono 应用类型（Bindings + Variables）
+ * - Bindings: Cloudflare 环境绑定（D1 等）
+ * - Variables: 中间件注入的上下文变量（例如 user）
+ */
+export type AppEnv = {
+  Bindings: Env;
+  Variables: {
+    user: AuthUser;
+  };
+};
+
 // 创建 Hono 应用
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
 
 // CORS 中间件 - 允许所有来源（生产环境建议限制为特定域名）
 app.use('/*', cors({
   origin: '*',  // 允许所有来源
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  // 🆕 PATCH：用于项目局部更新（避免全量保存）
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'accessToken'],
   exposeHeaders: ['Content-Length'],
   maxAge: 600,

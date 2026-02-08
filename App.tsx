@@ -62,12 +62,14 @@ import {
   getAllProjects,
   saveProject,
   saveEpisode,
+  patchEpisode,
   deleteProject,
   getCurrentProjectId,
   setCurrentProjectId,
   getProject,
   getEpisode,  // 🔧 获取单个剧集完整数据
 } from './services/d1Storage';
+import { getGenerationResult, pollGenerationResult, TaskStatus } from './services/aiImageGeneration';
 import { analyzeProjectScriptsWithProgress, analyzeProjectScripts } from './services/projectAnalysis';
 import { BatchAnalysisProgress } from './types/project';
 // 🆕 本集概述生成
@@ -252,6 +254,9 @@ const App: React.FC = () => {
     loadFromStorage(STORAGE_KEYS.CHAT_HISTORY, [])
   );
   const chatScrollRef = useRef<HTMLDivElement>(null);
+	  // 🆕 记录当前选中的 episodeId + 恢复任务 token，避免快速切换剧集时“旧恢复任务”污染新剧集状态
+	  const selectedEpisodeIdRef = useRef<string | null>(null);
+	  const nineGridResumeTokenRef = useRef(0);
 
   // State for Step 4 Images
   // 🆕 不再从 localStorage 加载 hqUrls（图片数据太大）
@@ -482,7 +487,8 @@ const App: React.FC = () => {
 
   const handleProjectComplete = async (project: Project) => {
     try {
-      await saveProject(project);
+      // ⚠️ 创建项目完成时需要把 episodes 一并落库（episodes 表）
+      await saveProject(project, { includeEpisodes: true });
       const allProjects = await getAllProjects();
       setProjects(allProjects);
       setCurrentProject(project);
@@ -522,6 +528,103 @@ const App: React.FC = () => {
     return await analyzeProjectScriptsWithProgress(scripts, model, onProgress, mode);
   };
 
+	  /**
+	   * 🆕 九宫格任务自动恢复
+	   * - 触发时机：选择剧集后
+	   * - 恢复目标：把 shots.storyboardGridGenerationMeta 里记录的 taskCode 轮询拿回 imageUrl，并写回到 hqUrls
+	   * - 重要约束：不写 storyboardGridUrl（避免影响“完成步骤跳转”逻辑），仅恢复“绘制步骤”的临时预览
+	   */
+	  const resumeNineGridTasksFromShots = async (
+	    episodeId: string | undefined,
+	    episodeShots: Shot[],
+	    token: number
+	  ) => {
+	    if (!episodeId) return;
+	    if (!Array.isArray(episodeShots) || episodeShots.length === 0) return;
+	    // 防止用户切换到其它剧集后仍然写入旧剧集状态
+	    if (selectedEpisodeIdRef.current !== episodeId) return;
+	    if (nineGridResumeTokenRef.current !== token) return;
+
+	    const GRID_SIZE = 9;
+
+	    // 已经“应用到分镜表”的 grid（shots 上存在 storyboardGridUrl）不需要恢复
+	    const appliedGrids = new Set<number>();
+	    episodeShots.forEach((shot, idx) => {
+	      const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
+	      if (!url) return;
+	      appliedGrids.add(Math.floor(idx / GRID_SIZE));
+	    });
+
+	    // 收集待恢复的 grid task（允许同一 grid 多次生成，取最新的 taskCreatedAt）
+	    const pendingByGrid = new Map<number, NonNullable<Shot['storyboardGridGenerationMeta']>>();
+	    for (let i = 0; i < episodeShots.length; i++) {
+	      const meta = episodeShots[i]?.storyboardGridGenerationMeta;
+	      if (!meta?.taskCode) continue;
+	      const gridIndex = typeof meta.gridIndex === 'number' ? meta.gridIndex : Math.floor(i / GRID_SIZE);
+	      if (appliedGrids.has(gridIndex)) continue;
+
+	      const existing = pendingByGrid.get(gridIndex);
+	      if (!existing) {
+	        pendingByGrid.set(gridIndex, { ...meta, gridIndex });
+	        continue;
+	      }
+
+	      const a = Date.parse(existing.taskCreatedAt || '');
+	      const b = Date.parse(meta.taskCreatedAt || '');
+	      const shouldReplace = Number.isNaN(a) ? !Number.isNaN(b) : (!Number.isNaN(b) && b > a);
+	      if (shouldReplace) pendingByGrid.set(gridIndex, { ...meta, gridIndex });
+	    }
+
+	    if (pendingByGrid.size === 0) return;
+	    console.log(`[NineGrid恢复] 发现 ${pendingByGrid.size} 个可恢复任务（episodeId=${episodeId}）`);
+
+	    // 逐个恢复，避免并发过高造成 API 压力/控制台噪声
+	    for (const [gridIndex, meta] of pendingByGrid.entries()) {
+	      if (selectedEpisodeIdRef.current !== episodeId) return;
+	      if (nineGridResumeTokenRef.current !== token) return;
+
+	      try {
+	        // 先快速查询一次（命中 SUCCESS 可省掉轮询）
+	        const quick = await getGenerationResult(meta.taskCode);
+	        if (quick.status === TaskStatus.SUCCESS && Array.isArray(quick.image_urls) && quick.image_urls[0]) {
+	          const url = quick.image_urls[0];
+	          setHqUrls(prev => {
+	            const next = [...prev];
+	            next[gridIndex] = url;
+	            return next;
+	          });
+	          console.log(`[NineGrid恢复] ✅ grid#${gridIndex + 1} 已就绪（快速命中 SUCCESS）`);
+	          continue;
+	        }
+
+	        if (quick.status === TaskStatus.FAILED) {
+	          console.warn(`[NineGrid恢复] ❌ grid#${gridIndex + 1} 任务失败：${meta.taskCode}`);
+	          continue;
+	        }
+
+	        // PENDING：进入轮询（内部指数退避，约 3 分钟超时）
+	        const result = await pollGenerationResult(meta.taskCode, (status, attempt) => {
+	          console.log(`[NineGrid恢复] grid#${gridIndex + 1} 状态=${status}，第${attempt}次查询`);
+	        });
+
+	        if (result.status === TaskStatus.SUCCESS && Array.isArray(result.image_urls) && result.image_urls[0]) {
+	          const url = result.image_urls[0];
+	          setHqUrls(prev => {
+	            const next = [...prev];
+	            next[gridIndex] = url;
+	            return next;
+	          });
+	          console.log(`[NineGrid恢复] ✅ grid#${gridIndex + 1} 恢复成功`);
+	        } else if (result.status === TaskStatus.FAILED) {
+	          console.warn(`[NineGrid恢复] ❌ grid#${gridIndex + 1} 任务失败：${meta.taskCode}`);
+	        }
+	      } catch (error) {
+	        // 不阻断用户；保留 meta，下一次进入剧集时仍可再次恢复
+	        console.warn(`[NineGrid恢复] ⚠️ grid#${gridIndex + 1} 恢复失败（稍后可重试）：`, error);
+	      }
+	    }
+	  };
+
   const goToProjectList = () => {
     setCurrentStep(AppStep.PROJECT_LIST);
   };
@@ -530,6 +633,8 @@ const App: React.FC = () => {
   const handleSelectEpisode = async (episode: Episode) => {
     try {
       console.log(`[handleSelectEpisode] 加载第${episode.episodeNumber}集完整数据, id=${episode.id}`);
+	      selectedEpisodeIdRef.current = episode.id || null;
+	      const resumeToken = ++nineGridResumeTokenRef.current;
 
       // 🔧 从后端获取完整的 episode 数据（包含 script 和 shots）
       // 列表 API 返回的 episode 可能不包含 script 和 shots
@@ -538,6 +643,7 @@ const App: React.FC = () => {
         const fetched = await getEpisode(episode.id);
         if (fetched) {
           fullEpisode = fetched;
+	          selectedEpisodeIdRef.current = fullEpisode.id || episode.id || null;
           console.log(`[handleSelectEpisode] 获取完整数据成功, script长度=${fullEpisode.script?.length || 0}, shots数量=${fullEpisode.shots?.length || 0}`);
         } else {
           console.warn(`[handleSelectEpisode] 无法获取完整数据，使用列表数据`);
@@ -567,6 +673,10 @@ const App: React.FC = () => {
 	        } else {
 	          setHqUrls([]);
 	        }
+
+		        // 🆕 自动恢复“未应用到分镜表”的九宫格生图任务（依赖 shots.storyboardGridGenerationMeta）
+		        // 说明：不影响步骤跳转逻辑，仅恢复绘制步骤的临时预览 hqUrls。
+		        void resumeNineGridTasksFromShots(fullEpisode.id, fullEpisode.shots, resumeToken);
 	      } else {
         setShots([]);
         setHqUrls([]);
@@ -649,6 +759,11 @@ const App: React.FC = () => {
 	        } else {
 	          setHqUrls([]);
 	        }
+
+		        // 🆕 fallback 情况下也尝试自动恢复（若 episode.id 存在）
+		        selectedEpisodeIdRef.current = episode.id || null;
+		        const resumeToken = ++nineGridResumeTokenRef.current;
+		        void resumeNineGridTasksFromShots(episode.id, episode.shots, resumeToken);
       } else {
         setShots([]);
         setHqUrls([]);
@@ -684,15 +799,22 @@ const App: React.FC = () => {
   };
 
   // 🆕 更新项目
-  const handleUpdateProject = async (updatedProject: Project) => {
-    await saveProject(updatedProject);
-    const allProjects = await getAllProjects();
-    setProjects(allProjects);
+  // - persist=false：仅更新前端状态（用于局部 PATCH 后避免重复全量保存）
+  const handleUpdateProject = async (
+    updatedProject: Project,
+    options?: { persist?: boolean }
+  ) => {
     setCurrentProject(updatedProject);
     // 同步角色库（安全检查）
     if (updatedProject.characters && updatedProject.characters.length > 0) {
       setCharacterRefs(updatedProject.characters);
     }
+
+    if (options?.persist === false) return;
+
+    await saveProject(updatedProject);
+    const allProjects = await getAllProjects();
+    setProjects(allProjects);
   };
 
   // 🆕 启动重新分析项目（切换到配置界面）
@@ -2140,10 +2262,17 @@ const App: React.FC = () => {
     setProgressMsg(`正在重新生成第 ${gridIndex + 1} 张九宫格...`);
 
     try {
+      // 🆕 单格重绘：任务创建后立即持久化 taskCode，便于断网/刷新后自动恢复
       // 获取美术风格
       const artStyle = currentProject
         ? detectArtStyleType(currentProject.settings.genre, currentProject.settings.visualStyle)
         : undefined;
+
+      // 🆕 获取 episodeId，用于持久化九宫格任务 taskCode
+      const currentEpisode = currentProject?.episodes?.find(
+        ep => ep.episodeNumber === currentEpisodeNumber
+      );
+      const episodeId = currentEpisode?.id;
 
       // 调用单独生成函数
       const { generateSingleGrid } = await import('./services/openrouter');
@@ -2155,7 +2284,38 @@ const App: React.FC = () => {
         selectedStyle,
         currentEpisodeNumber || undefined,
         currentProject?.scenes || [],
-        artStyle
+	        artStyle,
+	        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
+	        async (taskCode) => {
+	          if (!episodeId) {
+	            console.warn('[NineGrid] 未找到 episodeId，跳过 taskCode 持久化');
+	            return;
+	          }
+
+	          const taskCreatedAt = new Date().toISOString();
+	          const GRID_SIZE = 9;
+	          const startIdx = gridIndex * GRID_SIZE;
+	          setShots(prev => {
+	            if (startIdx < 0 || startIdx >= prev.length) return prev;
+	            // 约定：将 meta 写在该 grid 的第一个 shot 上即可（恢复逻辑按 gridIndex 聚合）
+	            const next = prev.map((s, idx) => {
+	              if (idx !== startIdx) return s;
+	              return {
+	                ...s,
+	                storyboardGridGenerationMeta: {
+	                  taskCode,
+	                  taskCreatedAt,
+	                  gridIndex,
+	                },
+	              };
+	            });
+
+	            void patchEpisode(episodeId, { shots: next }).catch(err => {
+	              console.error('[D1存储] 九宫格 taskCode 持久化失败', err);
+	            });
+	            return next;
+	          });
+	        }
       );
 
       if (imageUrl) {
@@ -2191,6 +2351,11 @@ const App: React.FC = () => {
       const artStyle = currentProject
         ? detectArtStyleType(currentProject.settings.genre, currentProject.settings.visualStyle)
         : undefined;
+
+	      const currentEpisode = currentProject?.episodes?.find(
+	        ep => ep.episodeNumber === currentEpisodeNumber
+	      );
+	      const episodeId = currentEpisode?.id;
       const results = await generateMergedStoryboardSheet(
         shots,
         characterRefs,
@@ -2209,6 +2374,34 @@ const App: React.FC = () => {
             return newUrls;
           });
         },
+	        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
+	        async (taskCode, gridIndex) => {
+	          if (!episodeId) {
+	            console.warn('[NineGrid] 未找到 episodeId，跳过 taskCode 持久化');
+	            return;
+	          }
+	          const taskCreatedAt = new Date().toISOString();
+	          const GRID_SIZE = 9;
+	          const startIdx = gridIndex * GRID_SIZE;
+	          setShots(prev => {
+	            if (startIdx < 0 || startIdx >= prev.length) return prev;
+	            const next = prev.map((s, idx) => {
+	              if (idx !== startIdx) return s;
+	              return {
+	                ...s,
+	                storyboardGridGenerationMeta: {
+	                  taskCode,
+	                  taskCreatedAt,
+	                  gridIndex,
+	                },
+	              };
+	            });
+	            void patchEpisode(episodeId, { shots: next }).catch(err => {
+	              console.error('[D1存储] 九宫格 taskCode 持久化失败', err);
+	            });
+	            return next;
+	          });
+	        },
         currentEpisodeNumber || undefined,  // 🆕 传入当前集数
         currentProject?.scenes || [],       // 🆕 传入场景库
         artStyle                            // 🆕 传入美术风格类型
@@ -2253,6 +2446,8 @@ const App: React.FC = () => {
 	      ...shot,
 	      storyboardGridUrl: gridUrl,
 	      storyboardGridCellIndex: cellIndex,
+		      // 🧹 清理九宫格生成任务元信息（已应用到 storyboardGridUrl，无需继续保留 taskCode）
+		      storyboardGridGenerationMeta: undefined,
 	    };
 	  });
 
@@ -2275,12 +2470,20 @@ const App: React.FC = () => {
 	  setIsLoading(true);
 	  setProgressMsg('正在将九宫格草图应用到分镜表并保存到云端...');
 	  try {
-	    await saveEpisode(currentProject.id, {
-	      ...currentEpisode,
-	      script: script || '',
-	      shots: updatedShots,
-	      updatedAt: new Date().toISOString(),
-	    });
+		    if (currentEpisode.id) {
+		      await patchEpisode(currentEpisode.id, {
+		        script: script || '',
+		        shots: updatedShots,
+		      });
+		    } else {
+		      // fallback：缺少 episodeId 时使用 saveEpisode（兼容旧数据/异常情况）
+		      await saveEpisode(currentProject.id, {
+		        ...currentEpisode,
+		        script: script || '',
+		        shots: updatedShots,
+		        updatedAt: new Date().toISOString(),
+		      });
+		    }
 	    setProgressMsg('✅ 九宫格草图已应用到分镜表，并已保存到云端。');
 	  } catch (error) {
 	    console.error('[D1存储] 保存九宫格草图映射失败:', error);

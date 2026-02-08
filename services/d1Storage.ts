@@ -130,8 +130,15 @@ export async function getProject(projectId: string): Promise<Project | null> {
  * 保存项目（UPSERT 模式）
  * 🔧 直接使用 POST（后端已实现 UPSERT），不再先调用 getProject
  *    避免 getProject 超时返回 null 导致重复创建项目
+ *
+ * ⚠️ 性能优化：默认不再自动保存所有 episodes。
+ * - includeEpisodes=false（默认）：仅保存 projects 表字段
+ * - includeEpisodes=true：额外保存 episodes 表（仅用于创建/导入/迁移等场景）
  */
-export async function saveProject(project: Project): Promise<void> {
+export async function saveProject(
+  project: Project,
+  options?: { includeEpisodes?: boolean }
+): Promise<void> {
   // 🔧 直接 POST，后端会自动判断是 INSERT 还是 UPDATE
   await apiRequest('/api/projects', {
     method: 'POST',
@@ -149,8 +156,14 @@ export async function saveProject(project: Project): Promise<void> {
 
   console.log(`[D1存储] 项目保存成功: ${project.name}`);
 
-  // 🔧 同时保存所有剧集到 episodes 表
-  if (project.episodes && Array.isArray(project.episodes) && project.episodes.length > 0) {
+  // 🔧 可选：同时保存所有剧集到 episodes 表
+  // 说明：避免“改一个小字段就重写全部 episodes”的高成本行为。
+  if (
+    options?.includeEpisodes === true &&
+    project.episodes &&
+    Array.isArray(project.episodes) &&
+    project.episodes.length > 0
+  ) {
     console.log(`[D1存储] 开始保存 ${project.episodes.length} 个剧集...`);
 
     // 并行保存所有剧集（提升性能）
@@ -160,6 +173,30 @@ export async function saveProject(project: Project): Promise<void> {
 
     console.log(`[D1存储] ${project.episodes.length} 个剧集保存成功`);
   }
+}
+
+/**
+ * 项目局部更新（PATCH）
+ * 仅更新 body 中出现的字段，避免全量传输。
+ */
+export async function patchProject(
+  projectId: string,
+  patch: Partial<{
+    name: Project['name'];
+    settings: Project['settings'];
+    characters: Project['characters'];
+    scenes: Project['scenes'];
+    volumes: Project['volumes'];
+    antagonists: Project['antagonists'];
+    storyOutline: Project['storyOutline'];
+  }>
+): Promise<void> {
+  await apiRequest(`/api/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+
+  console.log(`[D1存储] 项目局部更新成功: ${projectId} (${Object.keys(patch || {}).join(', ')})`);
 }
 
 /**
@@ -248,6 +285,30 @@ export async function saveEpisode(projectId: string, episode: Episode): Promise<
 }
 
 /**
+ * 剧集局部更新（PATCH）
+ * 仅更新 body 中出现的字段，避免全量传输。
+ *
+ * 依赖：后端需提供 PATCH /api/episodes/:id
+ */
+export async function patchEpisode(
+	episodeId: string,
+	patch: Partial<{
+		title: Episode['title'];
+		script: Episode['script'];
+		cleaningResult: Episode['cleaningResult'];
+		shots: Episode['shots'];
+		status: Episode['status'];
+	}>
+): Promise<void> {
+	await apiRequest(`/api/episodes/${episodeId}`, {
+		method: 'PATCH',
+		body: JSON.stringify(patch),
+	});
+
+	console.log(`[D1存储] 剧集局部更新成功: ${episodeId} (${Object.keys(patch || {}).join(', ')})`);
+}
+
+/**
  * 更新剧集
  */
 export async function updateEpisode(projectId: string, episode: Episode): Promise<void> {
@@ -313,7 +374,8 @@ export async function migrateFromLocalStorage(): Promise<{
     // 逐个迁移项目
     for (const project of projects) {
       try {
-        await saveProject(project);
+        // 迁移时需要把 episodes 一起落库
+        await saveProject(project, { includeEpisodes: true });
         migratedProjects++;
       } catch (error) {
         errors.push(`项目 "${project.name}" 迁移失败: ${error}`);
@@ -368,7 +430,8 @@ export async function importProjectFromFile(file: File): Promise<Project> {
     ep.id = `ep-${Date.now()}-${i}`;
   });
 
-  await saveProject(project);
+  // 导入时需要把 episodes 一起落库
+  await saveProject(project, { includeEpisodes: true });
   return project;
 }
 
