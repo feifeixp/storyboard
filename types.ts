@@ -107,66 +107,104 @@ export interface StoryboardStyle {
 // 分镜风格预览图 - 使用真实的分镜效果示例图
 // 这些图片展示了对应风格的实际分镜效果
 export const STORYBOARD_STYLES: StoryboardStyle[] = [
+  // ========== 🆕 12种专业风格（与角色/场景生成统一） ==========
   {
-    id: 'rough_sketch',
-    name: '粗略线稿',
-    description: '最快出图，极简黑白线条',
-    promptSuffix: 'rough pencil sketch, quick gesture drawing, minimal lines, black and white, no shading, storyboard style',
-    promptSuffixCn: '粗略铅笔线稿，快速动态草图，极简线条，黑白，无阴影，分镜风格',
-    previewColor: '#374151',
-    // 粗略分镜线稿风格
-    previewImage: 'https://cdn.dribbble.com/users/1355613/screenshots/15132259/media/63b7c4dd9c9e095c9b9ff57f13e5a7a5.jpg?resize=400x300'
-  },
-  {
-    id: 'pencil_draft',
-    name: '铅笔草图',
-    description: '传统铅笔质感，适度阴影',
-    promptSuffix: 'pencil sketch, graphite drawing, light hatching, grayscale, rough texture, film storyboard',
-    promptSuffixCn: '铅笔素描，石墨画，轻微排线，灰度，粗糙质感，电影分镜',
-    previewColor: '#6b7280',
-    // 铅笔素描分镜风格
-    previewImage: 'https://cdn.dribbble.com/users/1355613/screenshots/10879952/media/b2be3c3e2f22d2f7b4d0d1f5e0d0c5b5.jpg?resize=400x300'
+    id: '3d_anime_xianxia',
+    name: '3D国潮动漫',
+    description: '修真漫剧、皮克斯风格动画、现代国潮广告',
+    promptSuffix: '3D animation style, Pixar style, modern oriental aesthetics, Cinema 4D render, Octane render, subsurface scattering (SSS), soft studio lighting, clean textures, flowing simulation, masterpiece, 8k',
+    promptSuffixCn: '3D动画风格，皮克斯风格，现代东方美学，C4D渲染，OC渲染，次表面散射(SSS)材质，柔和影棚光，干净的纹理，流体模拟，杰作',
+    previewColor: '#f59e0b',
   },
   {
     id: 'ink_wash',
-    name: '水墨速写',
-    description: '东方水墨风格，写意笔触',
-    promptSuffix: 'ink wash painting, sumi-e style, brush strokes, black ink on white, minimal detail, zen aesthetic',
-    promptSuffixCn: '水墨画，写意风格，毛笔笔触，黑墨白底，极简细节，禅意美学',
+    name: '水墨写意',
+    description: '传统文化、高意境修真、回忆片段',
+    promptSuffix: 'Traditional Chinese ink wash painting style, watercolor, splashing ink, wet and dry brushstrokes, negative space (liubai), rice paper texture, black and white with subtle colors, abstract, zen atmosphere',
+    promptSuffixCn: '中国传统水墨画风格，水彩，泼墨，干湿笔触，留白，宣纸纹理，黑白略带淡彩，写意抽象，禅意氛围',
+    previewColor: '#6b7280',
+  },
+  {
+    id: 'anime_cel_shading',
+    name: '日式赛璐璐',
+    description: '青春校园、热血战斗、二次元短视频',
+    promptSuffix: 'Japanese anime style, cel shading, Makoto Shinkai style, vibrant and fresh colors, clean black outlines, hard-edge shadows, lens flare, highly detailed background, aesthetic, 2D animation',
+    promptSuffixCn: '日式动画风格，赛璐璐上色，新海诚风格，鲜艳清新的色彩，清晰的黑色轮廓线，硬边阴影，镜头光晕，高细节背景，唯美，2D动画',
+    previewColor: '#ec4899',
+  },
+  {
+    id: 'cinematic_photorealism',
+    name: '电影超写实',
+    description: '悬疑剧、高端商业广告、影视解说',
+    promptSuffix: 'Cinematic photography style, photorealistic, shot on Arri Alexa, 8k resolution, depth of field, film grain, dramatic lighting, detailed skin texture, ray tracing, hyper-realistic',
+    promptSuffixCn: '电影级摄影风格，照片级写实，阿莱Alexa拍摄，8k分辨率，景深，电影胶片颗粒，戏剧性布光，真实的皮肤纹理，光线追踪，超写实',
     previewColor: '#1f2937',
-    // 水墨画风格
-    previewImage: 'https://cdn.dribbble.com/users/2367469/screenshots/14835012/media/d5c4a5f0f5e5c5d5e5f5f5e5d5c5b5a5.png?resize=400x300'
   },
   {
-    id: 'comic_bw',
-    name: '漫画线稿',
-    description: '清晰线条，漫画分镜感',
-    promptSuffix: 'manga storyboard, clean black ink lines, comic panel style, high contrast, no screentone, professional manga draft',
-    promptSuffixCn: '漫画分镜，清晰黑色线条，漫画格风格，高对比度，无网点，专业漫画草稿',
-    previewColor: '#111827',
-    // 漫画分镜风格
-    previewImage: 'https://cdn.dribbble.com/users/1355613/screenshots/14102489/media/a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7.jpg?resize=400x300'
+    id: '3d_clay_popmart',
+    name: '3D 黏土/盲盒',
+    description: '趣味搞笑、IP营销、轻松科普',
+    promptSuffix: '3D Pop Mart toy style, blind box aesthetic, clay material, smooth vinyl texture, rounded edges, pastel colors, soft volumetric lighting, cute, chibi proportions, clean background, 3D icon',
+    promptSuffixCn: '3D泡泡玛特玩具风格，盲盒美学，黏土材质，光滑的软胶质感，圆润的边缘，糖果色，柔和体积光，可爱，Q版比例，干净背景，3D图标',
+    previewColor: '#fbbf24',
   },
   {
-    id: 'charcoal',
-    name: '炭笔速写',
-    description: '粗犷炭笔，强烈明暗',
-    promptSuffix: 'charcoal drawing, expressive strokes, dramatic lighting, smudged edges, rough artistic sketch',
-    promptSuffixCn: '炭笔画，表现性笔触，戏剧性光影，模糊边缘，粗犷艺术速写',
-    previewColor: '#4b5563',
-    // 炭笔画风格
-    previewImage: 'https://cdn.dribbble.com/users/1626229/screenshots/9621626/media/c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5.jpg?resize=400x300'
+    id: 'digital_impasto',
+    name: '数字艺术厚涂',
+    description: '史诗战争、游戏转场、概念设计',
+    promptSuffix: 'Digital concept art, impasto oil painting style, thick visible brushstrokes, palette knife texture, speedpaint look, blocky shapes, rich and deep colors, artistic lighting, trending on ArtStation',
+    promptSuffixCn: '数字概念艺术，厚涂油画风格，清晰厚重的笔触，油画刀纹理，快速绘画质感，块面结构，丰富深沉的色彩，艺术光影，ArtStation流行风格',
+    previewColor: '#7c3aed',
   },
   {
-    id: 'blueprint',
-    name: '蓝图风格',
-    description: '技术图纸感，适合科幻',
-    promptSuffix: 'blueprint style, technical drawing, white lines on dark blue, schematic, engineering diagram aesthetic',
-    promptSuffixCn: '蓝图风格，技术图纸，深蓝底白线，示意图，工程图纸美学',
-    previewColor: '#1e3a5f',
-    // 蓝图技术风格
-    previewImage: 'https://cdn.dribbble.com/users/2367469/screenshots/11234567/media/b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5.png?resize=400x300'
-  }
+    id: 'american_comic',
+    name: '美式漫画',
+    description: '超级英雄题材、夸张喜剧、快节奏广告',
+    promptSuffix: 'Vintage American comic book style, halftone dot texture, bold black outlines, flat saturated colors, pop art, dynamic contrast, comic illustration, retro aesthetic',
+    promptSuffixCn: '复古美式漫画风格，半调网点纹理，粗黑轮廓线，高饱和度平涂色彩，波普艺术，动态对比，漫画插图，复古美学',
+    previewColor: '#dc2626',
+  },
+  {
+    id: 'low_poly',
+    name: '低多边形',
+    description: '极简设计、科技感视频、独立游戏风格',
+    promptSuffix: 'Low poly art style, faceted geometry, triangular mesh, sharp edges, no smooth curves, minimalist, flat shading, vivid colors, abstract 3D art, digital aesthetic',
+    promptSuffixCn: '低多边形艺术风格，面片几何，三角形网格，锐利边缘，无平滑曲线，极简主义，平面着色，生动色彩，抽象3D艺术，数字美学',
+    previewColor: '#06b6d4',
+  },
+  {
+    id: 'pixel_art',
+    name: '像素艺术',
+    description: '复古游戏怀旧、电子风格、故障艺术',
+    promptSuffix: 'Pixel art style, 16-bit retro game aesthetic, visible pixels, jagged edges, limited color palette, dithering, sprite art, nostalgic, digital arcade style',
+    promptSuffixCn: '像素艺术风格，16位复古游戏美学，清晰像素点，锯齿边缘，有限色板，抖动算法，精灵图艺术，怀旧，电子街机风格',
+    previewColor: '#8b5cf6',
+  },
+  {
+    id: '2d_chibi_cartoon',
+    name: '2D Q版卡通',
+    description: '贴纸表情包、儿童内容、轻松叙事',
+    promptSuffix: '2D vector illustration, flat chibi cartoon style, thick outlines, sticker art, bright solid colors, simple shapes, cute and exaggerated, white border, vector graphics',
+    promptSuffixCn: '2D矢量插画，扁平Q版卡通风格，粗轮廓线，贴纸艺术，明亮的纯色，简单图形，可爱夸张，白边，矢量图形',
+    previewColor: '#f472b6',
+  },
+  {
+    id: 'film_noir',
+    name: '黑白电影',
+    description: '侦探推理、复古回忆、情绪片',
+    promptSuffix: 'Black and white Film Noir style, vintage photography, high contrast, chiaroscuro lighting, heavy film grain, dramatic shadows, mysterious atmosphere, 1940s cinema look',
+    promptSuffixCn: '黑白黑色电影风格，复古摄影，高对比度，明暗对照法布光，重度胶片颗粒，戏剧性阴影，神秘氛围，1940年代电影质感',
+    previewColor: '#374151',
+  },
+  {
+    id: 'hand_drawn_sketch',
+    name: '手绘线稿',
+    description: '创意手绘视频、设计草图、极简叙事',
+    promptSuffix: 'Hand-drawn sketch style, pencil drawing, graphite lines, rough hatching, monochrome, white paper background, unfinished art look, minimalist line art',
+    promptSuffixCn: '手绘素描风格，铅笔画，石墨线条，粗糙排线，单色，白纸背景，未完成的艺术感，极简线稿',
+    previewColor: '#9ca3af',
+  },
+
 ];
 
 // 创建自定义风格

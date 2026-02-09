@@ -290,6 +290,60 @@ export async function saveEpisode(projectId: string, episode: Episode): Promise<
  *
  * 依赖：后端需提供 PATCH /api/episodes/:id
  */
+/**
+ * 🔧 优化 shots 数据，移除不必要的字段以减少传输量
+ * 仅在保存到云端时使用，不影响本地数据
+ */
+function optimizeShotsForTransfer(shots: any[]): any[] {
+	return shots.map(shot => {
+		// 保留核心字段，移除冗余字段
+		const optimized: any = {
+			id: shot.id,
+			shotNumber: shot.shotNumber,
+			duration: shot.duration,
+			shotType: shot.shotType,
+			sceneId: shot.sceneId,
+			videoMode: shot.videoMode,
+			storyBeat: shot.storyBeat,
+			dialogue: shot.dialogue,
+			shotSize: shot.shotSize,
+			angleDirection: shot.angleDirection,
+			angleHeight: shot.angleHeight,
+			dutchAngle: shot.dutchAngle,
+			foreground: shot.foreground,
+			midground: shot.midground,
+			background: shot.background,
+			lighting: shot.lighting,
+			cameraMove: shot.cameraMove,
+			cameraMoveDetail: shot.cameraMoveDetail,
+			motionPath: shot.motionPath,
+			// 🔧 九宫格相关字段（必须保留）
+			storyboardGridUrl: shot.storyboardGridUrl,
+			storyboardGridCellIndex: shot.storyboardGridCellIndex,
+			storyboardGridGenerationMeta: shot.storyboardGridGenerationMeta,
+			status: shot.status,
+		};
+
+		// 🔧 可选字段：仅在有值时保留
+		if (shot.startFrame) optimized.startFrame = shot.startFrame;
+		if (shot.endFrame) optimized.endFrame = shot.endFrame;
+		if (shot.theory) optimized.theory = shot.theory;
+		if (shot.directorNote) optimized.directorNote = shot.directorNote;
+		if (shot.technicalNote) optimized.technicalNote = shot.technicalNote;
+		if (shot.assignedCharacterIds) optimized.assignedCharacterIds = shot.assignedCharacterIds;
+		if (shot.startFrameUrl) optimized.startFrameUrl = shot.startFrameUrl;
+		if (shot.endFrameUrl) optimized.endFrameUrl = shot.endFrameUrl;
+
+		// 🔧 提示词字段：仅保留必要的（减少数据量）
+		// 注意：promptCn/promptEn 通常很长，如果不需要在云端查看，可以不保存
+		// 这里保留 imagePromptEn（用于生图），其他提示词可选
+		if (shot.imagePromptEn) optimized.imagePromptEn = shot.imagePromptEn;
+		if (shot.videoPromptCn) optimized.videoPromptCn = shot.videoPromptCn;
+
+		return optimized;
+	});
+}
+
 export async function patchEpisode(
 	episodeId: string,
 	patch: Partial<{
@@ -300,10 +354,32 @@ export async function patchEpisode(
 		status: Episode['status'];
 	}>
 ): Promise<void> {
+	// 🔧 如果包含 shots 数组，使用更长的超时时间（60秒）和更多重试次数
+	const hasShots = patch.shots && patch.shots.length > 0;
+	const timeout = hasShots ? 60000 : 30000;  // shots 数据量大，需要更长超时
+	const retries = hasShots ? 5 : 3;  // shots 更容易失败，增加重试次数
+
+	// 🔧 优化 shots 数据（减少传输量）
+	let optimizedPatch = { ...patch };
+	if (hasShots) {
+		const originalSize = JSON.stringify(patch.shots).length;
+		optimizedPatch.shots = optimizeShotsForTransfer(patch.shots!);
+		const optimizedSize = JSON.stringify(optimizedPatch.shots).length;
+		const reduction = ((1 - optimizedSize / originalSize) * 100).toFixed(1);
+
+		console.log(`[D1存储] 准备更新 ${patch.shots!.length} 个镜头`);
+		console.log(`[D1存储] 数据优化: ${(originalSize / 1024).toFixed(2)} KB → ${(optimizedSize / 1024).toFixed(2)} KB (减少 ${reduction}%)`);
+		console.log(`[D1存储] 超时时间: ${timeout}ms，重试次数: ${retries}`);
+
+		if (optimizedSize > 90 * 1024) {
+			console.warn(`[D1存储] ⚠️ 优化后数据仍然较大 (${(optimizedSize / 1024).toFixed(2)} KB)，可能导致请求失败`);
+		}
+	}
+
 	await apiRequest(`/api/episodes/${episodeId}`, {
 		method: 'PATCH',
-		body: JSON.stringify(patch),
-	});
+		body: JSON.stringify(optimizedPatch),
+	}, retries, timeout);
 
 	console.log(`[D1存储] 剧集局部更新成功: ${episodeId} (${Object.keys(patch || {}).join(', ')})`);
 }

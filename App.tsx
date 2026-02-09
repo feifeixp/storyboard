@@ -2315,7 +2315,8 @@ const App: React.FC = () => {
 	            });
 	            return next;
 	          });
-	        }
+	        },
+        currentProject?.id  // 🆕 传入项目 ID，用于上传到 OSS
       );
 
       if (imageUrl) {
@@ -2338,11 +2339,26 @@ const App: React.FC = () => {
     }
   };
 
+  // 🆕 九宫格生成控制器（用于停止生成）
+  const [abortController, setAbortController] = React.useState<AbortController | null>(null);
+
+  // 🆕 九宫格生成时间跟踪
+  const [gridGenerationStartTime, setGridGenerationStartTime] = React.useState<number | null>(null);
+  const [currentGeneratingGrid, setCurrentGeneratingGrid] = React.useState<number | null>(null);
+
   const generateHQ = async () => {
     setIsLoading(true);
     setHqUrls([]);
     const totalGrids = Math.ceil(shots.length / 9);
     setProgressMsg(`正在使用「${selectedStyle.name}」风格绘制 ${totalGrids} 张九宫格...`);
+
+    // 🆕 创建 AbortController
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    // 🆕 重置生成时间跟踪
+    setGridGenerationStartTime(Date.now());
+    setCurrentGeneratingGrid(0);
 
     try {
       // 使用选中的图像模型和风格生成分镜图
@@ -2365,6 +2381,9 @@ const App: React.FC = () => {
         // 进度回调
         (current, total, info) => {
           setProgressMsg(`正在生成 ${info} (${current}/${total}) - ${selectedStyle.name}`);
+          // 🆕 更新当前生成的九宫格索引
+          setCurrentGeneratingGrid(current - 1);
+          setGridGenerationStartTime(Date.now());
         },
         // 单张完成回调 - 生成一张显示一张
         (gridIndex, imageUrl) => {
@@ -2373,6 +2392,8 @@ const App: React.FC = () => {
             newUrls[gridIndex] = imageUrl;
             return newUrls;
           });
+          // 🆕 完成后重置当前生成索引
+          setCurrentGeneratingGrid(null);
         },
 	        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
 	        async (taskCode, gridIndex) => {
@@ -2404,23 +2425,65 @@ const App: React.FC = () => {
 	        },
         currentEpisodeNumber || undefined,  // 🆕 传入当前集数
         currentProject?.scenes || [],       // 🆕 传入场景库
-        artStyle                            // 🆕 传入美术风格类型
+        artStyle,                           // 🆕 传入美术风格类型
+        currentProject?.id,                 // 🆕 传入项目 ID，用于上传到 OSS
+        controller.signal                   // 🆕 传入取消信号
       );
-      // 确保最终结果完整（处理失败的情况）
-      setHqUrls(results);
-      const successCount = results.filter(r => r).length;
-      if (successCount === totalGrids) {
-        setProgressMsg(`✅ 九宫格生成完成！共 ${totalGrids} 张`);
+
+      // 🆕 检查是否被用户停止
+      if (controller.signal.aborted) {
+        const successCount = results.filter(r => r).length;
+        setProgressMsg(`⏸️ 生成已停止：${successCount}/${totalGrids} 张已完成`);
+        setHqUrls(results);
       } else {
-        setProgressMsg(`⚠️ 生成完成：${successCount}/${totalGrids} 张成功`);
+        // 确保最终结果完整（处理失败的情况）
+        setHqUrls(results);
+        const successCount = results.filter(r => r).length;
+        if (successCount === totalGrids) {
+          setProgressMsg(`✅ 九宫格生成完成！共 ${totalGrids} 张`);
+        } else {
+          setProgressMsg(`⚠️ 生成完成：${successCount}/${totalGrids} 张成功`);
+        }
       }
     } catch (err) {
       console.error(err);
-      alert("渲染失败: " + (err instanceof Error ? err.message : String(err)));
+      if (err instanceof Error && err.name === 'AbortError') {
+        setProgressMsg('⏸️ 生成已被用户停止');
+      } else {
+        alert("渲染失败: " + (err instanceof Error ? err.message : String(err)));
+      }
     } finally {
       setIsLoading(false);
+      setAbortController(null);
+      setGridGenerationStartTime(null);
+      setCurrentGeneratingGrid(null);
     }
   };
+
+  // 🆕 停止九宫格生成
+  const stopGeneration = () => {
+    if (abortController) {
+      abortController.abort();
+      console.log('[九宫格] 用户请求停止生成');
+    }
+  };
+
+  // 🆕 计算当前九宫格生成耗时
+  const [generationElapsedTime, setGenerationElapsedTime] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    if (!gridGenerationStartTime || currentGeneratingGrid === null) {
+      setGenerationElapsedTime(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - gridGenerationStartTime) / 1000);
+      setGenerationElapsedTime(elapsed);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [gridGenerationStartTime, currentGeneratingGrid]);
 
 	/**
 	 * 🎨 B1：将“九宫格图片URL”按序映射到每个镜头（虚拟切割，不生成独立小图文件）
@@ -2471,12 +2534,13 @@ const App: React.FC = () => {
 	  setProgressMsg('正在将九宫格草图应用到分镜表并保存到云端...');
 	  try {
 		    if (currentEpisode.id) {
+		      // 🔧 保存到云端（patchEpisode 内部会自动优化数据）
 		      await patchEpisode(currentEpisode.id, {
-		        script: script || '',
 		        shots: updatedShots,
 		      });
 		    } else {
 		      // fallback：缺少 episodeId 时使用 saveEpisode（兼容旧数据/异常情况）
+		      console.warn('[D1存储] 未找到 episodeId，使用 saveEpisode fallback');
 		      await saveEpisode(currentProject.id, {
 		        ...currentEpisode,
 		        script: script || '',
@@ -2487,7 +2551,20 @@ const App: React.FC = () => {
 	    setProgressMsg('✅ 九宫格草图已应用到分镜表，并已保存到云端。');
 	  } catch (error) {
 	    console.error('[D1存储] 保存九宫格草图映射失败:', error);
-	    alert('❌ 已应用到本地分镜表，但保存到云端失败，请稍后重试。');
+
+	    // 🔧 提供更详细的错误信息
+	    let errorMsg = '❌ 已应用到本地分镜表，但保存到云端失败。';
+	    if (error instanceof Error) {
+	      if (error.message.includes('Load failed') || error.message.includes('Failed to fetch')) {
+	        errorMsg += '\n\n可能原因：\n1. 网络连接问题\n2. 数据量过大（已自动优化，如仍失败请减少镜头数量）\n3. API 服务暂时不可用\n\n请查看浏览器控制台了解详细信息。';
+	      } else if (error.message.includes('timeout')) {
+	        errorMsg += '\n\n原因：请求超时（已延长至60秒），请检查网络连接。';
+	      } else {
+	        errorMsg += `\n\n错误详情：${error.message}`;
+	      }
+	    }
+
+	    alert(errorMsg);
 	  } finally {
 	    setIsLoading(false);
 	  }
@@ -4741,6 +4818,17 @@ const App: React.FC = () => {
                   )}
                 </button>
 
+                {/* 🆕 停止生成按钮 */}
+                {isLoading && abortController && (
+                  <button
+                    onClick={stopGeneration}
+                    className="px-6 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-all text-sm flex items-center gap-2 shadow-lg"
+                    title="停止当前生成任务，保留已完成的九宫格"
+                  >
+                    ⏸️ 停止生成
+                  </button>
+                )}
+
                 {/* 应用到分镜表（从结果区移到顶部） */}
                 <button
                   onClick={applyGridsToShots}
@@ -4873,6 +4961,17 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex-1">
                       <p className="text-base font-bold text-blue-300">{progressMsg}</p>
+                      {/* 🆕 显示当前九宫格生成耗时 */}
+                      {currentGeneratingGrid !== null && generationElapsedTime > 0 && (
+                        <p className="text-xs text-blue-400 mt-1">
+                          当前第 {currentGeneratingGrid + 1} 张已耗时: {Math.floor(generationElapsedTime / 60)}分{generationElapsedTime % 60}秒
+                          {generationElapsedTime > 300 && (
+                            <span className="text-orange-400 ml-2">
+                              ⚠️ 生成时间较长，如需停止请点击"停止生成"按钮
+                            </span>
+                          )}
+                        </p>
+                      )}
                       <p className="text-xs text-blue-400 mt-1">
                         🎨 正在调用 AI 模型生成 {shots.length} 个镜头的草图...
                       </p>

@@ -3290,6 +3290,52 @@ export async function* chatEditShotListStream(
 }
 
 /**
+ * 🆕 下载图片并上传到 OSS
+ * @param imageUrl Neodomain 返回的临时图片 URL
+ * @param projectId 项目 ID
+ * @param gridIndex 九宫格索引
+ * @returns OSS 永久 URL
+ */
+async function downloadAndUploadToOSS(
+  imageUrl: string,
+  projectId: string,
+  gridIndex: number
+): Promise<string> {
+  try {
+    console.log(`[OSS] 开始下载九宫格图片 #${gridIndex + 1}: ${imageUrl.substring(0, 50)}...`);
+
+    // 1. 下载图片
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`下载图片失败: HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    console.log(`[OSS] 图片下载成功，大小: ${(blob.size / 1024).toFixed(2)} KB`);
+
+    // 2. 生成 OSS 路径
+    const { generateOSSPath } = await import('./oss');
+    const timestamp = Date.now();
+    const ossPath = `storyboard/${projectId}/nine-grid/grid_${gridIndex}_${timestamp}.jpg`;
+
+    // 3. 上传到 OSS
+    const { uploadToOSS } = await import('./oss');
+    const ossUrl = await uploadToOSS(blob, ossPath, (percent) => {
+      if (percent % 20 === 0) {  // 每20%打印一次日志
+        console.log(`[OSS] 九宫格 #${gridIndex + 1} 上传进度: ${percent}%`);
+      }
+    });
+
+    console.log(`[OSS] ✅ 九宫格 #${gridIndex + 1} 上传成功: ${ossUrl}`);
+    return ossUrl;
+  } catch (error) {
+    console.error(`[OSS] ❌ 九宫格 #${gridIndex + 1} 上传失败:`, error);
+    // 上传失败时返回原始 URL（降级方案）
+    console.warn(`[OSS] 降级使用 Neodomain 临时 URL: ${imageUrl}`);
+    return imageUrl;
+  }
+}
+
+/**
  * 🆕 使用 Neodomain API 生成单张图像
  * 替代原有的 OpenRouter 图像生成
  * 🔧 支持模型降级：nanobanana-pro → doubao-seedream-4.5
@@ -3471,6 +3517,7 @@ async function generateSingleImage(
  * 生成九宫格分镜草图 - 直接让AI生成包含9个分镜的九宫格图
  * 每张九宫格包含9个镜头（3x3布局），生成一张显示一张
  * 27个镜头 → 3张九宫格图
+ * 🆕 支持上传到 OSS（生成后自动上传，返回永久 URL）
  */
 export async function generateMergedStoryboardSheet(
   shots: Shot[],
@@ -3483,7 +3530,9 @@ export async function generateMergedStoryboardSheet(
   onTaskCreated?: (taskCode: string, gridIndex: number) => void | Promise<void>,
   episodeNumber?: number,  // 🆕 当前集数，用于匹配角色形态
   scenes?: SceneRef[],     // 🆕 场景库，用于匹配场景描述
-  artStyleType?: ArtStyleType  // 🆕 美术风格类型，用于调整提示词
+  artStyleType?: ArtStyleType,  // 🆕 美术风格类型，用于调整提示词
+  projectId?: string,  // 🆕 项目 ID，用于上传到 OSS
+  abortSignal?: AbortSignal  // 🆕 取消信号，用于停止生成
 ): Promise<string[]> {
   const styleName = style?.name || '粗略线稿';
   const styleSuffix = style?.promptSuffix || 'rough sketch, black and white, storyboard style';
@@ -3505,6 +3554,12 @@ export async function generateMergedStoryboardSheet(
 
   // 逐张生成九宫格图
   for (let gridIndex = 0; gridIndex < totalGrids; gridIndex++) {
+    // 🆕 检查是否被取消
+    if (abortSignal?.aborted) {
+      console.log(`[OpenRouter] 九宫格生成已被用户停止 (已完成 ${gridIndex}/${totalGrids} 张)`);
+      break;
+    }
+
     const startIdx = gridIndex * GRID_SIZE;
     const endIdx = Math.min(startIdx + GRID_SIZE, shots.length);
     const gridShots = shots.slice(startIdx, endIdx);
@@ -3519,24 +3574,44 @@ export async function generateMergedStoryboardSheet(
     // 🆕 构建九宫格提示词 - 传入角色信息、集数、场景信息和美术风格约束
     const gridPrompt = buildNineGridPrompt(gridShots, gridIndex + 1, totalGrids, styleSuffix, styleName, characterRefs, episodeNumber, sceneSection, artStyleSection);
 
-    // 调用AI生成九宫格图
-    // 注意：大多数图像生成模型不支持图片参考，所以角色信息以文字形式写入提示词
-    const imageUrl = await generateSingleImage(
-				gridPrompt,
-				effectiveModel,
-				[],
-				(taskCode) => onTaskCreated ? onTaskCreated(taskCode, gridIndex) : undefined
-			);
+    try {
+      // 调用AI生成九宫格图
+      // 注意：大多数图像生成模型不支持图片参考，所以角色信息以文字形式写入提示词
+      const tempImageUrl = await generateSingleImage(
+  				gridPrompt,
+  				effectiveModel,
+  				[],
+  				(taskCode) => onTaskCreated ? onTaskCreated(taskCode, gridIndex) : undefined
+  			);
 
-    if (imageUrl) {
-      results.push(imageUrl);
-      // 生成一张就回调显示一张
-      if (onGridComplete) {
-        onGridComplete(gridIndex, imageUrl);
+      if (tempImageUrl) {
+        // 🆕 上传到 OSS（如果提供了 projectId）
+        let finalImageUrl = tempImageUrl;
+        if (projectId) {
+          try {
+            console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} 开始上传到 OSS...`);
+            finalImageUrl = await downloadAndUploadToOSS(tempImageUrl, projectId, gridIndex);
+            console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} OSS URL: ${finalImageUrl}`);
+          } catch (error) {
+            console.error(`[OpenRouter] 九宫格 #${gridIndex + 1} 上传 OSS 失败，使用临时 URL:`, error);
+            // 上传失败时使用临时 URL（降级方案）
+            finalImageUrl = tempImageUrl;
+          }
+        }
+
+        results.push(finalImageUrl);
+        // 生成一张就回调显示一张
+        if (onGridComplete) {
+          onGridComplete(gridIndex, finalImageUrl);
+        }
+      } else {
+        console.warn(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成失败`);
+        // 失败时推入空字符串作为占位
+        results.push('');
       }
-    } else {
-      console.warn(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成失败`);
-      // 失败时推入空字符串作为占位
+    } catch (error) {
+      // 🆕 捕获生成错误，继续下一张
+      console.error(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成异常:`, error);
       results.push('');
     }
   }
@@ -3555,6 +3630,7 @@ export async function generateMergedStoryboardSheet(
  * @param episodeNumber 当前集数
  * @param scenes 场景库
  * @param artStyleType 美术风格类型
+ * @param projectId 项目 ID，用于上传到 OSS
  * @returns 生成的图片URL，失败返回null
  */
 export async function generateSingleGrid(
@@ -3566,7 +3642,8 @@ export async function generateSingleGrid(
   episodeNumber?: number,
   scenes?: SceneRef[],
   artStyleType?: ArtStyleType,
-	onTaskCreated?: (taskCode: string) => void | Promise<void>
+	onTaskCreated?: (taskCode: string) => void | Promise<void>,
+  projectId?: string  // 🆕 项目 ID
 ): Promise<string | null> {
   const GRID_SIZE = 9; // 每张图9个镜头 (3x3)
   const totalGrids = Math.ceil(shots.length / GRID_SIZE);
@@ -3611,11 +3688,24 @@ export async function generateSingleGrid(
   );
 
   // 调用AI生成九宫格图
-  const imageUrl = await generateSingleImage(gridPrompt, effectiveModel, [], onTaskCreated);
+  const tempImageUrl = await generateSingleImage(gridPrompt, effectiveModel, [], onTaskCreated);
 
-  if (imageUrl) {
+  if (tempImageUrl) {
+    // 🆕 上传到 OSS（如果提供了 projectId）
+    let finalImageUrl = tempImageUrl;
+    if (projectId) {
+      try {
+        console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} 开始上传到 OSS...`);
+        finalImageUrl = await downloadAndUploadToOSS(tempImageUrl, projectId, gridIndex);
+        console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} OSS URL: ${finalImageUrl}`);
+      } catch (error) {
+        console.error(`[OpenRouter] 九宫格 #${gridIndex + 1} 上传 OSS 失败，使用临时 URL:`, error);
+        finalImageUrl = tempImageUrl;
+      }
+    }
+
     console.log(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成成功`);
-    return imageUrl;
+    return finalImageUrl;
   } else {
     console.warn(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成失败`);
     return null;
