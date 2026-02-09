@@ -13,7 +13,7 @@ import { supplementSceneDetails } from '../services/sceneSupplement';
 import { extractNewScenes } from '../services/sceneExtraction';
 import AIImageModelSelector from './AIImageModelSelector';
 import { ScenarioType, generateAndUploadImage, pollAndUploadFromTask } from '../services/aiImageGeneration';
-import { patchProject } from '../services/d1Storage';
+import { patchProject, saveProject } from '../services/d1Storage';
 import mammoth from 'mammoth';
 
 interface ProjectDashboardProps {
@@ -58,6 +58,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [sceneGenProgress, setSceneGenProgress] = useState<{ stage: string; percent: number } | null>(null);
+
+  // 🆕 批量生成状态
+  const [isBatchGeneratingCharacters, setIsBatchGeneratingCharacters] = useState(false);
+  const [batchCharacterProgress, setBatchCharacterProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const [isBatchGeneratingScenes, setIsBatchGeneratingScenes] = useState(false);
+  const [batchSceneProgress, setBatchSceneProgress] = useState<{ current: number; total: number } | null>(null);
 
   // 🆕 剧集上传相关状态
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -203,9 +210,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   };
 
   // =============================
-  // 🆕 生成角色设定图（单张 16:9，通常为 2×2 四分屏：正/侧/背 + 面部特写）
+  // 🆕 生成角色设定图（单张 16:9，1×4 横向四分屏：正/侧/背 + 面部特写）
   // =============================
-  const handleGenerateCharacterImageSheet = async (characterId: string) => {
+  // skipConfirm: 批量生成时跳过确认对话框
+  const handleGenerateCharacterImageSheet = async (characterId: string, skipConfirm = false) => {
     const character = (project.characters || []).find(c => c.id === characterId);
     if (!character) return;
 
@@ -219,10 +227,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       return;
     }
 
-    const confirmGenerate = confirm(
-      `将为角色「${character.name}」生成 1 张设定图（会消耗积分）。\n\n是否继续？`
-    );
-    if (!confirmGenerate) return;
+    // 🔧 批量生成时跳过确认对话框
+    if (!skipConfirm) {
+      const confirmGenerate = confirm(
+        `将为角色「${character.name}」生成 1 张设定图（会消耗积分）。\n\n是否继续？`
+      );
+      if (!confirmGenerate) return;
+    }
 
     setGeneratingCharacterId(characterId);
     setCharacterGenProgress({ stage: '准备中', percent: 0 });
@@ -245,8 +256,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       const prompt = [
         baseInfoCn,
-        '16:9 canvas, 2x2 grid layout with 4 equal panels, edge-to-edge, clean background, consistent character, consistent outfit, consistent face.',
-        'Panels: (1) front full-body standing, (2) side profile full-body, (3) back full-body, (4) face close-up portrait.',
+        '16:9 canvas, 1x4 horizontal grid layout with 4 equal panels, edge-to-edge, clean background, consistent character, consistent outfit, consistent face.',
+        'Panels from left to right: (1) front full-body standing, (2) side profile full-body, (3) back full-body, (4) face close-up portrait.',
         'NO text, NO labels, NO numbers, NO watermark, NO logo.',
         styleSuffix,
       ].filter(Boolean).join(' ');
@@ -325,15 +336,18 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         }),
       };
 
-	      // 1) 先更新本地 UI（不触发全量保存）
-	      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
-	      // 2) 再做最小化持久化（PATCH 只更新 characters 字段）
+	      // 🔧 修复：先持久化到数据库，再更新前端状态
+	      // 这样即使用户离开页面，数据也已经保存了
 	      try {
 	        await patchProject(project.id, { characters: updatedProject.characters });
+	        console.log(`[ProjectDashboard] ✅ 角色设定图已保存到数据库: ${character.name}`);
 	      } catch (err) {
 	        console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
-	        await Promise.resolve(onUpdateProject(updatedProject));
+	        await saveProject(updatedProject);
 	      }
+
+	      // 最后更新前端状态（persist: false 避免重复保存）
+	      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
     } catch (error: any) {
       console.error('生成角色设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
@@ -341,6 +355,69 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       setGeneratingCharacterId(null);
       setCharacterGenProgress(null);
     }
+  };
+
+  // =============================
+  // 🆕 批量生成所有角色设定图
+  // =============================
+  const handleBatchGenerateCharacters = async () => {
+    const charactersToGenerate = (project.characters || []).filter(c => !c.imageSheetUrl);
+
+    if (charactersToGenerate.length === 0) {
+      alert('所有角色都已有设定图！');
+      return;
+    }
+
+    if (!characterImageModel) {
+      alert('请先选择生图模型');
+      return;
+    }
+
+    const confirmGenerate = confirm(
+      `将为 ${charactersToGenerate.length} 个角色批量生成设定图（会消耗积分）。\n\n` +
+      `角色列表：\n${charactersToGenerate.map(c => `• ${c.name}`).join('\n')}\n\n` +
+      `是否继续？`
+    );
+    if (!confirmGenerate) return;
+
+    setIsBatchGeneratingCharacters(true);
+    setBatchCharacterProgress({ current: 0, total: charactersToGenerate.length });
+
+    let successCount = 0;
+    let failCount = 0;
+    const failedCharacters: string[] = [];
+
+    for (let i = 0; i < charactersToGenerate.length; i++) {
+      const char = charactersToGenerate[i];
+      setBatchCharacterProgress({ current: i + 1, total: charactersToGenerate.length });
+
+      try {
+        // 🔧 调用单个角色生成函数，skipConfirm = true 跳过确认对话框
+        await handleGenerateCharacterImageSheet(char.id, true);
+        successCount++;
+
+        // 等待一小段时间，避免请求过快
+        if (i < charactersToGenerate.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } catch (error) {
+        console.error(`生成角色 ${char.name} 失败:`, error);
+        failCount++;
+        failedCharacters.push(char.name);
+      }
+    }
+
+    setIsBatchGeneratingCharacters(false);
+    setBatchCharacterProgress(null);
+
+    // 显示结果
+    let message = `批量生成完成！\n\n`;
+    message += `✅ 成功: ${successCount} 个\n`;
+    if (failCount > 0) {
+      message += `❌ 失败: ${failCount} 个\n\n`;
+      message += `失败的角色：\n${failedCharacters.map(name => `• ${name}`).join('\n')}`;
+    }
+    alert(message);
   };
 
   // =============================
@@ -463,15 +540,18 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         }),
       };
 
-	      // 1) 先更新本地 UI（不触发全量保存）
-	      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
-	      // 2) 再做最小化持久化（PATCH 只更新 scenes 字段）
+	      // 🔧 修复：先持久化到数据库，再更新前端状态
+	      // 这样即使用户离开页面，数据也已经保存了
 	      try {
 	        await patchProject(project.id, { scenes: updatedProject.scenes });
+	        console.log(`[ProjectDashboard] ✅ 场景设定图已保存到数据库: ${scene.name}`);
 	      } catch (err) {
 	        console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
-	        await Promise.resolve(onUpdateProject(updatedProject));
+	        await saveProject(updatedProject);
 	      }
+
+	      // 最后更新前端状态（persist: false 避免重复保存）
+	      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
     } catch (error: any) {
       console.error('生成场景设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
@@ -479,6 +559,69 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       setGeneratingSceneId(null);
       setSceneGenProgress(null);
     }
+  };
+
+  // =============================
+  // 🆕 批量生成所有场景设定图
+  // =============================
+  const handleBatchGenerateScenes = async () => {
+    const scenesToGenerate = (project.scenes || []).filter((s: SceneRef) => !s.imageSheetUrl);
+
+    if (scenesToGenerate.length === 0) {
+      alert('所有场景都已有设定图！');
+      return;
+    }
+
+    if (!sceneImageModel) {
+      alert('请先选择生图模型');
+      return;
+    }
+
+    const confirmGenerate = confirm(
+      `将为 ${scenesToGenerate.length} 个场景批量生成设定图（会消耗积分）。\n\n` +
+      `场景列表：\n${scenesToGenerate.map((s: SceneRef) => `• ${s.name}`).join('\n')}\n\n` +
+      `是否继续？`
+    );
+    if (!confirmGenerate) return;
+
+    setIsBatchGeneratingScenes(true);
+    setBatchSceneProgress({ current: 0, total: scenesToGenerate.length });
+
+    let successCount = 0;
+    let failCount = 0;
+    const failedScenes: string[] = [];
+
+    for (let i = 0; i < scenesToGenerate.length; i++) {
+      const scene = scenesToGenerate[i];
+      setBatchSceneProgress({ current: i + 1, total: scenesToGenerate.length });
+
+      try {
+        // 调用单个场景生成函数
+        await handleGenerateSceneImageSheet(scene.id);
+        successCount++;
+
+        // 等待一小段时间，避免请求过快
+        if (i < scenesToGenerate.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } catch (error) {
+        console.error(`生成场景 ${scene.name} 失败:`, error);
+        failCount++;
+        failedScenes.push(scene.name);
+      }
+    }
+
+    setIsBatchGeneratingScenes(false);
+    setBatchSceneProgress(null);
+
+    // 显示结果
+    let message = `批量生成完成！\n\n`;
+    message += `✅ 成功: ${successCount} 个\n`;
+    if (failCount > 0) {
+      message += `❌ 失败: ${failCount} 个\n\n`;
+      message += `失败的场景：\n${failedScenes.map(name => `• ${name}`).join('\n')}`;
+    }
+    alert(message);
   };
 
 	// =============================
@@ -1112,12 +1255,28 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                 ))}
               </select>
               <div className="mt-2 text-[11px] text-gray-400">
-                说明：点击角色卡的“🖼️”按钮才会生图（消耗积分）。
+                说明：点击角色卡的绿色"🎨 生成设定图"按钮才会生图（消耗积分）。
               </div>
             </div>
 
-            <div className="text-[11px] text-gray-400 leading-relaxed">
-              生成内容：单张 16:9 角色设定图（通常为 2×2 四分屏：正/侧/背 + 面部特写）。
+            <div className="flex flex-col gap-2">
+              <div className="text-[11px] text-gray-400 leading-relaxed">
+                生成内容：单张 16:9 角色设定图（通常为 2×2 四分屏：正/侧/背 + 面部特写）。
+              </div>
+
+              {/* 🆕 批量生成按钮 */}
+              <button
+                onClick={handleBatchGenerateCharacters}
+                disabled={isBatchGeneratingCharacters || !characterImageModel}
+                className={`${primaryBtnClass} w-full disabled:opacity-50 disabled:cursor-not-allowed`}
+                title="批量生成所有未生成设定图的角色"
+              >
+                {isBatchGeneratingCharacters ? (
+                  <>⏳ 批量生成中 ({batchCharacterProgress?.current}/{batchCharacterProgress?.total})</>
+                ) : (
+                  <>🎨 批量生成所有角色设定图</>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -1203,6 +1362,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             onGenerateSceneImageSheet={handleGenerateSceneImageSheet}
             generatingSceneId={generatingSceneId}
             generationProgress={sceneGenProgress}
+            onBatchGenerateScenes={handleBatchGenerateScenes}
+            isBatchGeneratingScenes={isBatchGeneratingScenes}
+            batchSceneProgress={batchSceneProgress}
           />
         )}
         {/* 🔧 移除独立的 episodes tab，已合并到 overview */}
@@ -1308,10 +1470,10 @@ const CharacterCard: React.FC<{
               onGenerateImage();
             }}
             disabled={!!isGenerating}
-            className="text-gray-500 hover:text-emerald-400 disabled:text-gray-600 disabled:cursor-not-allowed text-xs px-1"
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-medium disabled:cursor-not-allowed transition-colors"
             title={character.imageSheetUrl ? '重新生成角色设定图' : '生成角色设定图'}
           >
-            {isGenerating ? '⏳' : '🖼️'}
+            {isGenerating ? '⏳ 生成中...' : (character.imageSheetUrl ? '� 重新生成' : '🎨 生成设定图')}
           </button>
         )}
 
@@ -1455,6 +1617,9 @@ const ScenesTab: React.FC<{
   onGenerateSceneImageSheet: (sceneId: string) => void;
   generatingSceneId: string | null;
   generationProgress: { stage: string; percent: number } | null;
+  onBatchGenerateScenes?: () => void;
+  isBatchGeneratingScenes?: boolean;
+  batchSceneProgress?: { current: number; total: number } | null;
 }> = ({
   project,
   onEditScene,
@@ -1471,6 +1636,9 @@ const ScenesTab: React.FC<{
   onGenerateSceneImageSheet,
   generatingSceneId,
   generationProgress,
+  onBatchGenerateScenes,
+  isBatchGeneratingScenes,
+  batchSceneProgress,
 }) => {
   const [expandedScene, setExpandedScene] = React.useState<string | null>(null);
 
@@ -1526,12 +1694,30 @@ const ScenesTab: React.FC<{
               ))}
             </select>
             <div className="mt-2 text-[11px] text-gray-400">
-              说明：点击场景卡的“🖼️”按钮才会生图（消耗积分）。
+              说明：点击场景卡的绿色"🎨 生成设定图"按钮才会生图（消耗积分）。
             </div>
           </div>
 
-          <div className="text-[11px] text-gray-400 leading-relaxed">
-            生成内容：单张 16:9 场景设定图（通常为 2×2 四分屏：多角度 + 关键特写）。
+          <div className="flex flex-col gap-2">
+            <div className="text-[11px] text-gray-400 leading-relaxed">
+              生成内容：单张 16:9 场景设定图（通常为 2×2 四分屏：多角度 + 关键特写）。
+            </div>
+
+            {/* 🆕 批量生成按钮 */}
+            {onBatchGenerateScenes && (
+              <button
+                onClick={onBatchGenerateScenes}
+                disabled={isBatchGeneratingScenes || !sceneImageModel}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2.5 py-1.5 rounded text-xs font-medium w-full disabled:opacity-50"
+                title="批量生成所有未生成设定图的场景"
+              >
+                {isBatchGeneratingScenes ? (
+                  <>⏳ 批量生成中 ({batchSceneProgress?.current}/{batchSceneProgress?.total})</>
+                ) : (
+                  <>🎨 批量生成所有场景设定图</>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1557,10 +1743,10 @@ const ScenesTab: React.FC<{
                       onGenerateSceneImageSheet(scene.id);
                     }}
                     disabled={generatingSceneId === scene.id}
-                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-emerald-400 disabled:text-gray-600 disabled:cursor-not-allowed text-xs"
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs font-medium disabled:cursor-not-allowed transition-colors"
                     title={scene.imageSheetUrl ? '重新生成场景设定图' : '生成场景设定图'}
                   >
-                    {generatingSceneId === scene.id ? '⏳' : '🖼️'}
+                    {generatingSceneId === scene.id ? '⏳ 生成中...' : (scene.imageSheetUrl ? '� 重新生成' : '🎨 生成设定图')}
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); onEditScene(scene); }}

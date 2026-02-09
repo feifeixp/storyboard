@@ -10,6 +10,18 @@ export interface CharacterForm {
   note?: string;             // 备注
   visualPromptCn?: string;   // 中文视觉提示词
   visualPromptEn?: string;   // 英文视觉提示词
+
+  // 🆕 形态设定图（1×4 横向四分屏）
+  imageSheetUrl?: string;
+
+  // 🆕 生图元信息
+  imageGenerationMeta?: {
+    modelName: string;
+    styleName: string;
+    generatedAt: string;
+    taskCode?: string;
+    taskCreatedAt?: string;
+  };
 }
 
 export interface CharacterRef {
