@@ -3555,6 +3555,45 @@ export async function generateMergedStoryboardSheet(
   // 🚀 并行生成所有九宫格图（同时生成，不等待）
   console.log(`[OpenRouter] 🚀 开始并行生成 ${totalGrids} 张九宫格...`);
 
+  // 🔧 优化：提前获取模型列表（避免每次生成都调用API）
+  const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
+
+  console.log('[OpenRouter] 获取分镜场景可用模型列表...');
+  let availableModels;
+  try {
+    availableModels = await getModelsByScenario(ScenarioType.STORYBOARD);
+    console.log(`[OpenRouter] 获取到 ${availableModels.length} 个可用模型`);
+  } catch (error) {
+    console.error('[OpenRouter] 获取模型列表失败:', error);
+    throw new Error('无法获取可用模型列表，请稍后重试');
+  }
+
+  // 🔍 查找目标模型
+  const PRIMARY_MODEL_KEYWORDS = ['nano', 'banana', 'pro'];
+  const FALLBACK_MODEL_KEYWORDS = ['seedream'];
+
+  const findModelByKeywords = (keywords: string[]) => {
+    return availableModels.find(m => {
+      const displayNameLower = m.model_display_name.toLowerCase();
+      const modelNameLower = m.model_name.toLowerCase();
+      return keywords.every(keyword =>
+        displayNameLower.includes(keyword.toLowerCase()) ||
+        modelNameLower.includes(keyword.toLowerCase())
+      );
+    });
+  };
+
+  const primaryModel = findModelByKeywords(PRIMARY_MODEL_KEYWORDS);
+  const fallbackModel = findModelByKeywords(FALLBACK_MODEL_KEYWORDS);
+  const preferredModel = primaryModel || fallbackModel;
+
+  if (!preferredModel) {
+    throw new Error('未找到可用的生图模型');
+  }
+
+  const preferredModelName = preferredModel.model_name;
+  console.log(`[OpenRouter] ✅ 使用模型: ${preferredModelName} (${preferredModel.model_display_name})`);
+
   // 初始化 results 数组（预留位置）
   results = new Array(totalGrids).fill('');
 
@@ -3587,36 +3626,62 @@ export async function generateMergedStoryboardSheet(
       );
 
       try {
-        // 调用AI生成九宫格图
-        const tempImageUrl = await generateSingleImage(
-          gridPrompt,
-          effectiveModel,
-          [],
-          (taskCode) => {
-            if (onTaskCreated) {
-              onTaskCreated(taskCode, gridIndex);
-            }
-            // 回调进度（任务创建时）
-            if (onProgress) {
-              onProgress(gridIndex + 1, totalGrids, `第${gridIndex + 1}张九宫格`);
+        // 🔧 直接调用 Neodomain API（不再调用 generateSingleImage，避免重复获取模型）
+        console.log(`[OpenRouter] 提交生成任务 #${gridIndex + 1}...`);
+
+        const task = await generateImage({
+          prompt: gridPrompt,
+          negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
+          modelName: preferredModelName,
+          numImages: '1',
+          aspectRatio: '16:9',
+          size: '2K',
+          outputFormat: 'jpeg',
+          guidanceScale: 7.5,
+          showPrompt: false,
+        });
+
+        console.log(`[OpenRouter] ✅ 任务 #${gridIndex + 1} 已提交: ${task.task_code}`);
+
+        // 任务创建后立即回调
+        if (onTaskCreated) {
+          try {
+            await Promise.resolve(onTaskCreated(task.task_code, gridIndex));
+          } catch (err) {
+            console.warn(`[OpenRouter] 任务 #${gridIndex + 1} 回调失败:`, err);
+          }
+        }
+
+        // 回调进度
+        if (onProgress) {
+          onProgress(gridIndex + 1, totalGrids, `第${gridIndex + 1}张九宫格`);
+        }
+
+        // 轮询查询结果
+        console.log(`[OpenRouter] 开始轮询任务 #${gridIndex + 1}...`);
+        const result = await pollGenerationResult(
+          task.task_code,
+          (status, attempt) => {
+            if (attempt % 5 === 0) { // 每5次查询打印一次日志
+              console.log(`[OpenRouter] 任务 #${gridIndex + 1} 状态: ${status}, 第${attempt}次查询`);
             }
           }
         );
 
-        if (tempImageUrl) {
-          // 🔧 Neodomain 返回的 URL 已经是 OSS 永久 URL，无需再次上传
+        if (result.status === TaskStatus.SUCCESS && result.image_urls && result.image_urls.length > 0) {
+          const imageUrl = result.image_urls[0];
           console.log(`[OpenRouter] ✅ 九宫格 #${gridIndex + 1} 生成成功`);
-          console.log(`[OpenRouter] 图片 URL: ${tempImageUrl}`);
+          console.log(`[OpenRouter] 图片 URL: ${imageUrl}`);
 
           // 保存到 results 数组
-          results[gridIndex] = tempImageUrl;
+          results[gridIndex] = imageUrl;
 
           // 立即回调显示图片
           if (onGridComplete) {
-            onGridComplete(gridIndex, tempImageUrl);
+            onGridComplete(gridIndex, imageUrl);
           }
         } else {
-          console.warn(`[OpenRouter] ❌ 第 ${gridIndex + 1} 张九宫格生成失败`);
+          console.warn(`[OpenRouter] ❌ 第 ${gridIndex + 1} 张九宫格生成失败: ${result.failure_reason}`);
           results[gridIndex] = '';
         }
       } catch (error) {
@@ -3627,6 +3692,7 @@ export async function generateMergedStoryboardSheet(
   });
 
   // 等待所有任务完成
+  console.log(`[OpenRouter] ⏳ 等待 ${totalGrids} 个并行任务完成...`);
   await Promise.all(generationTasks);
 
   console.log(`[OpenRouter] 🎉 所有九宫格生成完成！成功: ${results.filter(r => r).length}/${totalGrids}`);
