@@ -3544,7 +3544,7 @@ export async function generateMergedStoryboardSheet(
 
   const GRID_SIZE = 9; // 每张图9个镜头 (3x3)
   const totalGrids = Math.ceil(shots.length / GRID_SIZE);
-  const results: string[] = [];
+  let results: string[] = [];
 
   // 🆕 构建场景描述信息（如果有场景库）
   const sceneSection = scenes ? buildSceneDescriptionsForPrompt(scenes, episodeNumber) : '';
