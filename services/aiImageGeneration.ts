@@ -217,7 +217,7 @@ export async function getGenerationResult(
  * @param taskCode 任务编码
  * @param onProgress 进度回调
  * @param maxRetries 最大重试次数：用于计算总超时预算（maxRetries * retryInterval），默认约3分钟
- * @param retryInterval 初始重试间隔（毫秒），默认3000ms（后续将按 2 倍指数退避增长）
+ * @param retryInterval 初始重试间隔（毫秒），默认3000ms（后续将按指数退避增长，上限30s）
  */
 export async function pollGenerationResult(
   taskCode: string,
@@ -225,13 +225,15 @@ export async function pollGenerationResult(
   maxRetries: number = 60,
   retryInterval: number = 3000
 ): Promise<ImageGenerationResult> {
-  // 说明：采用指数退避（strict doubling）以减少请求次数。
-  // 首次查询将等待 retryInterval（默认3秒），之后等待时间每次翻倍：3s → 6s → 12s → ...
-  // 同时保持总超时预算约为 maxRetries * retryInterval（默认 60 * 3000ms ≈ 180s）。
-  let attempt = 0; // 实际查询次数（不是等待次数）
+  // 说明：采用有上限的指数退避（capped exponential backoff）。
+  // 首次查询等待 retryInterval（默认3秒），之后翻倍增长，但上限为 MAX_DELAY_MS（30秒）。
+  // 这样在 300s 总预算内可以查询约 12-15 次，避免因间隔过长而错过已完成的任务。
+  // 退避序列：3s → 6s → 12s → 24s → 30s → 30s → 30s → ...
+  const MAX_DELAY_MS = 30_000; // 单次等待上限 30 秒
+  const totalTimeoutMs = 300_000; // 总超时 300 秒（5分钟），给角色设定图等复杂任务足够时间
+  let attempt = 0;
   let elapsedMs = 0;
   let delayMs = retryInterval;
-  const totalTimeoutMs = Math.max(0, maxRetries * retryInterval);
 
   while (elapsedMs < totalTimeoutMs) {
     const remainingMs = totalTimeoutMs - elapsedMs;
@@ -242,19 +244,24 @@ export async function pollGenerationResult(
     elapsedMs += waitMs;
 
     attempt++;
-    const result = await getGenerationResult(taskCode);
+    try {
+      const result = await getGenerationResult(taskCode);
 
-    if (onProgress) {
-      onProgress(result.status, attempt);
+      if (onProgress) {
+        onProgress(result.status, attempt);
+      }
+
+      // 成功或失败时返回结果
+      if (result.status === TaskStatus.SUCCESS || result.status === TaskStatus.FAILED) {
+        return result;
+      }
+    } catch (err) {
+      // 网络错误等不中断轮询，继续重试
+      console.warn(`[Neodomain] 第${attempt}次查询异常（将继续重试）:`, err);
     }
 
-    // 成功或失败时返回结果
-    if (result.status === TaskStatus.SUCCESS || result.status === TaskStatus.FAILED) {
-      return result;
-    }
-
-    // 未完成则指数退避（严格翻倍）
-    delayMs *= 2;
+    // 未完成则指数退避（翻倍，但不超过上限）
+    delayMs = Math.min(delayMs * 2, MAX_DELAY_MS);
   }
 
   throw new Error(`图片生成超时（已查询${attempt}次，等待约${Math.ceil(elapsedMs / 1000)}秒）`);

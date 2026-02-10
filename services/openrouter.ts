@@ -82,12 +82,43 @@ export function removeChinese(text: string): string {
 }
 
 /**
- * 🆕 根据集数获取角色在该集应使用的形态描述
- * 如果角色有forms数组，会根据episodeRange匹配当前集数
+ * 🆕 根据集数匹配角色的正确形态
  * 匹配逻辑：
  *   - "Ep 5" → 仅第5集
  *   - "Ep 1-20" → 第1到20集
  *   - "Ep 46+" → 第46集及以后
+ * @returns 匹配到的 CharacterForm，或 undefined
+ */
+export function matchFormForEpisode(
+  forms: CharacterForm[],
+  episodeNumber: number
+): CharacterForm | undefined {
+  for (const form of forms) {
+    if (!form.episodeRange) continue;
+    const range = form.episodeRange.trim();
+
+    // 格式1: "Ep 5" - 仅该集
+    const singleMatch = range.match(/^Ep\s*(\d+)$/i);
+    if (singleMatch && parseInt(singleMatch[1], 10) === episodeNumber) return form;
+
+    // 格式2: "Ep 1-20" - 范围
+    const rangeMatch = range.match(/^Ep\s*(\d+)\s*[-–]\s*(\d+)$/i);
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1], 10);
+      const end = parseInt(rangeMatch[2], 10);
+      if (episodeNumber >= start && episodeNumber <= end) return form;
+    }
+
+    // 格式3: "Ep 46+" - 该集及以后
+    const plusMatch = range.match(/^Ep\s*(\d+)\+$/i);
+    if (plusMatch && episodeNumber >= parseInt(plusMatch[1], 10)) return form;
+  }
+  return undefined;
+}
+
+/**
+ * 🆕 根据集数获取角色在该集应使用的形态描述
+ * 如果角色有forms数组，会根据episodeRange匹配当前集数
  */
 export function getCharacterAppearanceForEpisode(
   character: CharacterRef,
@@ -97,45 +128,11 @@ export function getCharacterAppearanceForEpisode(
   if (!episodeNumber || !character.forms || character.forms.length === 0) {
     return character.appearance || '';
   }
-
-  // 尝试匹配当前集数的形态
-  for (const form of character.forms) {
-    if (!form.episodeRange) continue;
-
-    const range = form.episodeRange.trim();
-
-    // 格式1: "Ep 5" - 仅该集
-    const singleMatch = range.match(/^Ep\s*(\d+)$/i);
-    if (singleMatch) {
-      const ep = parseInt(singleMatch[1], 10);
-      if (ep === episodeNumber) {
-        return form.description || form.visualPromptCn || character.appearance || '';
-      }
-      continue;
-    }
-
-    // 格式2: "Ep 1-20" - 范围
-    const rangeMatch = range.match(/^Ep\s*(\d+)\s*[-–]\s*(\d+)$/i);
-    if (rangeMatch) {
-      const start = parseInt(rangeMatch[1], 10);
-      const end = parseInt(rangeMatch[2], 10);
-      if (episodeNumber >= start && episodeNumber <= end) {
-        return form.description || form.visualPromptCn || character.appearance || '';
-      }
-      continue;
-    }
-
-    // 格式3: "Ep 46+" - 该集及以后
-    const plusMatch = range.match(/^Ep\s*(\d+)\+$/i);
-    if (plusMatch) {
-      const start = parseInt(plusMatch[1], 10);
-      if (episodeNumber >= start) {
-        return form.description || form.visualPromptCn || character.appearance || '';
-      }
-      continue;
-    }
+  // 使用统一的形态匹配函数
+  const form = matchFormForEpisode(character.forms, episodeNumber);
+  if (form) {
+    return form.description || form.visualPromptCn || character.appearance || '';
   }
-
   // 没有匹配到任何形态，返回基础外观
   return character.appearance || '';
 }
@@ -152,6 +149,48 @@ export function buildCharacterDescriptionsForEpisode(
     gender: c.gender,
     appearance: getCharacterAppearanceForEpisode(c, episodeNumber)
   }));
+}
+
+/**
+ * 🆕 获取角色参考图信息（根据集数匹配形态的设定图）
+ * 用于在分镜生成时上传角色参考图，让生图模型准确识别角色
+ * @returns 包含角色名、简要描述（≤10字）、图片URL的列表
+ */
+export function getCharacterReferenceImagesForEpisode(
+  characters: CharacterRef[],
+  episodeNumber?: number
+): { name: string; briefDesc: string; imageUrl: string }[] {
+  const result: { name: string; briefDesc: string; imageUrl: string }[] = [];
+
+  for (const character of characters) {
+    let imageUrl: string | undefined;
+    let briefDesc = '';
+
+    // 1. 优先：根据集数匹配形态的设定图
+    if (episodeNumber && character.forms && character.forms.length > 0) {
+      const matchedForm = matchFormForEpisode(character.forms, episodeNumber);
+      if (matchedForm?.imageSheetUrl) {
+        imageUrl = matchedForm.imageSheetUrl;
+        // 简要描述：优先用形态名（去除emoji前缀），限制10字以内
+        const cleanName = matchedForm.name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').trim();
+        briefDesc = cleanName.length > 10 ? cleanName.slice(0, 10) : cleanName;
+      }
+    }
+
+    // 2. 回退：使用角色主体设定图
+    if (!imageUrl && character.imageSheetUrl) {
+      imageUrl = character.imageSheetUrl;
+      // 简要描述：用角色外观的前10字
+      const desc = character.appearance || character.name;
+      briefDesc = desc.length > 10 ? desc.slice(0, 10) : desc;
+    }
+
+    if (imageUrl) {
+      result.push({ name: character.name, briefDesc, imageUrl });
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -3345,7 +3384,8 @@ async function generateSingleImage(
   prompt: string,
   imageModel: string = DEFAULT_NEODOMAIN_IMAGE_MODEL,
   characterRefs: CharacterRef[] = [],
-  onTaskCreated?: (taskCode: string) => void | Promise<void>
+  onTaskCreated?: (taskCode: string) => void | Promise<void>,
+  imageUrls?: string[]  // 🆕 角色参考图 URL 列表
 ): Promise<string | null> {
   // 动态导入 neodomain API
   const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
@@ -3405,6 +3445,7 @@ async function generateSingleImage(
       prompt: prompt,
 	      negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
       modelName: preferredModelName,  // ✅ 使用动态获取的 model_name
+      imageUrls: imageUrls && imageUrls.length > 0 ? imageUrls : undefined,  // 🆕 角色参考图
       numImages: '1',
       aspectRatio: '16:9',  // 九宫格分镜草图使用16:9横版
       size: '2K',           // 2K分辨率，平衡质量和速度
@@ -3468,6 +3509,7 @@ async function generateSingleImage(
           prompt: prompt,
 	          negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
           modelName: fallbackModel!.model_name,  // ✅ 使用备用模型的 model_name
+          imageUrls: imageUrls && imageUrls.length > 0 ? imageUrls : undefined,  // 🆕 角色参考图
           numImages: '1',
           aspectRatio: '16:9',
           size: '2K',
@@ -3594,6 +3636,19 @@ export async function generateMergedStoryboardSheet(
   const preferredModelName = preferredModel.model_name;
   console.log(`[OpenRouter] ✅ 使用模型: ${preferredModelName} (${preferredModel.model_display_name})`);
 
+  // 🆕 获取角色参考图信息（根据集数匹配形态的设定图）
+  const characterRefImages = getCharacterReferenceImagesForEpisode(characterRefs, episodeNumber);
+  // 根据模型支持的最大参考图数量进行截断
+  const maxRefImages = preferredModel.max_reference_images || 0;
+  const limitedRefImages = maxRefImages > 0 ? characterRefImages.slice(0, maxRefImages) : characterRefImages;
+  const referenceImageUrls = limitedRefImages.map(r => r.imageUrl);
+  if (limitedRefImages.length > 0) {
+    console.log(`[OpenRouter] 📸 角色参考图: ${limitedRefImages.length}张（模型最大支持${maxRefImages}张）`, limitedRefImages.map(r => `${r.name}(${r.briefDesc})`));
+    if (characterRefImages.length > limitedRefImages.length) {
+      console.warn(`[OpenRouter] ⚠️ 角色参考图超过模型限制，已截断: ${characterRefImages.length} → ${limitedRefImages.length}`);
+    }
+  }
+
   // 初始化 results 数组（预留位置）
   results = new Array(totalGrids).fill('');
 
@@ -3612,7 +3667,7 @@ export async function generateMergedStoryboardSheet(
 
       console.log(`[OpenRouter] 🎬 开始生成第 ${gridIndex + 1}/${totalGrids} 张九宫格 (镜头 #${startIdx + 1} - #${endIdx})`);
 
-      // 构建九宫格提示词
+      // 构建九宫格提示词（🆕 传入角色参考图信息，用于在提示词中添加 [图N] 标记）
       const gridPrompt = buildNineGridPrompt(
         gridShots,
         gridIndex + 1,
@@ -3622,7 +3677,8 @@ export async function generateMergedStoryboardSheet(
         characterRefs,
         episodeNumber,
         sceneSection,
-        artStyleSection
+        artStyleSection,
+        limitedRefImages
       );
 
       try {
@@ -3633,6 +3689,7 @@ export async function generateMergedStoryboardSheet(
           prompt: gridPrompt,
           negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
           modelName: preferredModelName,
+          imageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,  // 🆕 上传角色参考图
           numImages: '1',
           aspectRatio: '16:9',
           size: '2K',
@@ -3753,7 +3810,14 @@ export async function generateSingleGrid(
   // 构建美术风格约束
   const artStyleSection = artStyleType ? getArtStyleConstraints(artStyleType) : '';
 
-  // 构建九宫格提示词
+  // 🆕 获取角色参考图信息（根据集数匹配形态的设定图）
+  const characterRefImages = getCharacterReferenceImagesForEpisode(characterRefs, episodeNumber);
+  const referenceImageUrls = characterRefImages.map(r => r.imageUrl);
+  if (characterRefImages.length > 0) {
+    console.log(`[OpenRouter] 📸 单格重绘 - 角色参考图: ${characterRefImages.length}张`, characterRefImages.map(r => `${r.name}(${r.briefDesc})`));
+  }
+
+  // 构建九宫格提示词（🆕 传入角色参考图信息）
   const gridPrompt = buildNineGridPrompt(
     gridShots,
     gridIndex + 1,
@@ -3763,11 +3827,12 @@ export async function generateSingleGrid(
     characterRefs,
     episodeNumber,
     sceneSection,
-    artStyleSection
+    artStyleSection,
+    characterRefImages
   );
 
-  // 调用AI生成九宫格图
-  const tempImageUrl = await generateSingleImage(gridPrompt, effectiveModel, [], onTaskCreated);
+  // 调用AI生成九宫格图（🆕 传入角色参考图 URL）
+  const tempImageUrl = await generateSingleImage(gridPrompt, effectiveModel, [], onTaskCreated, referenceImageUrls);
 
   if (tempImageUrl) {
     // 🔧 Neodomain 返回的 URL 已经是 OSS 永久 URL，无需再次上传
@@ -3801,7 +3866,8 @@ function buildNineGridPrompt(
   characterRefs: CharacterRef[] = [],
   episodeNumber?: number,       // 🆕 当前集数，用于匹配角色形态
   sceneSection: string = '',    // 🆕 场景描述信息
-  artStyleSection: string = ''  // 🆕 美术风格约束
+  artStyleSection: string = '', // 🆕 美术风格约束
+  characterRefImages: { name: string; briefDesc: string; imageUrl: string }[] = []  // 🆕 角色参考图信息
 ): string {
   // 🆕 精确角度参数映射（防止AI生图误解，如3/4正面变成正面）
   // 每个角度都有精确的角度范围描述，确保AI生图模型理解正确
@@ -3987,14 +4053,17 @@ ${characterDescriptions.map(c => {
   const appearanceDesc = c.appearance
     ? `外观：${c.appearance}`
     : '请保持外观一致（发型、服装、体型）';
-  return `• ${c.name}${genderLabel}：${appearanceDesc}`;
+  // 🆕 如果有参考图，添加 [图N] 标记，让生图模型通过标记关联上传的参考图
+  const refIdx = characterRefImages.findIndex(r => r.name === c.name);
+  const refTag = refIdx >= 0 ? ` → 参考[图${refIdx + 1}]${characterRefImages[refIdx].briefDesc}` : '';
+  return `• ${c.name}${genderLabel}：${appearanceDesc}${refTag}`;
 }).join('\n')}
 
 ⚠️ 重要规则：
 - 同一角色在不同镜头中必须可识别为同一个人
 - 严格按照上述外观描述绘制，不可随意修改
 - 角色的发型、服装、体型必须保持一致
-`
+${characterRefImages.length > 0 ? '- 请参考上传的角色设定图（[图N]）来绘制对应角色，确保角色外观与设定图一致\n' : ''}`
     : '';
 
 		// ⚠️ 关键：为了后续等分切割，必须禁止任何标题/页码/镜号等文字元素，且要求网格边到边均分。

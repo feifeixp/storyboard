@@ -53,8 +53,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     return STORYBOARD_STYLES.find(s => s.id === sceneStyleId) || STORYBOARD_STYLES[0];
   }, [sceneStyleId]);
 
-  const [generatingCharacterId, setGeneratingCharacterId] = useState<string | null>(null);
-  const [characterGenProgress, setCharacterGenProgress] = useState<{ stage: string; percent: number } | null>(null);
+  // 🔧 支持多个角色/形态同时生成（并发）
+  const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
+  const [genProgressMap, setGenProgressMap] = useState<Map<string, { stage: string; percent: number }>>(new Map());
 
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [sceneGenProgress, setSceneGenProgress] = useState<{ stage: string; percent: number } | null>(null);
@@ -213,46 +214,62 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 🆕 生成角色设定图（单张 16:9，1×4 横向四分屏：正/侧/背 + 面部特写）
   // =============================
   // skipConfirm: 批量生成时跳过确认对话框
-  const handleGenerateCharacterImageSheet = async (characterId: string, skipConfirm = false) => {
+  // 🔧 支持 formId 参数：为指定形态生成设定图
+  const handleGenerateCharacterImageSheet = async (characterId: string, skipConfirm = false, formId?: string) => {
     const character = (project.characters || []).find(c => c.id === characterId);
     if (!character) return;
+    if (!characterImageModel) { alert('请先选择生图模型'); return; }
 
-    if (!characterImageModel) {
-      alert('请先选择生图模型');
-      return;
-    }
+    // 🔧 生成唯一 ID（角色ID 或 角色ID_形态ID）
+    const genKey = characterId + (formId ? `_${formId}` : '');
 
-    if (generatingCharacterId) {
-      alert('正在生成其他角色图片，请稍后');
-      return;
-    }
+    // 检查该角色/形态是否已在生成中（允许不同角色并发）
+    if (generatingIds.has(genKey)) { alert('该角色/形态正在生成中，请稍后'); return; }
+
+    // 查找目标形态
+    const targetForm = formId ? character.forms?.find(f => f.id === formId) : null;
+    if (formId && !targetForm) { alert('未找到指定形态'); return; }
+    const targetLabel = targetForm ? `角色「${character.name}」的形态「${targetForm.name}」` : `角色「${character.name}」`;
 
     // 🔧 批量生成时跳过确认对话框
     if (!skipConfirm) {
-      const confirmGenerate = confirm(
-        `将为角色「${character.name}」生成 1 张设定图（会消耗积分）。\n\n是否继续？`
-      );
-      if (!confirmGenerate) return;
+      if (!confirm(`将为${targetLabel}生成 1 张设定图（会消耗积分）。\n\n是否继续？`)) return;
     }
 
-    setGeneratingCharacterId(characterId);
-    setCharacterGenProgress({ stage: '准备中', percent: 0 });
+    // 🔧 向 Set 中添加（支持并发）
+    setGeneratingIds(prev => new Set(prev).add(genKey));
+    setGenProgressMap(prev => { const m = new Map(prev); m.set(genKey, { stage: '准备中', percent: 0 }); return m; });
 
     try {
-	      let createdTaskCode: string | null = null;
-	      let createdTaskAt: string | null = null;
-
+      let createdTaskCode: string | null = null;
+      let createdTaskAt: string | null = null;
       const styleSuffix = characterStyle?.promptSuffix || '';
       const projectVisualStyle = project.settings?.visualStyle || '';
 
-      const baseInfoCn = [
-        `角色设定图`,
-        `角色：${character.name}`,
-        character.appearance ? `外观：${character.appearance}` : '',
-        character.gender ? `性别：${character.gender}` : '',
-        character.ageGroup ? `年龄段：${character.ageGroup}` : '',
-        projectVisualStyle ? `项目视觉风格：${projectVisualStyle}` : '',
-      ].filter(Boolean).join('；');
+      // 🔧 根据是否指定形态，构建不同的提示词
+      let baseInfoCn: string;
+      if (targetForm) {
+        // 形态设定图：使用形态的描述和视觉提示词
+        baseInfoCn = [
+          `角色设定图 - 特定形态`, `角色：${character.name}`, `形态：${targetForm.name}`,
+          targetForm.description ? `形态描述：${targetForm.description}` : '',
+          targetForm.visualPromptCn ? `视觉特征：${targetForm.visualPromptCn}` : '',
+          character.appearance ? `基础外观：${character.appearance}` : '',
+          character.gender ? `性别：${character.gender}` : '',
+          character.ageGroup ? `年龄段：${character.ageGroup}` : '',
+          targetForm.note ? `备注：${targetForm.note}` : '',
+          projectVisualStyle ? `项目视觉风格：${projectVisualStyle}` : '',
+        ].filter(Boolean).join('；');
+      } else {
+        // 主形态设定图：使用角色基础信息
+        baseInfoCn = [
+          `角色设定图`, `角色：${character.name}`,
+          character.appearance ? `外观：${character.appearance}` : '',
+          character.gender ? `性别：${character.gender}` : '',
+          character.ageGroup ? `年龄段：${character.ageGroup}` : '',
+          projectVisualStyle ? `项目视觉风格：${projectVisualStyle}` : '',
+        ].filter(Boolean).join('；');
+      }
 
       const prompt = [
         baseInfoCn,
@@ -262,98 +279,78 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         styleSuffix,
       ].filter(Boolean).join(' ');
 
-	      const imageUrls = await generateAndUploadImage(
-        {
-          prompt,
-          negativePrompt: NEGATIVE_PROMPT,
-          modelName: characterImageModel,
-          aspectRatio: '16:9',
-          numImages: '1',
-          outputFormat: 'jpg',
-        },
+      const shotNumber = targetForm ? `character_sheet_${characterId}_form_${formId}` : `character_sheet_${characterId}`;
+
+      const imageUrls = await generateAndUploadImage(
+        { prompt, negativePrompt: NEGATIVE_PROMPT, modelName: characterImageModel, aspectRatio: '16:9', numImages: '1', outputFormat: 'jpg' },
         project.id,
-        `character_sheet_${characterId}`,
-	        (stage, percent) => setCharacterGenProgress({ stage, percent }),
-	        async (taskCode) => {
-	          // ✅ 任务创建后立即持久化 taskCode（断网/刷新后可恢复）
-	          createdTaskCode = taskCode;
-	          createdTaskAt = new Date().toISOString();
-	          setCharacterGenProgress({ stage: '保存任务信息', percent: 15 });
+        shotNumber,
+        (stage, percent) => setGenProgressMap(prev => { const m = new Map(prev); m.set(genKey, { stage, percent }); return m; }),
+        async (taskCode) => {
+          // ✅ 任务创建后立即持久化 taskCode（断网/刷新后可恢复）
+          createdTaskCode = taskCode;
+          createdTaskAt = new Date().toISOString();
+          setGenProgressMap(prev => { const m = new Map(prev); m.set(genKey, { stage: '保存任务信息', percent: 15 }); return m; });
+          const metaData = {
+            modelName: characterImageModel,
+            styleName: characterStyle?.name || '未知风格',
+            generatedAt: createdTaskAt, taskCode, taskCreatedAt: createdTaskAt,
+          };
+          const updatedProject: Project = {
+            ...project, updatedAt: new Date().toISOString(),
+            characters: (project.characters || []).map(c => {
+              if (c.id !== characterId) return c;
+              if (targetForm) {
+                // 更新形态的 imageGenerationMeta
+                return { ...c, forms: (c.forms || []).map(f => f.id === formId ? { ...f, imageGenerationMeta: metaData } : f) };
+              }
+              // 更新角色主体的 imageGenerationMeta（不清空 imageSheetUrl，保留旧图避免生成失败导致空白）
+              return { ...c, imageGenerationMeta: metaData };
+            }),
+          };
+          await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+          try { await patchProject(project.id, { characters: updatedProject.characters }); }
+          catch (err) { console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err); await Promise.resolve(onUpdateProject(updatedProject)); }
+        },
+        { skipOSSUpload: true }
+      );
 
-	          const updatedProject: Project = {
-	            ...project,
-	            updatedAt: new Date().toISOString(),
-	            characters: (project.characters || []).map(c => {
-	              if (c.id !== characterId) return c;
-	              return {
-	                ...c,
-	                // 注意：不清空 imageSheetUrl（如果此前已有图，生成中仍保留旧图，避免“生成失败导致空白”）
-	                imageGenerationMeta: {
-	                  modelName: characterImageModel,
-	                  styleName: characterStyle?.name || '未知风格',
-	                  // generatedAt 历史上用于“生成时间”；此处用任务创建时间占位，最终成功后会再写一次
-	                  generatedAt: createdTaskAt,
-	                  taskCode,
-	                  taskCreatedAt: createdTaskAt,
-	                },
-	              };
-	            }),
-	          };
+      const sheetUrl = imageUrls?.[0];
+      if (!sheetUrl) throw new Error('未获取到生成图片URL');
 
-	          // 1) 先更新本地 UI（不触发全量保存）
-	          await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
-	          // 2) 再做最小化持久化（PATCH 只更新 characters 字段）
-	          try {
-	            await patchProject(project.id, { characters: updatedProject.characters });
-	          } catch (err) {
-	            console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
-	            await Promise.resolve(onUpdateProject(updatedProject));
-	          }
-	        },
-	        // S3：设定图直接保存 Neodomain 的永久 image_urls，跳过 OSS
-	        { skipOSSUpload: true }
-	      );
-
-	      const sheetUrl = imageUrls?.[0];
-	      if (!sheetUrl) throw new Error('未获取到生成图片URL');
-
+      const finalMeta = {
+        modelName: characterImageModel, styleName: characterStyle?.name || '未知风格',
+        generatedAt: new Date().toISOString(), taskCode: createdTaskCode || undefined, taskCreatedAt: createdTaskAt || undefined,
+      };
       const updatedProject: Project = {
-        ...project,
-        updatedAt: new Date().toISOString(),
+        ...project, updatedAt: new Date().toISOString(),
         characters: (project.characters || []).map(c => {
           if (c.id !== characterId) return c;
-          return {
-            ...c,
-            imageSheetUrl: sheetUrl,
-            imageGenerationMeta: {
-              modelName: characterImageModel,
-              styleName: characterStyle?.name || '未知风格',
-              generatedAt: new Date().toISOString(),
-	              taskCode: createdTaskCode || c.imageGenerationMeta?.taskCode,
-	              taskCreatedAt: createdTaskAt || c.imageGenerationMeta?.taskCreatedAt,
-            },
-          };
+          if (targetForm) {
+            // 保存到形态的 imageSheetUrl
+            return { ...c, forms: (c.forms || []).map(f => f.id === formId ? { ...f, imageSheetUrl: sheetUrl, imageGenerationMeta: finalMeta } : f) };
+          }
+          // 保存到角色主体的 imageSheetUrl
+          return { ...c, imageSheetUrl: sheetUrl, imageGenerationMeta: { ...finalMeta, taskCode: createdTaskCode || c.imageGenerationMeta?.taskCode, taskCreatedAt: createdTaskAt || c.imageGenerationMeta?.taskCreatedAt } };
         }),
       };
 
-	      // 🔧 修复：先持久化到数据库，再更新前端状态
-	      // 这样即使用户离开页面，数据也已经保存了
-	      try {
-	        await patchProject(project.id, { characters: updatedProject.characters });
-	        console.log(`[ProjectDashboard] ✅ 角色设定图已保存到数据库: ${character.name}`);
-	      } catch (err) {
-	        console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
-	        await saveProject(updatedProject);
-	      }
-
-	      // 最后更新前端状态（persist: false 避免重复保存）
-	      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+      // 🔧 先持久化到数据库，再更新前端状态
+      try {
+        await patchProject(project.id, { characters: updatedProject.characters });
+        console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已保存: ${targetLabel}`);
+      } catch (err) {
+        console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
+        await saveProject(updatedProject);
+      }
+      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
     } catch (error: any) {
       console.error('生成角色设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
     } finally {
-      setGeneratingCharacterId(null);
-      setCharacterGenProgress(null);
+      // 🔧 从 Set/Map 中移除（支持并发）
+      setGeneratingIds(prev => { const s = new Set(prev); s.delete(genKey); return s; });
+      setGenProgressMap(prev => { const m = new Map(prev); m.delete(genKey); return m; });
     }
   };
 
@@ -361,10 +358,26 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 🆕 批量生成所有角色设定图
   // =============================
   const handleBatchGenerateCharacters = async () => {
-    const charactersToGenerate = (project.characters || []).filter(c => !c.imageSheetUrl);
+    // 🔧 收集所有需要生成的任务（角色+形态）
+    const tasks: { characterId: string; formId?: string; label: string }[] = [];
+    for (const char of (project.characters || [])) {
+      if (char.forms && char.forms.length > 0) {
+        // 有形态的角色：为每个未生成设定图的形态创建任务
+        for (const form of char.forms) {
+          if (!form.imageSheetUrl) {
+            tasks.push({ characterId: char.id, formId: form.id, label: `${char.name} - ${form.name}` });
+          }
+        }
+      } else {
+        // 无形态的角色：为角色主体创建任务
+        if (!char.imageSheetUrl) {
+          tasks.push({ characterId: char.id, label: char.name });
+        }
+      }
+    }
 
-    if (charactersToGenerate.length === 0) {
-      alert('所有角色都已有设定图！');
+    if (tasks.length === 0) {
+      alert('所有角色/形态都已有设定图！');
       return;
     }
 
@@ -374,38 +387,23 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
 
     const confirmGenerate = confirm(
-      `将为 ${charactersToGenerate.length} 个角色批量生成设定图（会消耗积分）。\n\n` +
-      `角色列表：\n${charactersToGenerate.map(c => `• ${c.name}`).join('\n')}\n\n` +
+      `将并发生成 ${tasks.length} 个角色/形态的设定图（会消耗积分）。\n\n` +
+      `任务列表：\n${tasks.map(t => `• ${t.label}`).join('\n')}\n\n` +
       `是否继续？`
     );
     if (!confirmGenerate) return;
 
     setIsBatchGeneratingCharacters(true);
-    setBatchCharacterProgress({ current: 0, total: charactersToGenerate.length });
+    setBatchCharacterProgress({ current: 0, total: tasks.length });
 
-    let successCount = 0;
-    let failCount = 0;
-    const failedCharacters: string[] = [];
+    // 🔧 并发执行所有生成任务
+    const results = await Promise.allSettled(
+      tasks.map(task => handleGenerateCharacterImageSheet(task.characterId, true, task.formId))
+    );
 
-    for (let i = 0; i < charactersToGenerate.length; i++) {
-      const char = charactersToGenerate[i];
-      setBatchCharacterProgress({ current: i + 1, total: charactersToGenerate.length });
-
-      try {
-        // 🔧 调用单个角色生成函数，skipConfirm = true 跳过确认对话框
-        await handleGenerateCharacterImageSheet(char.id, true);
-        successCount++;
-
-        // 等待一小段时间，避免请求过快
-        if (i < charactersToGenerate.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      } catch (error) {
-        console.error(`生成角色 ${char.name} 失败:`, error);
-        failCount++;
-        failedCharacters.push(char.name);
-      }
-    }
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    const failCount = results.filter(r => r.status === 'rejected').length;
+    const failedLabels = tasks.filter((_, i) => results[i].status === 'rejected').map(t => t.label);
 
     setIsBatchGeneratingCharacters(false);
     setBatchCharacterProgress(null);
@@ -415,7 +413,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     message += `✅ 成功: ${successCount} 个\n`;
     if (failCount > 0) {
       message += `❌ 失败: ${failCount} 个\n\n`;
-      message += `失败的角色：\n${failedCharacters.map(name => `• ${name}`).join('\n')}`;
+      message += `失败的角色：\n${failedLabels.map(name => `• ${name}`).join('\n')}`;
     }
     alert(message);
   };
@@ -641,20 +639,22 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 	    return;
 	  }
 	
-	  if (generatingCharacterId && generatingCharacterId !== characterId) {
-	    if (!silent) alert('正在恢复/生成其他角色图片，请稍后');
+	  // 🔧 检查该角色是否已在生成中
+  const resumeKey = characterId;
+  if (generatingIds.has(resumeKey)) {
+	    if (!silent) alert('该角色正在生成中，请稍后');
 	    return;
 	  }
-	
-	  setGeneratingCharacterId(characterId);
-	  setCharacterGenProgress({ stage: '恢复任务中', percent: 0 });
-	
+
+	  setGeneratingIds(prev => new Set(prev).add(resumeKey));
+	  setGenProgressMap(prev => { const m = new Map(prev); m.set(resumeKey, { stage: '恢复任务中', percent: 0 }); return m; });
+
 		  try {
 		    const imageUrls = await pollAndUploadFromTask(
 	      taskCode,
 	      project.id,
 	      `character_sheet_${characterId}`,
-		      (stage, percent) => setCharacterGenProgress({ stage, percent }),
+		      (stage, percent) => setGenProgressMap(prev => { const m = new Map(prev); m.set(resumeKey, { stage, percent }); return m; }),
 		      // S3：恢复时同样跳过 OSS，直接拿 Neodomain 永久链接
 		      { skipOSSUpload: true }
 	    );
@@ -698,8 +698,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 	      alert(`❌ 恢复失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
 	    }
 	  } finally {
-	    setGeneratingCharacterId(null);
-	    setCharacterGenProgress(null);
+	    setGeneratingIds(prev => { const s = new Set(prev); s.delete(resumeKey); return s; });
+	    setGenProgressMap(prev => { const m = new Map(prev); m.delete(resumeKey); return m; });
 	  }
 	};
 
@@ -1296,8 +1296,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               onSupplement={() => handleSupplementCharacter(char.id)}
               isSupplementing={isSupplementing && supplementingCharacterId === char.id}
               onGenerateImage={() => handleGenerateCharacterImageSheet(char.id)}
-              isGenerating={generatingCharacterId === char.id}
-              generationProgress={generatingCharacterId === char.id ? characterGenProgress : null}
+              isGenerating={generatingIds.has(char.id) || [...generatingIds].some((id: string) => id.startsWith(char.id + '_'))}
+              generationProgress={genProgressMap.get(char.id) || null}
+              onGenerateFormImage={(formId) => handleGenerateCharacterImageSheet(char.id, false, formId)}
+              generatingFormIds={[...generatingIds].filter((id: string) => id.startsWith(char.id + '_')).map((id: string) => id.split('_').slice(1).join('_'))}
+              formGenProgressMap={Object.fromEntries([...generatingIds].filter((id: string) => id.startsWith(char.id + '_')).map((id: string) => [id.split('_').slice(1).join('_'), genProgressMap.get(id) || { stage: '', percent: 0 }]))}
             />
           );
         })}
@@ -1399,6 +1402,10 @@ const CharacterCard: React.FC<{
   onGenerateImage?: () => void;
   isGenerating?: boolean;
   generationProgress?: { stage: string; percent: number } | null;
+  onGenerateFormImage?: (formId: string) => void;
+  // 🔧 支持多个形态并发生成
+  generatingFormIds?: string[];
+  formGenProgressMap?: Record<string, { stage: string; percent: number }>;
 }> = ({
   character,
   isExpanded,
@@ -1412,6 +1419,9 @@ const CharacterCard: React.FC<{
   onGenerateImage,
   isGenerating,
   generationProgress,
+  onGenerateFormImage,
+  generatingFormIds = [],
+  formGenProgressMap = {},
 }) => {
   const completenessInfo = completeness !== undefined ? getCompletenessLevel(completeness) : null;
 
@@ -1464,8 +1474,8 @@ const CharacterCard: React.FC<{
           ✏️
         </button>
 
-        {/* 生成角色设定图 */}
-        {onGenerateImage && (
+        {/* 生成角色设定图 - 有形态时隐藏主体按钮，只在形态上显示 */}
+        {onGenerateImage && !(character.forms && character.forms.length > 0) && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1482,8 +1492,8 @@ const CharacterCard: React.FC<{
         <span className="text-[var(--color-text-tertiary)] text-[12px]">{isExpanded ? '▼' : '▶'}</span>
       </div>
 
-      {/* 生成进度 */}
-      {isGenerating && generationProgress && (
+      {/* 生成进度 - 有形态时主体进度隐藏（进度在形态卡片上显示） */}
+      {!(character.forms && character.forms.length > 0) && isGenerating && generationProgress && (
         <div className="border-t border-[var(--color-border)] p-3 text-[11px] text-[var(--color-text-secondary)] bg-[var(--color-surface)]">
           <div className="flex items-center justify-between gap-2">
             <span>⏳ {generationProgress.stage}</span>
@@ -1498,8 +1508,8 @@ const CharacterCard: React.FC<{
         </div>
       )}
 
-      {/* 设定图预览（直接展示整张设定图，不做切割） */}
-      {character.imageSheetUrl && (
+      {/* 设定图预览 - 有形态时主体设定图隐藏（在形态卡片上显示） */}
+      {!(character.forms && character.forms.length > 0) && character.imageSheetUrl && (
         <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
           <img
             src={character.imageSheetUrl}
@@ -1568,33 +1578,78 @@ const CharacterCard: React.FC<{
       {/* 形态列表 - 始终显示（不需要点击展开） */}
       {character.forms && character.forms.length > 0 && (
         <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
-          <div className="grid grid-cols-2 gap-3">
-            {character.forms.map((form) => (
-              <div key={form.id} className="bg-[var(--color-surface-solid)] rounded-lg p-3 text-[12px] group relative border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-colors">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[var(--color-text)] font-medium">{form.name}</span>
-                  <div className="flex items-center gap-1">
-                    {form.episodeRange && (
-                      <span className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">
-                        {form.episodeRange}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => onEditForm(form)}
-                      className="opacity-0 group-hover:opacity-100 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[11px] transition-all"
-                      title="编辑形态"
-                    >
-                      ✏️
-                    </button>
+          <div className="grid grid-cols-1 gap-3">
+            {character.forms.map((form) => {
+              const isFormGenerating = generatingFormIds.includes(form.id);
+              const currentFormProgress = formGenProgressMap[form.id] || null;
+              return (
+                <div key={form.id} className="bg-[var(--color-surface-solid)] rounded-lg p-3 text-[12px] group relative border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-colors">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[var(--color-text)] font-medium">{form.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      {form.episodeRange && (
+                        <span className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">
+                          {form.episodeRange}
+                        </span>
+                      )}
+                      {/* 形态设定图生成按钮 */}
+                      {onGenerateFormImage && (
+                        <button
+                          onClick={() => onGenerateFormImage(form.id)}
+                          disabled={isFormGenerating}
+                          className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-2 py-0.5 rounded-md text-[10px] font-medium disabled:cursor-not-allowed transition-colors"
+                          title={form.imageSheetUrl ? '重新生成形态设定图' : '生成形态设定图'}
+                        >
+                          {isFormGenerating ? '⏳ 生成中...' : (form.imageSheetUrl ? '🔄 重新生成' : '🎨 生成设定图')}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onEditForm(form)}
+                        className="opacity-0 group-hover:opacity-100 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[11px] transition-all"
+                        title="编辑形态"
+                      >
+                        ✏️
+                      </button>
+                    </div>
                   </div>
+                  {/* 描述完整显示（不截断） */}
+                  <p className="text-[var(--color-text-secondary)] text-[11px] leading-relaxed whitespace-pre-wrap">{form.description}</p>
+                  {form.note && (
+                    <p className="text-[var(--color-text-tertiary)] text-[10px] mt-1.5 italic">💡 {form.note}</p>
+                  )}
+
+                  {/* 形态生成进度 */}
+                  {isFormGenerating && currentFormProgress && (
+                    <div className="mt-2 text-[10px] text-[var(--color-text-secondary)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>⏳ {currentFormProgress.stage}</span>
+                        <span className="text-[var(--color-text-tertiary)]">{Math.round(currentFormProgress.percent)}%</span>
+                      </div>
+                      <div className="mt-1 h-1 bg-[var(--color-bg-subtle)] rounded overflow-hidden">
+                        <div className="h-full bg-[var(--color-accent-green)]" style={{ width: `${Math.max(0, Math.min(100, currentFormProgress.percent))}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 形态设定图预览 */}
+                  {form.imageSheetUrl && (
+                    <div className="mt-2">
+                      <img
+                        src={form.imageSheetUrl}
+                        alt={`${form.name} 设定图`}
+                        className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[200px]"
+                        loading="lazy"
+                      />
+                      {form.imageGenerationMeta && (
+                        <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                          模型：{form.imageGenerationMeta.modelName} · 风格：{form.imageGenerationMeta.styleName}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {/* 描述完整显示（不截断） */}
-                <p className="text-[var(--color-text-secondary)] text-[11px] leading-relaxed whitespace-pre-wrap">{form.description}</p>
-                {form.note && (
-                  <p className="text-[var(--color-text-tertiary)] text-[10px] mt-1.5 italic">💡 {form.note}</p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
