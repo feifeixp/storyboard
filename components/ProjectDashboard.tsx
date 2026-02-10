@@ -35,6 +35,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [expandedCharacter, setExpandedCharacter] = useState<string | null>(null);
 
+  // 🔧 使用 ref 保存最新的 project 状态（避免并发更新时覆盖数据）
+  const projectRef = useRef<Project>(project);
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+
   // =============================
   // 🆕 角色/场景设定图生成（模型 + 风格）
   // 说明：仅在用户点击按钮时才会调用生图接口（会消耗积分）。
@@ -322,9 +328,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         modelName: characterImageModel, styleName: characterStyle?.name || '未知风格',
         generatedAt: new Date().toISOString(), taskCode: createdTaskCode || undefined, taskCreatedAt: createdTaskAt || undefined,
       };
+
+      // 🔧 修复：使用 projectRef.current 获取最新的 project 状态（避免并发时覆盖其他形态的数据）
+      const latestProject = projectRef.current;
       const updatedProject: Project = {
-        ...project, updatedAt: new Date().toISOString(),
-        characters: (project.characters || []).map(c => {
+        ...latestProject, updatedAt: new Date().toISOString(),
+        characters: (latestProject.characters || []).map(c => {
           if (c.id !== characterId) return c;
           if (targetForm) {
             // 保存到形态的 imageSheetUrl
