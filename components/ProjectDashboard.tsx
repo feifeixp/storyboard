@@ -14,6 +14,8 @@ import { extractNewScenes } from '../services/sceneExtraction';
 import AIImageModelSelector from './AIImageModelSelector';
 import { ScenarioType, generateAndUploadImage, pollAndUploadFromTask } from '../services/aiImageGeneration';
 import { patchProject, saveProject } from '../services/d1Storage';
+import { uploadToOSS, generateOSSPath } from '../services/oss';
+import { analyzeCharacterImage, mergeAnalysisToCharacter } from '../services/characterImageAnalysis';
 import mammoth from 'mammoth';
 
 interface ProjectDashboardProps {
@@ -76,6 +78,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 🆕 剧集上传相关状态
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingEpisodes, setIsUploadingEpisodes] = useState(false);
+
+  // 🆕 角色图片上传和分析状态
+  const [uploadCharacterImageDialogOpen, setUploadCharacterImageDialogOpen] = useState(false);
+  const [uploadingCharacterId, setUploadingCharacterId] = useState<string | null>(null);
+  const [uploadImageUrl, setUploadImageUrl] = useState('');
+  const [uploadImageFile, setUploadImageFile] = useState<File | null>(null);
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
 
 	// =============================
 	// 🆕 生图任务恢复（自动续跑）
@@ -364,6 +373,98 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       // 🔧 从 Set/Map 中移除（支持并发）
       setGeneratingIds(prev => { const s = new Set(prev); s.delete(genKey); return s; });
       setGenProgressMap(prev => { const m = new Map(prev); m.delete(genKey); return m; });
+    }
+  };
+
+  // =============================
+  // 🆕 角色图片上传和 AI 分析
+  // =============================
+  const handleUploadCharacterImage = async (characterId: string) => {
+    const character = (project.characters || []).find(c => c.id === characterId);
+    if (!character) return;
+
+    setUploadingCharacterId(characterId);
+    setUploadCharacterImageDialogOpen(true);
+    setUploadImageUrl('');
+    setUploadImageFile(null);
+  };
+
+  const handleConfirmUploadCharacterImage = async () => {
+    if (!uploadingCharacterId) return;
+    if (!uploadImageUrl && !uploadImageFile) {
+      alert('请输入图片 URL 或选择本地文件');
+      return;
+    }
+
+    const character = (project.characters || []).find(c => c.id === uploadingCharacterId);
+    if (!character) return;
+
+    try {
+      setIsAnalyzingImage(true);
+
+      // 1. 获取图片 URL
+      let imageUrl = uploadImageUrl;
+      if (uploadImageFile) {
+        // 上传本地文件到 OSS
+        const ossPath = generateOSSPath(
+          project.id,
+          `character_${character.id}_ref`,
+          'image',
+          uploadImageFile.name.split('.').pop() || 'jpg'
+        );
+        imageUrl = await uploadToOSS(uploadImageFile, ossPath);
+      }
+
+      // 2. 使用 AI 分析图片
+      const existingDescription = [
+        character.appearance,
+        character.personality,
+        character.visualPromptCn
+      ].filter(Boolean).join('\n\n');
+
+      const analysis = await analyzeCharacterImage(
+        imageUrl,
+        character.name,
+        existingDescription
+      );
+
+      // 3. 合并分析结果到角色数据
+      const updatedCharacter = mergeAnalysisToCharacter(analysis, character);
+      updatedCharacter.referenceImageUrl = imageUrl;  // 保存参考图片 URL
+
+      // 4. 更新项目数据
+      const latestProject = projectRef.current;
+      const updatedProject: Project = {
+        ...latestProject,
+        updatedAt: new Date().toISOString(),
+        characters: (latestProject.characters || []).map(c =>
+          c.id === uploadingCharacterId ? updatedCharacter : c
+        ),
+      };
+
+      // 5. 保存到数据库
+      try {
+        await patchProject(project.id, { characters: updatedProject.characters });
+      } catch (err) {
+        console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
+        await saveProject(updatedProject);
+      }
+
+      // 6. 更新前端状态
+      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+
+      // 7. 关闭对话框
+      setUploadCharacterImageDialogOpen(false);
+      setUploadingCharacterId(null);
+      setUploadImageUrl('');
+      setUploadImageFile(null);
+
+      alert(`✅ 图片上传成功！\n\nAI 已分析图片并优化了角色描述。\n置信度: ${Math.round(analysis.confidence * 100)}%`);
+    } catch (error: any) {
+      console.error('上传和分析角色图片失败:', error);
+      alert(`❌ 上传失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
+    } finally {
+      setIsAnalyzingImage(false);
     }
   };
 
@@ -1308,6 +1409,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               missingFields={charCompleteness?.missingFields}
               onSupplement={() => handleSupplementCharacter(char.id)}
               isSupplementing={isSupplementing && supplementingCharacterId === char.id}
+              onUploadImage={() => handleUploadCharacterImage(char.id)}
               onGenerateImage={() => handleGenerateCharacterImageSheet(char.id)}
               isGenerating={generatingIds.has(char.id) || [...generatingIds].some((id: string) => id.startsWith(char.id + '_'))}
               generationProgress={genProgressMap.get(char.id) || null}
@@ -1397,6 +1499,80 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         onSave={handleSaveEdit}
         parentCharacter={editParentCharacter}
       />
+
+      {/* 🆕 角色图片上传对话框 */}
+      {uploadCharacterImageDialogOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">📤 上传角色图片</h3>
+
+            {/* URL 输入 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">图片 URL</label>
+              <input
+                type="text"
+                value={uploadImageUrl}
+                onChange={(e) => setUploadImageUrl(e.target.value)}
+                placeholder="https://example.com/character.jpg"
+                className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-colors"
+              />
+            </div>
+
+            {/* 分隔线 */}
+            <div className="flex items-center gap-3 my-4">
+              <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+              <span className="text-sm text-[var(--color-text-tertiary)]">或</span>
+              <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+            </div>
+
+            {/* 本地文件上传 */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">本地文件</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setUploadImageFile(e.target.files?.[0] || null)}
+                className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[var(--color-primary)] file:text-white hover:file:bg-[var(--color-primary-hover)] transition-colors"
+              />
+              {uploadImageFile && (
+                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                  已选择: {uploadImageFile.name}
+                </p>
+              )}
+            </div>
+
+            {/* 提示信息 */}
+            <div className="mb-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <p className="text-sm text-blue-400">
+                💡 上传后，AI 将自动分析图片并优化角色描述（外貌、服装、气质等）
+              </p>
+            </div>
+
+            {/* 按钮 */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setUploadCharacterImageDialogOpen(false);
+                  setUploadingCharacterId(null);
+                  setUploadImageUrl('');
+                  setUploadImageFile(null);
+                }}
+                disabled={isAnalyzingImage}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmUploadCharacterImage}
+                disabled={isAnalyzingImage || (!uploadImageUrl && !uploadImageFile)}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+              >
+                {isAnalyzingImage ? '⏳ 分析中...' : '确认上传'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1419,6 +1595,8 @@ const CharacterCard: React.FC<{
   // 🔧 支持多个形态并发生成
   generatingFormIds?: string[];
   formGenProgressMap?: Record<string, { stage: string; percent: number }>;
+  // 🆕 上传角色图片
+  onUploadImage?: () => void;
 }> = ({
   character,
   isExpanded,
@@ -1435,6 +1613,7 @@ const CharacterCard: React.FC<{
   onGenerateFormImage,
   generatingFormIds = [],
   formGenProgressMap = {},
+  onUploadImage,
 }) => {
   const completenessInfo = completeness !== undefined ? getCompletenessLevel(completeness) : null;
 
@@ -1486,6 +1665,20 @@ const CharacterCard: React.FC<{
         >
           ✏️
         </button>
+
+        {/* 上传角色图片按钮 */}
+        {onUploadImage && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onUploadImage();
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors"
+            title="上传角色图片并AI分析"
+          >
+            📤 上传图片
+          </button>
+        )}
 
         {/* 生成角色设定图 - 有形态时隐藏主体按钮，只在形态上显示 */}
         {onGenerateImage && !(character.forms && character.forms.length > 0) && (
