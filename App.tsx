@@ -280,6 +280,12 @@ const App: React.FC = () => {
   // hqUrls 是临时数据，每次生成时重新获取
   const [hqUrls, setHqUrls] = useState<string[]>([]);
 
+  // 🆕 九宫格上传对话框状态
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadGridIndex, setUploadGridIndex] = useState<number | null>(null);
+  const [uploadUrl, setUploadUrl] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+
   // 🆕 模型选择状态 - 默认使用 Gemini 3 Flash Preview (最便宜的高质量模型)
   const [analysisModel, setAnalysisModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 剧本分析模型
   const [reviewModel, setReviewModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 审核优化模型
@@ -2424,6 +2430,106 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * 🆕 上传九宫格图片（URL或本地文件）
+   */
+  const handleUploadGrid = async () => {
+    if (uploadGridIndex === null) return;
+
+    try {
+      setIsLoading(true);
+      let imageUrl = '';
+
+      if (uploadUrl.trim()) {
+        // 使用URL
+        imageUrl = uploadUrl.trim();
+      } else if (uploadFile) {
+        // 上传本地文件到OSS
+        if (!currentProject) {
+          alert('⚠️ 未选择项目，无法上传图片');
+          return;
+        }
+
+        setProgressMsg('正在上传图片到云端...');
+        const { uploadToOSS } = await import('./services/oss');
+        const ossUrl = await uploadToOSS(
+          uploadFile,
+          `projects/${currentProject.id}/storyboard/grid_${uploadGridIndex + 1}_${Date.now()}.png`
+        );
+        imageUrl = ossUrl;
+      } else {
+        alert('请输入URL或选择文件');
+        return;
+      }
+
+      // 更新九宫格URL
+      setHqUrls(prev => {
+        const newUrls = [...prev];
+        newUrls[uploadGridIndex] = imageUrl;
+        return newUrls;
+      });
+
+      setProgressMsg(`✅ 第 ${uploadGridIndex + 1} 张九宫格上传成功！`);
+
+      // 关闭对话框并重置状态
+      setUploadDialogOpen(false);
+      setUploadGridIndex(null);
+      setUploadUrl('');
+      setUploadFile(null);
+    } catch (err) {
+      console.error(err);
+      alert('上传失败: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * 🆕 手动刷新九宫格任务（从已保存的taskCode恢复）
+   */
+  const handleRefreshGrid = async (gridIndex: number) => {
+    const GRID_SIZE = 9;
+    const startIdx = gridIndex * GRID_SIZE;
+
+    if (startIdx >= shots.length) {
+      alert('无效的九宫格索引');
+      return;
+    }
+
+    const meta = shots[startIdx]?.storyboardGridGenerationMeta;
+    if (!meta?.taskCode) {
+      alert('该九宫格没有保存的任务信息，无法刷新');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setProgressMsg(`正在刷新第 ${gridIndex + 1} 张九宫格任务...`);
+
+      const { pollGenerationResult, TaskStatus } = await import('./services/aiImageGeneration');
+      const result = await pollGenerationResult(meta.taskCode);
+
+      if (result.status === TaskStatus.SUCCESS && result.image_urls && result.image_urls.length > 0) {
+        // 更新九宫格URL
+        setHqUrls(prev => {
+          const newUrls = [...prev];
+          newUrls[gridIndex] = result.image_urls![0];
+          return newUrls;
+        });
+        setProgressMsg(`✅ 第 ${gridIndex + 1} 张九宫格刷新成功！`);
+      } else if (result.status === TaskStatus.FAILED) {
+        alert(`任务失败: ${result.failure_reason || '未知错误'}`);
+      } else {
+        alert('任务仍在处理中，请稍后再试');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('刷新失败: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // 🆕 九宫格生成控制器（用于停止生成）
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
 
@@ -3032,41 +3138,41 @@ const App: React.FC = () => {
       {/* 🆕 场景空间布局信息 - 表格顶部单独显示 */}
       {renderSceneSpaceHeader()}
 
-      <div className="rounded-lg border border-gray-700 bg-gray-900">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] overflow-hidden">
         <table className="w-full text-xs text-left border-collapse table-fixed">
-          <thead className="bg-gray-800 text-white font-bold text-[10px] sticky top-0 z-10">
+          <thead className="bg-[var(--color-surface)] text-[var(--color-text-primary)] font-bold text-[10px] sticky top-0 z-10">
             <tr>
-              <th className="px-2 py-2 border-r border-gray-700 w-[60px] text-center">#</th>
-              <th className="px-2 py-2 border-r border-gray-700 w-[18%]">故事</th>
-              <th className="px-2 py-2 border-r border-gray-700 w-[32%]">视觉设计</th>
-	              <th className="px-2 py-2 border-r border-gray-700 w-[25%]">首帧</th>
+              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[60px] text-center">#</th>
+              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[18%]">故事</th>
+              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[32%]">视觉设计</th>
+	              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[25%]">首帧</th>
 	              <th className="px-2 py-2 w-[25%]">尾帧</th>
             </tr>
           </thead>
-          <tbody className="bg-gray-900">
+          <tbody className="bg-[var(--color-bg)]">
             {shots.map((shot) => {
               const isMotion = shot.shotType === '运动';
             return (
-              <tr key={shot.id} className="hover:bg-gray-800 border-b border-gray-700 text-gray-200 align-top">
+              <tr key={shot.id} className="hover:bg-[var(--color-surface-hover)] border-b border-[var(--color-border)] text-[var(--color-text-primary)] align-top transition-colors">
                 {/* # 列：编号+时长+类型+视频模式+场景ID */}
-                <td className="px-2 py-2 border-r border-gray-700 text-center">
+                <td className="px-2 py-2 border-r border-[var(--color-border)] text-center">
                   <div className="font-bold text-blue-400 text-sm">{shot.shotNumber}</div>
-                  <div className="text-gray-500 text-[10px]">{shot.duration}</div>
+                  <div className="text-[var(--color-text-tertiary)] text-[10px]">{shot.duration}</div>
                   {/* 🆕 显示场景ID（关联空间布局） */}
                   {shot.sceneId && (
-                    <span className="mt-1 inline-block px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-900/50 text-emerald-300 border border-emerald-600" title="所属场景（查看顶部场景空间布局）">
+                    <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-emerald-900/30 text-emerald-300 border border-emerald-600/50" title="所属场景（查看顶部场景空间布局）">
                       {shot.sceneId}
                     </span>
                   )}
-                  <span className={`mt-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${isMotion ? 'bg-amber-900/50 text-amber-300' : 'bg-gray-700 text-gray-400'}`}>
+                  <span className={`mt-1 inline-block px-1.5 py-0.5 rounded-md text-[9px] font-bold ${isMotion ? 'bg-amber-900/30 text-amber-300 border border-amber-600/50' : 'bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]'}`}>
                     {isMotion ? '运动' : '静态'}
                   </span>
                   {/* 🆕 显示视频生成模式 */}
                   {shot.videoMode && (
-                    <span className={`mt-1 inline-block px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                    <span className={`mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold ${
                       shot.videoMode === 'Keyframe'
-                        ? 'bg-purple-900/50 text-purple-300 border border-purple-600'
-                        : 'bg-cyan-900/50 text-cyan-300 border border-cyan-600'
+                        ? 'bg-purple-900/30 text-purple-300 border border-purple-600/50'
+                        : 'bg-cyan-900/30 text-cyan-300 border border-cyan-600/50'
                     }`}>
                       {shot.videoMode === 'Keyframe' ? '首尾帧' : '图生视频'}
                     </span>
@@ -3079,7 +3185,7 @@ const App: React.FC = () => {
                       (shot.videoMode === 'Keyframe' && shot.promptCn && shot.endFramePromptCn &&
                        !validateKeyframeConsistency(shot.promptCn, shot.endFramePromptCn).valid);
                     return hasIssues ? (
-                      <span className="mt-1 inline-block px-1.5 py-0.5 rounded text-[8px] font-bold bg-red-900/50 text-red-300 border border-red-600" title="存在校验问题">
+                      <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-red-900/30 text-red-300 border border-red-600/50" title="存在校验问题">
                         ⚠️
                       </span>
                     ) : null;
@@ -3087,29 +3193,29 @@ const App: React.FC = () => {
                 </td>
 
                 {/* 故事列：故事节拍+对白+导演意图+技术备注 */}
-                <td className="px-2 py-2 border-r border-gray-700">
+                <td className="px-2 py-2 border-r border-[var(--color-border)]">
                   {editable ? (
                     <div className="space-y-1.5">
-                      <textarea className="w-full h-12 p-1 bg-gray-800 border border-gray-600 rounded text-xs text-gray-200 resize-none"
+                      <textarea className="w-full h-12 p-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-xs text-[var(--color-text-primary)] resize-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                         placeholder="故事节拍（人物+地点+事件+冲突）" value={shot.storyBeat || ''} onChange={(e) => updateShotField(shot.id, 'storyBeat', e.target.value)} />
-                      <textarea className="w-full h-8 p-1 bg-indigo-900/30 border border-indigo-700 rounded text-[10px] text-indigo-200 resize-none"
+                      <textarea className="w-full h-8 p-1 bg-indigo-900/20 border border-indigo-700/50 rounded text-[10px] text-indigo-200 resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                         placeholder="对白/音效" value={shot.dialogue || ''} onChange={(e) => updateShotField(shot.id, 'dialogue', e.target.value)} />
-                      <textarea className="w-full h-8 p-1 bg-purple-900/30 border border-purple-700 rounded text-[10px] text-purple-200 resize-none"
+                      <textarea className="w-full h-8 p-1 bg-purple-900/20 border border-purple-700/50 rounded text-[10px] text-purple-200 resize-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                         placeholder="🎬 导演意图（为什么这么设计、观众应感受...）" value={shot.directorNote || ''} onChange={(e) => updateShotField(shot.id, 'directorNote', e.target.value)} />
-                      <textarea className="w-full h-8 p-1 bg-amber-900/30 border border-amber-700 rounded text-[10px] text-amber-200 resize-none"
+                      <textarea className="w-full h-8 p-1 bg-amber-900/20 border border-amber-700/50 rounded text-[10px] text-amber-200 resize-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
                         placeholder="🔧 技术备注（慢动作/手持/景深变化...）" value={shot.technicalNote || ''} onChange={(e) => updateShotField(shot.id, 'technicalNote', e.target.value)} />
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      <div className="text-gray-100 font-medium text-xs leading-relaxed">{shot.storyBeat}</div>
-                      {shot.dialogue && <div className="text-indigo-300 text-[10px] bg-indigo-900/40 px-1.5 py-1 rounded">💬 {shot.dialogue}</div>}
+                      <div className="text-[var(--color-text-primary)] font-medium text-xs leading-relaxed">{shot.storyBeat}</div>
+                      {shot.dialogue && <div className="text-indigo-300 text-[10px] bg-indigo-900/30 px-1.5 py-1 rounded-md">💬 {shot.dialogue}</div>}
                       {shot.directorNote && (
-                        <div className="text-purple-300 text-[9px] bg-purple-900/40 px-1.5 py-1 rounded border-l-2 border-purple-500">
+                        <div className="text-purple-300 text-[9px] bg-purple-900/30 px-1.5 py-1 rounded-md border-l-2 border-purple-500">
                           🎬 {shot.directorNote}
                         </div>
                       )}
                       {shot.technicalNote && (
-                        <div className="text-amber-300 text-[9px] bg-amber-900/40 px-1.5 py-1 rounded border-l-2 border-amber-500">
+                        <div className="text-amber-300 text-[9px] bg-amber-900/30 px-1.5 py-1 rounded-md border-l-2 border-amber-500">
                           🔧 {shot.technicalNote}
                         </div>
                       )}
@@ -3118,50 +3224,50 @@ const App: React.FC = () => {
                 </td>
 
                 {/* 视觉设计列：景别/角度 + FG/MG/BG + 光影 + 运镜/动线 */}
-                <td className="px-2 py-2 border-r border-gray-700 text-[10px]">
+                <td className="px-2 py-2 border-r border-[var(--color-border)] text-[10px]">
                   {/* 景别+角度行 */}
-                  <div className="flex items-center gap-2 mb-1.5 pb-1.5 border-b border-gray-700">
-                    <span className="bg-blue-900/50 text-blue-300 px-1.5 py-0.5 rounded font-bold">{shot.shotSize || '—'}</span>
-                    <span className="text-gray-300">{shot.angleDirection || '—'}</span>
-                    <span className="text-gray-500">+</span>
-                    <span className="text-gray-300">{shot.angleHeight || '—'}</span>
+                  <div className="flex items-center gap-2 mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
+                    <span className="bg-blue-900/30 text-blue-300 px-1.5 py-0.5 rounded-md font-bold border border-blue-600/50">{shot.shotSize || '—'}</span>
+                    <span className="text-[var(--color-text-secondary)]">{shot.angleDirection || '—'}</span>
+                    <span className="text-[var(--color-text-tertiary)]">+</span>
+                    <span className="text-[var(--color-text-secondary)]">{shot.angleHeight || '—'}</span>
                     {shot.dutchAngle && <span className="text-purple-400 font-medium">荷兰角{shot.dutchAngle}</span>}
                   </div>
 
                   {/* 三层构图 */}
-                  <div className="space-y-0.5 mb-1.5 pb-1.5 border-b border-gray-700">
-                    <div><span className="text-gray-500 font-medium w-8 inline-block">FG:</span> <span className="text-gray-300">{shot.foreground || '—'}</span></div>
-                    <div><span className="text-gray-500 font-medium w-8 inline-block">MG:</span> <span className="text-gray-200 font-medium">{shot.midground || '—'}</span></div>
-                    <div><span className="text-gray-500 font-medium w-8 inline-block">BG:</span> <span className="text-gray-300">{shot.background || '—'}</span></div>
+                  <div className="space-y-0.5 mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
+                    <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">FG:</span> <span className="text-[var(--color-text-secondary)]">{shot.foreground || '—'}</span></div>
+                    <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">MG:</span> <span className="text-[var(--color-text-primary)] font-medium">{shot.midground || '—'}</span></div>
+                    <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">BG:</span> <span className="text-[var(--color-text-secondary)]">{shot.background || '—'}</span></div>
                   </div>
 
                   {/* 光影 */}
-                  <div className="mb-1.5 pb-1.5 border-b border-gray-700">
-                    <span className="text-yellow-400">💡</span> <span className="text-gray-300">{shot.lighting || '—'}</span>
+                  <div className="mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
+                    <span className="text-yellow-400">💡</span> <span className="text-[var(--color-text-secondary)]">{shot.lighting || '—'}</span>
                   </div>
 
                   {/* 运镜+动线 */}
                   <div className="flex items-start gap-1">
-                    <span className="bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded font-medium shrink-0">📹 {shot.cameraMove || '—'}</span>
+                    <span className="bg-cyan-900/30 text-cyan-300 px-1.5 py-0.5 rounded-md font-medium shrink-0 border border-cyan-600/50">📹 {shot.cameraMove || '—'}</span>
                     {isMotion && shot.motionPath && (
-                      <span className="text-gray-400 text-[9px]">| {shot.motionPath}</span>
+                      <span className="text-[var(--color-text-tertiary)] text-[9px]">| {shot.motionPath}</span>
                     )}
                   </div>
                 </td>
 
                 {/* 首帧列 - 运动镜头显示首帧描述，静态镜头留空 */}
-                <td className="px-2 py-2 border-r border-gray-700">
+                <td className="px-2 py-2 border-r border-[var(--color-border)]">
                   {isMotion ? (
                     editable ? (
-                      <textarea className="w-full h-20 p-1.5 bg-green-900/30 border border-green-700 rounded text-[10px] text-green-200 resize-none"
+                      <textarea className="w-full h-20 p-1.5 bg-green-900/20 border border-green-700/50 rounded text-[10px] text-green-200 resize-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
                         placeholder="【首帧】画面描述..." value={shot.startFrame || ''} onChange={(e) => updateShotField(shot.id, 'startFrame', e.target.value)} />
                     ) : (
-                      <div className="bg-green-900/40 p-2 rounded border-l-2 border-green-500 text-[10px] text-green-100 leading-relaxed">
-                        {shot.startFrame || <span className="text-gray-500 italic">未填写</span>}
+                      <div className="bg-green-900/30 p-2 rounded-md border-l-2 border-green-500 text-[10px] text-green-100 leading-relaxed">
+                        {shot.startFrame || <span className="text-[var(--color-text-tertiary)] italic">未填写</span>}
                       </div>
                     )
                   ) : (
-                    <div className="text-gray-500 text-center py-4 italic text-[10px]">静态镜头</div>
+                    <div className="text-[var(--color-text-tertiary)] text-center py-4 italic text-[10px]">静态镜头</div>
                   )}
                 </td>
 
@@ -3171,15 +3277,15 @@ const App: React.FC = () => {
                 <td className="px-2 py-2">
                   {isMotion ? (
                     editable ? (
-                      <textarea className="w-full h-20 p-1.5 bg-orange-900/30 border border-orange-700 rounded text-[10px] text-orange-200 resize-none"
+                      <textarea className="w-full h-20 p-1.5 bg-orange-900/20 border border-orange-700/50 rounded text-[10px] text-orange-200 resize-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                         placeholder="【尾帧】画面描述..." value={shot.endFrame || ''} onChange={(e) => updateShotField(shot.id, 'endFrame', e.target.value)} />
                     ) : (
-                      <div className="bg-orange-900/40 p-2 rounded border-l-2 border-orange-500 text-[10px] text-orange-100 leading-relaxed">
-                        {shot.endFrame || <span className="text-gray-500 italic">未填写</span>}
+                      <div className="bg-orange-900/30 p-2 rounded-md border-l-2 border-orange-500 text-[10px] text-orange-100 leading-relaxed">
+                        {shot.endFrame || <span className="text-[var(--color-text-tertiary)] italic">未填写</span>}
                       </div>
                     )
                   ) : (
-                    <div className="text-gray-500 text-center py-4 italic text-[10px]">静态镜头</div>
+                    <div className="text-[var(--color-text-tertiary)] text-center py-4 italic text-[10px]">静态镜头</div>
                   )}
                 </td>
               </tr>
@@ -3785,27 +3891,31 @@ const App: React.FC = () => {
 
         {/* 🆕 剧本清洗页面 */}
         {currentStep === AppStep.SCRIPT_CLEANING && (
-          <div className="grid lg:grid-cols-2 gap-3">
+          <div className="grid lg:grid-cols-2 gap-4">
             {/* 左侧：清洗进度 / 原始剧本 */}
-            <div className="bg-gray-800 p-3 rounded-lg border border-gray-700">
-              <h2 className="text-sm font-bold text-white mb-2">🧹 剧本清洗</h2>
+            <div className="glass-card p-4 rounded-xl">
+              <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+                🧹 剧本清洗
+              </h2>
 
               {isCleaning ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center gap-2 text-blue-400">
-                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
                     <span className="text-sm font-medium">正在清洗剧本...</span>
                   </div>
-                  <div className="bg-gray-900 p-2 rounded border border-gray-700 max-h-[60vh] overflow-auto">
-                    <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">{cleaningProgress}</pre>
+                  <div className="bg-[var(--color-bg)] p-3 rounded-lg border border-[var(--color-border)] max-h-[60vh] overflow-auto">
+                    <pre className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap font-mono">{cleaningProgress}</pre>
                   </div>
                 </div>
               ) : cleaningResult ? (
                 <div className="space-y-3">
                   {/* 解析错误提示 */}
                   {cleaningResult.parseError && (
-                    <div className="bg-red-900/30 p-2 rounded border border-red-800">
-                      <h3 className="text-sm font-bold text-red-300 mb-1">⚠️ JSON解析失败</h3>
+                    <div className="bg-red-900/20 p-3 rounded-lg border border-red-700/50">
+                      <h3 className="text-sm font-bold text-red-300 mb-1 flex items-center gap-2">
+                        ⚠️ JSON解析失败
+                      </h3>
                       <pre className="text-xs text-red-400 whitespace-pre-wrap max-h-32 overflow-auto">
                         {cleaningResult.rawOutput?.substring(0, 1000)}...
                       </pre>
@@ -3814,9 +3924,11 @@ const App: React.FC = () => {
 
                   {/* 设定约束 */}
                   {cleaningResult.constraints?.length > 0 && (
-                    <div className="bg-amber-900/30 p-2 rounded border border-amber-800">
-                      <h3 className="text-sm font-bold text-amber-300 mb-1">⚠️ 剧本设定约束</h3>
-                      <ul className="space-y-0.5">
+                    <div className="bg-amber-900/20 p-3 rounded-lg border border-amber-700/50">
+                      <h3 className="text-sm font-bold text-amber-300 mb-2 flex items-center gap-2">
+                        ⚠️ 剧本设定约束
+                      </h3>
+                      <ul className="space-y-1">
                         {cleaningResult.constraints.map((c: any, i: number) => (
                           <li key={i} className="text-xs text-amber-400">
                             <span className="font-medium">• {c.rule}</span>
@@ -3829,14 +3941,16 @@ const App: React.FC = () => {
 
                   {/* 场景权重 */}
                   {cleaningResult.sceneWeights?.length > 0 && (
-                    <div className="bg-blue-900/30 p-2 rounded border border-blue-800">
-                      <h3 className="text-sm font-bold text-blue-300 mb-1">📊 场景权重分配</h3>
-                      <div className="grid grid-cols-2 gap-1">
+                    <div className="bg-blue-900/20 p-3 rounded-lg border border-blue-700/50">
+                      <h3 className="text-sm font-bold text-blue-300 mb-2 flex items-center gap-2">
+                        📊 场景权重分配
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
                         {cleaningResult.sceneWeights.map((w: any, i: number) => (
-                          <div key={i} className={`p-1.5 rounded text-xs ${
-                            w.weight === 'high' ? 'bg-red-900/50 text-red-300' :
-                            w.weight === 'medium' ? 'bg-yellow-900/50 text-yellow-300' :
-                            'bg-green-900/50 text-green-300'
+                          <div key={i} className={`p-2 rounded-lg text-xs ${
+                            w.weight === 'high' ? 'bg-red-900/30 text-red-300 border border-red-700/50' :
+                            w.weight === 'medium' ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50' :
+                            'bg-green-900/30 text-green-300 border border-green-700/50'
                           }`}>
                             <div className="font-medium">场景 {w.sceneId}</div>
                             <div>建议 {w.suggestedShots} 镜头</div>
@@ -3847,9 +3961,11 @@ const App: React.FC = () => {
                   )}
 
                   {/* 非画面信息 */}
-                  <div className="bg-gray-900 p-2 rounded border border-gray-700">
-                    <h3 className="text-sm font-bold text-gray-300 mb-1">🔇 非画面信息</h3>
-                    <div className="space-y-0.5 text-xs text-gray-400">
+                  <div className="bg-[var(--color-bg)] p-3 rounded-lg border border-[var(--color-border)]">
+                    <h3 className="text-sm font-bold text-[var(--color-text-primary)] mb-2 flex items-center gap-2">
+                      🔇 非画面信息
+                    </h3>
+                    <div className="space-y-1 text-xs text-[var(--color-text-secondary)]">
                       {cleaningResult.audioEffects?.length > 0 && (
                         <div><span className="font-medium">音效:</span> {cleaningResult.audioEffects.join(', ')}</div>
                       )}
@@ -3866,25 +3982,27 @@ const App: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="text-gray-500 text-center py-8">等待清洗结果...</div>
+                <div className="text-[var(--color-text-tertiary)] text-center py-8">等待清洗结果...</div>
               )}
             </div>
 
             {/* 右侧：清洗后的场景列表 */}
-            <div className="bg-gray-800 p-3 rounded-lg border border-gray-700">
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-sm font-bold text-white">📝 清洗后的场景</h2>
+            <div className="glass-card p-4 rounded-xl">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  📝 清洗后的场景
+                </h2>
                 {cleaningResult && !isCleaning && (
                   <div className="flex items-center gap-2">
                     {/* 生成模式选择 */}
-                    <div className="flex items-center gap-1 bg-gray-900 rounded px-2 py-1">
-                      <span className="text-xs text-gray-500">模式:</span>
+                    <div className="flex items-center gap-1 bg-[var(--color-bg)] rounded-lg px-2 py-1 border border-[var(--color-border)]">
+                      <span className="text-xs text-[var(--color-text-tertiary)]">模式:</span>
                       <button
                         onClick={() => setGenerationMode('traditional')}
                         className={`px-2 py-1 rounded text-xs font-medium transition-all ${
                           generationMode === 'traditional'
                             ? 'bg-blue-600 text-white'
-                            : 'bg-white text-slate-600 hover:bg-slate-200'
+                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
                         }`}
                       >
                         传统
@@ -3894,7 +4012,7 @@ const App: React.FC = () => {
                         className={`px-2 py-1 rounded text-xs font-medium transition-all ${
                           generationMode === 'chain-of-thought'
                             ? 'bg-green-600 text-white'
-                            : 'bg-white text-slate-600 hover:bg-slate-200'
+                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
                         }`}
                         title="5阶段思维链模式：剧本分析→视觉策略→镜头分配→逐镜设计→质量自检"
                       >
@@ -3904,15 +4022,15 @@ const App: React.FC = () => {
 
                     {/* 方案B：角色提取警告 */}
                     {characterRefs.length === 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-300 rounded-lg">
-                        <span className="text-amber-600">⚠️</span>
-                        <span className="text-xs text-amber-700 font-medium">未提取角色</span>
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+                        <span className="text-amber-400">⚠️</span>
+                        <span className="text-xs text-amber-300 font-medium">未提取角色</span>
                       </div>
                     )}
 
                     <button
                       onClick={startShotListGeneration}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-all"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-all shadow-lg"
                     >
                       {generationMode === 'chain-of-thought' ? '🧠 开始5阶段生成' : '生成分镜脚本'} →
                     </button>
@@ -3921,27 +4039,27 @@ const App: React.FC = () => {
               </div>
 
               {cleaningResult?.cleanedScenes ? (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[60vh] overflow-auto">
                   {cleaningResult.cleanedScenes.map((scene, i) => (
-                    <div key={i} className="p-3 bg-slate-50 rounded-lg border">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded font-medium">
+                    <div key={i} className="p-3 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)]/30 transition-colors">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-md font-medium">
                           场景 {scene.id}
                         </span>
                         {scene.moodTags.map((tag, j) => (
-                          <span key={j} className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded">
+                          <span key={j} className="bg-purple-900/30 text-purple-300 text-xs px-2 py-0.5 rounded-md border border-purple-700/50">
                             {tag}
                           </span>
                         ))}
                       </div>
-                      <div className="text-sm text-slate-700 mb-2">{scene.visualContent}</div>
+                      <div className="text-sm text-[var(--color-text-primary)] mb-2">{scene.visualContent}</div>
                       {scene.dialogues.length > 0 && (
-                        <div className="text-xs text-slate-500 italic">
+                        <div className="text-xs text-[var(--color-text-secondary)] italic">
                           {scene.dialogues.map((d, k) => <div key={k}>「{d}」</div>)}
                         </div>
                       )}
                       {scene.uiElements.length > 0 && (
-                        <div className="text-xs text-green-600 mt-1">
+                        <div className="text-xs text-green-400 mt-1">
                           UI: {scene.uiElements.join(' | ')}
                         </div>
                       )}
@@ -3949,7 +4067,7 @@ const App: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div className="text-slate-400 text-center py-10">等待清洗结果...</div>
+                <div className="text-[var(--color-text-tertiary)] text-center py-10">等待清洗结果...</div>
               )}
             </div>
           </div>
@@ -4418,39 +4536,45 @@ const App: React.FC = () => {
         {currentStep === AppStep.EXTRACT_PROMPTS && (
           <div className="space-y-4 pb-10">
             {/* 顶部栏 */}
-            <div className="flex justify-between items-center bg-gray-800 p-4 rounded-lg border border-gray-700">
-              <div>
-                <h2 className="text-xl font-bold text-white">🎯 提取AI生图提示词</h2>
-                <p className="text-gray-400 text-xs mt-1">
-                  根据 Nano Banana Pro 官方手册，从分镜脚本提取纯画面描述的AI提示词（中英文双版本）
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setCurrentStep(AppStep.MANUAL_EDIT)}
-                  className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-md font-medium text-xs hover:bg-gray-600 transition-all"
-                >
-                  ← 返回精修
-                </button>
-                <button
-                  onClick={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
-                  disabled={!shots.some(s => s.imagePromptEn)}
-                  className="px-4 py-2 bg-emerald-500 text-white rounded-md font-medium text-sm hover:bg-emerald-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  下一步: 绘制草图 →
-                </button>
+            <div className="glass-card p-4 rounded-xl">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    🎯 提取AI生图提示词
+                  </h2>
+                  <p className="text-[var(--color-text-secondary)] text-xs mt-1">
+                    根据 Nano Banana Pro 官方手册，从分镜脚本提取纯画面描述的AI提示词（中英文双版本）
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setCurrentStep(AppStep.MANUAL_EDIT)}
+                    className="px-3 py-1.5 bg-[var(--color-surface)] text-[var(--color-text-secondary)] rounded-lg font-medium text-xs hover:bg-[var(--color-surface-hover)] transition-all"
+                  >
+                    ← 返回精修
+                  </button>
+                  <button
+                    onClick={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
+                    disabled={!shots.some(s => s.imagePromptEn)}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium text-sm hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                  >
+                    下一步: 绘制草图 →
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* 提示词公式说明 */}
-            <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 p-4 rounded-lg border border-purple-700">
-              <h3 className="font-bold text-purple-300 mb-2">📐 Nano Banana Pro 提示词公式</h3>
+            <div className="glass-card p-4 rounded-xl bg-gradient-to-r from-purple-900/20 to-indigo-900/20 border-purple-700/50">
+              <h3 className="font-bold text-purple-300 mb-2 flex items-center gap-2">
+                📐 Nano Banana Pro 提示词公式
+              </h3>
               <div className="text-sm text-purple-300">
-                <code className="bg-gray-800 px-2 py-1 rounded border border-purple-700">
+                <code className="bg-[var(--color-bg)] px-3 py-1.5 rounded-lg border border-purple-700/50 inline-block">
                   [主体描述] + [环境/背景] + [动作/状态] + [技术参数(景别/角度/光影)]
                 </code>
               </div>
-              <ul className="text-xs text-purple-400 mt-2 space-y-1">
+              <ul className="text-xs text-purple-400 mt-3 space-y-1">
                 <li>• <strong>主体描述</strong>：角色外貌、服装、在画面中的位置</li>
                 <li>• <strong>环境/背景</strong>：场景、天气、时间</li>
                 <li>• <strong>动作/状态</strong>：表情、姿态、正在做什么</li>
@@ -4460,7 +4584,7 @@ const App: React.FC = () => {
             </div>
 
             {/* 操作按钮 */}
-            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+            <div className="glass-card p-4 rounded-xl">
               <div className="flex items-center gap-4">
                 <button
                   onClick={async () => {
@@ -4670,12 +4794,12 @@ const App: React.FC = () => {
                   )}
                 </button>
 
-                <span className="text-sm text-gray-400">{extractProgress}</span>
+                <span className="text-sm text-[var(--color-text-secondary)]">{extractProgress}</span>
               </div>
 
               {/* 🆕 提示词自检结果显示 */}
               {promptValidationResults.length > 0 && (
-                <div className="mt-4 p-3 bg-red-900/20 border border-red-700 rounded-lg">
+                <div className="mt-4 p-3 bg-red-900/20 border border-red-700/50 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-bold text-red-400">⚠️ 发现 {promptValidationResults.length} 个提示词问题</h4>
                     <div className="flex items-center gap-2">
@@ -4762,10 +4886,10 @@ const App: React.FC = () => {
                   </div>
                   <div className="max-h-40 overflow-y-auto space-y-2 text-xs">
                     {promptValidationResults.map((result, idx) => (
-                      <div key={idx} className="p-2 bg-gray-800 rounded border border-gray-700">
+                      <div key={idx} className="p-2 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
                         <span className="font-bold text-amber-400">#{result.shotNumber}</span>
-                        <span className="text-gray-300 ml-2">{result.suggestion}</span>
-                        <span className="text-gray-500 ml-2">({result.reason})</span>
+                        <span className="text-[var(--color-text-primary)] ml-2">{result.suggestion}</span>
+                        <span className="text-[var(--color-text-tertiary)] ml-2">({result.reason})</span>
                       </div>
                     ))}
                   </div>
@@ -4775,8 +4899,8 @@ const App: React.FC = () => {
               {/* 进度统计 */}
               {shots.length > 0 && (
                 <div className="mt-4 flex gap-4 text-xs">
-                  <span className="text-gray-400">
-                    总镜头: <strong className="text-gray-200">{shots.length}</strong>
+                  <span className="text-[var(--color-text-secondary)]">
+                    总镜头: <strong className="text-[var(--color-text-primary)]">{shots.length}</strong>
                   </span>
                   <span className="text-emerald-400">
                     已提取: <strong>{shots.filter(s => s.imagePromptEn).length}</strong>
@@ -4789,28 +4913,30 @@ const App: React.FC = () => {
             </div>
 
             {/* 提示词预览表格 */}
-            <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-              <div className="p-3 bg-gray-900 border-b border-gray-700 flex items-center justify-between">
-                <h3 className="font-bold text-gray-200">📋 提示词预览</h3>
+            <div className="glass-card rounded-xl overflow-hidden">
+              <div className="p-3 bg-[var(--color-bg)] border-b border-[var(--color-border)] flex items-center justify-between">
+                <h3 className="font-bold text-[var(--color-text-primary)] flex items-center gap-2">
+                  📋 提示词预览
+                </h3>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={exportPromptsToJSON}
                     disabled={!shots.some(s => s.imagePromptEn)}
-                    className="px-3 py-1.5 bg-gray-800 border border-purple-700 text-purple-400 rounded-md font-medium text-xs hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 bg-[var(--color-surface)] border border-purple-700/50 text-purple-400 rounded-lg font-medium text-xs hover:bg-[var(--color-surface-hover)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     📥 导出JSON
                   </button>
                   <button
                     onClick={exportPromptsChineseCSV}
                     disabled={!shots.some(s => s.imagePromptCn)}
-                    className="px-3 py-1.5 bg-gray-800 border border-amber-700 text-amber-400 rounded-md font-medium text-xs hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 bg-[var(--color-surface)] border border-amber-700/50 text-amber-400 rounded-lg font-medium text-xs hover:bg-[var(--color-surface-hover)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     🇨🇳 导出中文版
                   </button>
                   <button
                     onClick={exportPromptsEnglishCSV}
                     disabled={!shots.some(s => s.imagePromptEn)}
-                    className="px-3 py-1.5 bg-gray-800 border border-green-700 text-green-400 rounded-md font-medium text-xs hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 bg-[var(--color-surface)] border border-green-700/50 text-green-400 rounded-lg font-medium text-xs hover:bg-[var(--color-surface-hover)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     🇺🇸 导出英文版
                   </button>
@@ -4818,18 +4944,18 @@ const App: React.FC = () => {
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-900">
+                  <thead className="bg-[var(--color-bg)]">
                     <tr>
-                      <th className="px-3 py-2 text-left font-medium text-gray-400 w-16">#</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-400 w-20">类型</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-400 w-1/3">🇨🇳 中文提示词</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-400 w-1/3">🇺🇸 英文提示词 (生图用)</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-400">🎬 视频提示词</th>
+                      <th className="px-3 py-2 text-left font-medium text-[var(--color-text-tertiary)] w-16">#</th>
+                      <th className="px-3 py-2 text-left font-medium text-[var(--color-text-tertiary)] w-20">类型</th>
+                      <th className="px-3 py-2 text-left font-medium text-[var(--color-text-tertiary)] w-1/3">🇨🇳 中文提示词</th>
+                      <th className="px-3 py-2 text-left font-medium text-[var(--color-text-tertiary)] w-1/3">🇺🇸 英文提示词 (生图用)</th>
+                      <th className="px-3 py-2 text-left font-medium text-[var(--color-text-tertiary)]">🎬 视频提示词</th>
                     </tr>
                   </thead>
                   <tbody>
                     {shots.map((shot, idx) => (
-                      <tr key={shot.id} className={idx % 2 === 0 ? 'bg-gray-800' : 'bg-gray-850'}>
+                      <tr key={shot.id} className={idx % 2 === 0 ? 'bg-[var(--color-surface)]' : 'bg-[var(--color-bg)]'}>
                         <td className="px-3 py-2 font-mono font-bold text-gray-200">
                           #{shot.shotNumber}
                         </td>
@@ -5154,6 +5280,18 @@ const App: React.FC = () => {
                               >
                                 🔄 重新生成
                               </button>
+                              {/* 🆕 上传按钮 */}
+                              <button
+                                onClick={() => {
+                                  setUploadGridIndex(idx);
+                                  setUploadDialogOpen(true);
+                                }}
+                                disabled={isLoading}
+                                className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="上传自定义图片"
+                              >
+                                📤 上传
+                              </button>
                               <button
                                 onClick={() => downloadImage(url, `storyboard_grid_${idx + 1}_${Date.now()}.png`)}
                                 className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
@@ -5162,7 +5300,20 @@ const App: React.FC = () => {
                               </button>
                             </>
                           ) : (
-                            <span className="text-xs text-orange-400">生成中...</span>
+                            <>
+                              <span className="text-xs text-orange-400">生成中...</span>
+                              {/* 🆕 刷新任务按钮（如果有保存的taskCode） */}
+                              {shots[idx * 9]?.storyboardGridGenerationMeta?.taskCode && (
+                                <button
+                                  onClick={() => handleRefreshGrid(idx)}
+                                  disabled={isLoading}
+                                  className="px-2 py-1 bg-cyan-600 text-white rounded text-xs hover:bg-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                                  title="刷新任务状态，获取生成结果"
+                                >
+                                  🔄 刷新任务
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -5271,6 +5422,80 @@ const App: React.FC = () => {
           <div className="bg-gray-800 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 border border-gray-700">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
             <p className="text-sm font-medium text-gray-200">{progressMsg}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 上传九宫格对话框 */}
+      {uploadDialogOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
+          <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
+              📤 上传第 {uploadGridIndex !== null ? uploadGridIndex + 1 : ''} 张九宫格
+            </h3>
+
+            <div className="space-y-4">
+              {/* URL输入 */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  图片URL
+                </label>
+                <input
+                  type="text"
+                  value={uploadUrl}
+                  onChange={(e) => setUploadUrl(e.target.value)}
+                  placeholder="https://example.com/image.png"
+                  className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              {/* 分隔线 */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+                <span className="text-xs text-[var(--color-text-tertiary)]">或</span>
+                <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+              </div>
+
+              {/* 文件上传 */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  上传本地图片
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                />
+                {uploadFile && (
+                  <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
+                    已选择: {uploadFile.name}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* 按钮 */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setUploadDialogOpen(false);
+                  setUploadGridIndex(null);
+                  setUploadUrl('');
+                  setUploadFile(null);
+                }}
+                className="flex-1 px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg font-medium hover:bg-[var(--color-surface-hover)] transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleUploadGrid}
+                disabled={!uploadUrl.trim() && !uploadFile}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                确认上传
+              </button>
+            </div>
           </div>
         </div>
       )}
