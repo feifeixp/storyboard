@@ -1246,11 +1246,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             />
 
             <div>
-              <label className="model-selector-label">角色风格</label>
+              <label className="block text-[13px] font-medium text-[var(--color-text-primary)] mb-2">角色风格</label>
               <select
                 value={characterStyleId}
                 onChange={(e) => setCharacterStyleId(e.target.value)}
-                className="model-selector-select"
+                className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-[13px] hover:border-[var(--color-border-hover)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-colors cursor-pointer"
               >
                 {STORYBOARD_STYLES.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
@@ -1748,11 +1748,11 @@ const ScenesTab: React.FC<{
           />
 
           <div>
-            <label className="model-selector-label">场景风格</label>
+            <label className="block text-[13px] font-medium text-[var(--color-text-primary)] mb-2">场景风格</label>
             <select
               value={sceneStyleId}
               onChange={(e) => onChangeSceneStyleId(e.target.value)}
-              className="model-selector-select"
+              className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-[13px] hover:border-[var(--color-border-hover)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-colors cursor-pointer"
             >
               {STORYBOARD_STYLES.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
