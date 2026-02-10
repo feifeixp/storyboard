@@ -328,7 +328,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           if (c.id !== characterId) return c;
           if (targetForm) {
             // 保存到形态的 imageSheetUrl
-            return { ...c, forms: (c.forms || []).map(f => f.id === formId ? { ...f, imageSheetUrl: sheetUrl, imageGenerationMeta: finalMeta } : f) };
+            const updatedChar = { ...c, forms: (c.forms || []).map(f => f.id === formId ? { ...f, imageSheetUrl: sheetUrl, imageGenerationMeta: finalMeta } : f) };
+            console.log(`[ProjectDashboard] 🔍 更新形态设定图: ${targetLabel}, URL: ${sheetUrl.substring(0, 80)}...`);
+            console.log(`[ProjectDashboard] 🔍 更新后的forms:`, updatedChar.forms);
+            return updatedChar;
           }
           // 保存到角色主体的 imageSheetUrl
           return { ...c, imageSheetUrl: sheetUrl, imageGenerationMeta: { ...finalMeta, taskCode: createdTaskCode || c.imageGenerationMeta?.taskCode, taskCreatedAt: createdTaskAt || c.imageGenerationMeta?.taskCreatedAt } };
@@ -338,12 +341,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       // 🔧 先持久化到数据库，再更新前端状态
       try {
         await patchProject(project.id, { characters: updatedProject.characters });
-        console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已保存: ${targetLabel}`);
+        console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已保存到数据库: ${targetLabel}`);
       } catch (err) {
         console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
         await saveProject(updatedProject);
       }
       await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+      console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已更新到前端状态: ${targetLabel}`);
     } catch (error: any) {
       console.error('生成角色设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
@@ -1582,6 +1586,10 @@ const CharacterCard: React.FC<{
             {character.forms.map((form) => {
               const isFormGenerating = generatingFormIds.includes(form.id);
               const currentFormProgress = formGenProgressMap[form.id] || null;
+              // 🔍 调试日志
+              if (form.imageSheetUrl) {
+                console.log(`[CharacterCard] 🔍 形态 ${form.name} 有设定图: ${form.imageSheetUrl.substring(0, 80)}...`);
+              }
               return (
                 <div key={form.id} className="bg-[var(--color-surface-solid)] rounded-lg p-3 text-[12px] group relative border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-colors">
                   <div className="flex items-center justify-between mb-1.5">
