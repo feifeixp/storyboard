@@ -3552,71 +3552,84 @@ export async function generateMergedStoryboardSheet(
   // 🆕 构建美术风格约束
   const artStyleSection = artStyleType ? getArtStyleConstraints(artStyleType) : '';
 
-  // 逐张生成九宫格图
-  for (let gridIndex = 0; gridIndex < totalGrids; gridIndex++) {
-    // 🆕 检查是否被取消
-    if (abortSignal?.aborted) {
-      console.log(`[OpenRouter] 九宫格生成已被用户停止 (已完成 ${gridIndex}/${totalGrids} 张)`);
-      break;
-    }
+  // 🚀 并行生成所有九宫格图（同时生成，不等待）
+  console.log(`[OpenRouter] 🚀 开始并行生成 ${totalGrids} 张九宫格...`);
 
-    const startIdx = gridIndex * GRID_SIZE;
-    const endIdx = Math.min(startIdx + GRID_SIZE, shots.length);
-    const gridShots = shots.slice(startIdx, endIdx);
+  // 初始化 results 数组（预留位置）
+  results = new Array(totalGrids).fill('');
 
-    // 回调进度
-    if (onProgress) {
-      onProgress(gridIndex + 1, totalGrids, `第${gridIndex + 1}张九宫格`);
-    }
-
-    console.log(`[OpenRouter] 生成第 ${gridIndex + 1}/${totalGrids} 张九宫格 (镜头 #${startIdx + 1} - #${endIdx})`);
-
-    // 🆕 构建九宫格提示词 - 传入角色信息、集数、场景信息和美术风格约束
-    const gridPrompt = buildNineGridPrompt(gridShots, gridIndex + 1, totalGrids, styleSuffix, styleName, characterRefs, episodeNumber, sceneSection, artStyleSection);
-
-    try {
-      // 调用AI生成九宫格图
-      // 注意：大多数图像生成模型不支持图片参考，所以角色信息以文字形式写入提示词
-      const tempImageUrl = await generateSingleImage(
-  				gridPrompt,
-  				effectiveModel,
-  				[],
-  				(taskCode) => onTaskCreated ? onTaskCreated(taskCode, gridIndex) : undefined
-  			);
-
-      if (tempImageUrl) {
-        // 🆕 上传到 OSS（如果提供了 projectId）
-        let finalImageUrl = tempImageUrl;
-        if (projectId) {
-          try {
-            console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} 开始上传到 OSS...`);
-            finalImageUrl = await downloadAndUploadToOSS(tempImageUrl, projectId, gridIndex);
-            console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} OSS URL: ${finalImageUrl}`);
-          } catch (error) {
-            console.error(`[OpenRouter] 九宫格 #${gridIndex + 1} 上传 OSS 失败，使用临时 URL:`, error);
-            // 上传失败时使用临时 URL（降级方案）
-            finalImageUrl = tempImageUrl;
-          }
-        }
-
-        results.push(finalImageUrl);
-        // 生成一张就回调显示一张
-        if (onGridComplete) {
-          onGridComplete(gridIndex, finalImageUrl);
-        }
-      } else {
-        console.warn(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成失败`);
-        // 失败时推入空字符串作为占位
-        results.push('');
+  // 创建所有生成任务
+  const generationTasks = Array.from({ length: totalGrids }, (_, gridIndex) => {
+    return (async () => {
+      // 检查是否被取消
+      if (abortSignal?.aborted) {
+        console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} 已被用户停止`);
+        return;
       }
-    } catch (error) {
-      // 🆕 捕获生成错误，继续下一张
-      console.error(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成异常:`, error);
-      results.push('');
-    }
-  }
 
-  console.log(`[OpenRouter] 九宫格生成完成: ${results.filter(r => r).length}/${totalGrids} 成功`);
+      const startIdx = gridIndex * GRID_SIZE;
+      const endIdx = Math.min(startIdx + GRID_SIZE, shots.length);
+      const gridShots = shots.slice(startIdx, endIdx);
+
+      console.log(`[OpenRouter] 🎬 开始生成第 ${gridIndex + 1}/${totalGrids} 张九宫格 (镜头 #${startIdx + 1} - #${endIdx})`);
+
+      // 构建九宫格提示词
+      const gridPrompt = buildNineGridPrompt(
+        gridShots,
+        gridIndex + 1,
+        totalGrids,
+        styleSuffix,
+        styleName,
+        characterRefs,
+        episodeNumber,
+        sceneSection,
+        artStyleSection
+      );
+
+      try {
+        // 调用AI生成九宫格图
+        const tempImageUrl = await generateSingleImage(
+          gridPrompt,
+          effectiveModel,
+          [],
+          (taskCode) => {
+            if (onTaskCreated) {
+              onTaskCreated(taskCode, gridIndex);
+            }
+            // 回调进度（任务创建时）
+            if (onProgress) {
+              onProgress(gridIndex + 1, totalGrids, `第${gridIndex + 1}张九宫格`);
+            }
+          }
+        );
+
+        if (tempImageUrl) {
+          // 🔧 Neodomain 返回的 URL 已经是 OSS 永久 URL，无需再次上传
+          console.log(`[OpenRouter] ✅ 九宫格 #${gridIndex + 1} 生成成功`);
+          console.log(`[OpenRouter] 图片 URL: ${tempImageUrl}`);
+
+          // 保存到 results 数组
+          results[gridIndex] = tempImageUrl;
+
+          // 立即回调显示图片
+          if (onGridComplete) {
+            onGridComplete(gridIndex, tempImageUrl);
+          }
+        } else {
+          console.warn(`[OpenRouter] ❌ 第 ${gridIndex + 1} 张九宫格生成失败`);
+          results[gridIndex] = '';
+        }
+      } catch (error) {
+        console.error(`[OpenRouter] ❌ 第 ${gridIndex + 1} 张九宫格生成异常:`, error);
+        results[gridIndex] = '';
+      }
+    })();
+  });
+
+  // 等待所有任务完成
+  await Promise.all(generationTasks);
+
+  console.log(`[OpenRouter] 🎉 所有九宫格生成完成！成功: ${results.filter(r => r).length}/${totalGrids}`);
   return results;
 }
 
@@ -3691,21 +3704,12 @@ export async function generateSingleGrid(
   const tempImageUrl = await generateSingleImage(gridPrompt, effectiveModel, [], onTaskCreated);
 
   if (tempImageUrl) {
-    // 🆕 上传到 OSS（如果提供了 projectId）
-    let finalImageUrl = tempImageUrl;
-    if (projectId) {
-      try {
-        console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} 开始上传到 OSS...`);
-        finalImageUrl = await downloadAndUploadToOSS(tempImageUrl, projectId, gridIndex);
-        console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} OSS URL: ${finalImageUrl}`);
-      } catch (error) {
-        console.error(`[OpenRouter] 九宫格 #${gridIndex + 1} 上传 OSS 失败，使用临时 URL:`, error);
-        finalImageUrl = tempImageUrl;
-      }
-    }
+    // 🔧 Neodomain 返回的 URL 已经是 OSS 永久 URL，无需再次上传
+    console.log(`[OpenRouter] ✅ 第 ${gridIndex + 1} 张九宫格生成成功`);
+    console.log(`[OpenRouter] 图片 URL: ${tempImageUrl}`);
 
-    console.log(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成成功`);
-    return finalImageUrl;
+    // 直接返回 Neodomain 的 OSS URL
+    return tempImageUrl;
   } else {
     console.warn(`[OpenRouter] 第 ${gridIndex + 1} 张九宫格生成失败`);
     return null;

@@ -261,21 +261,21 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 p-8">
+    <div className="min-h-screen p-8">
       <div className="max-w-7xl mx-auto">
         {/* 头部 */}
         <div className="mb-8 flex justify-between items-center">
           <div>
             <button
               onClick={onBack}
-              className="mb-4 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all"
+              className="mb-4 px-4 py-2 bg-[var(--color-surface)] text-[var(--color-text)] rounded-lg hover:bg-[var(--color-surface-hover)] transition-all border border-[var(--color-border)]"
             >
               ← 返回
             </button>
-            <h1 className="text-4xl font-bold text-white mb-2">
+            <h1 className="text-4xl font-bold text-[var(--color-text)] mb-2">
               📋 最终故事板预览
             </h1>
-            <p className="text-gray-400">
+            <p className="text-[var(--color-text-secondary)]">
               {projectName || '未命名项目'} - 第{episodeNumber || '?'}集 - 共 {shots.length} 个镜头
             </p>
           </div>
@@ -285,28 +285,28 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
             <button
               onClick={exportJSON}
               disabled={isExporting}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50"
+              className="px-4 py-2 bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] rounded-lg hover:bg-[var(--color-accent-blue)]/20 transition-all disabled:opacity-50 border border-[var(--color-accent-blue)]/30"
             >
               📄 导出 JSON
             </button>
             <button
               onClick={exportCSV}
               disabled={isExporting}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all disabled:opacity-50"
+              className="px-4 py-2 bg-[var(--color-accent-green)]/10 text-[var(--color-accent-green)] rounded-lg hover:bg-[var(--color-accent-green)]/20 transition-all disabled:opacity-50 border border-[var(--color-accent-green)]/30"
             >
               📊 导出 CSV
             </button>
             <button
               onClick={exportMarkdown}
               disabled={isExporting}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all disabled:opacity-50"
+              className="px-4 py-2 bg-[var(--color-accent-violet)]/10 text-[var(--color-accent-violet)] rounded-lg hover:bg-[var(--color-accent-violet)]/20 transition-all disabled:opacity-50 border border-[var(--color-accent-violet)]/30"
             >
               📝 导出 MD
             </button>
             <button
               onClick={exportPDF}
               disabled={isExporting}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all disabled:opacity-50"
+              className="px-4 py-2 bg-[var(--color-accent-red)]/10 text-[var(--color-accent-red)] rounded-lg hover:bg-[var(--color-accent-red)]/20 transition-all disabled:opacity-50 border border-[var(--color-accent-red)]/30"
             >
               {isExporting ? '⏳ 生成中...' : '📕 导出 PDF'}
             </button>
@@ -333,9 +333,9 @@ function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
   const storyBeat = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event;
 
   return (
-    <div className="bg-gray-50 rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg hover:shadow-xl transition-all">
+    <div className="rounded-lg overflow-hidden border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-all bg-[var(--color-surface-solid)]">
       {/* 镜头编号 */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-2 font-bold text-lg">
+      <div className="bg-gradient-to-r from-[var(--color-primary-dark)] to-[var(--color-primary)] text-white px-4 py-2 font-bold text-lg">
         镜头 {shot.shotNumber}
       </div>
 
@@ -354,35 +354,35 @@ function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
       <div className="p-4 space-y-3">
         {/* 剧情描述 */}
         <div>
-          <div className="text-xs font-semibold text-gray-500 mb-1">剧情描述</div>
-          <div className="text-sm text-gray-800 leading-relaxed">{storyBeat}</div>
+          <div className="text-xs font-semibold text-[#a1a1aa] mb-1">剧情描述</div>
+          <div className="text-sm text-[#fafaf9] leading-relaxed">{storyBeat}</div>
         </div>
 
         {/* 对话 */}
         {shot.dialogue && (
           <div>
-            <div className="text-xs font-semibold text-gray-500 mb-1">对话</div>
-            <div className="text-sm text-gray-800 italic">"{shot.dialogue}"</div>
+            <div className="text-xs font-semibold text-[#a1a1aa] mb-1">对话</div>
+            <div className="text-sm text-[#e8c9a0] italic">"{shot.dialogue}"</div>
           </div>
         )}
 
         {/* 镜头信息 */}
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
-            <span className="font-semibold text-gray-600">景别:</span>
-            <span className="ml-1 text-gray-800">{shot.shotSize}</span>
+            <span className="font-semibold text-[#71717a]">景别:</span>
+            <span className="ml-1 text-[#fafaf9]">{shot.shotSize}</span>
           </div>
           <div>
-            <span className="font-semibold text-gray-600">时长:</span>
-            <span className="ml-1 text-gray-800">{shot.duration}</span>
+            <span className="font-semibold text-[#71717a]">时长:</span>
+            <span className="ml-1 text-[#fafaf9]">{shot.duration}</span>
           </div>
           <div className="col-span-2">
-            <span className="font-semibold text-gray-600">角度:</span>
-            <span className="ml-1 text-gray-800">{shot.angleDirection} {shot.angleHeight}</span>
+            <span className="font-semibold text-[#71717a]">角度:</span>
+            <span className="ml-1 text-[#fafaf9]">{shot.angleDirection} {shot.angleHeight}</span>
           </div>
           <div className="col-span-2">
-            <span className="font-semibold text-gray-600">运镜:</span>
-            <span className="ml-1 text-gray-800">{shot.cameraMove}</span>
+            <span className="font-semibold text-[#71717a]">运镜:</span>
+            <span className="ml-1 text-[#fafaf9]">{shot.cameraMove}</span>
           </div>
         </div>
       </div>

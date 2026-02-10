@@ -1028,36 +1028,36 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     { id: 'scenes', label: '场景', icon: '🏛️' },
   ];
 
-  // 渲染项目概览 - 全页展开版（无滚动条）+ 剧集列表
+  // 渲染项目概览 - Neodomain 设计
   const renderOverview = () => (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* 顶部行：基础信息 + 分卷 */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        {/* 基础信息 + 🆕 角色卡/场景卡按钮 */}
-        <div className={`${cardClass} ${cardPad}`}>
-          <h3 className="text-sm font-bold text-white mb-2">📋 项目信息</h3>
-          <div className="space-y-1 text-xs">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {/* 基础信息 + 角色卡/场景卡按钮 */}
+        <div className="glass-card rounded-xl p-5">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3">📋 项目信息</h3>
+          <div className="space-y-2 text-[13px]">
             {project.settings?.mediaType && (
-              <div><span className="text-gray-500">媒体类型:</span> <span className="text-blue-400">{PROJECT_MEDIA_TYPES[project.settings.mediaType]?.name || project.settings.mediaType}</span></div>
+              <div><span className="text-[var(--color-text-tertiary)]">媒体类型:</span> <span className="text-[var(--color-primary-light)]">{PROJECT_MEDIA_TYPES[project.settings.mediaType]?.name || project.settings.mediaType}</span></div>
             )}
-            <div><span className="text-gray-500">题材类型:</span> <span className="text-white">{project.settings?.genre || '未设置'}</span></div>
-            <div><span className="text-gray-500">视觉风格:</span> <span className="text-white">{project.settings?.visualStyle || '未设置'}</span></div>
-            <div><span className="text-gray-500">剧集:</span> <span className="text-white">{project.episodes?.length || 0}集</span></div>
-            <div><span className="text-gray-500">角色:</span> <span className="text-white">{project.characters?.length || 0}个</span></div>
-            <div><span className="text-gray-500">场景:</span> <span className="text-white">{project.scenes?.length || 0}个</span></div>
+            <div><span className="text-[var(--color-text-tertiary)]">题材类型:</span> <span className="text-[var(--color-text)]">{project.settings?.genre || '未设置'}</span></div>
+            <div><span className="text-[var(--color-text-tertiary)]">视觉风格:</span> <span className="text-[var(--color-text)]">{project.settings?.visualStyle || '未设置'}</span></div>
+            <div><span className="text-[var(--color-text-tertiary)]">剧集:</span> <span className="text-[var(--color-text)]">{project.episodes?.length || 0}集</span></div>
+            <div><span className="text-[var(--color-text-tertiary)]">角色:</span> <span className="text-[var(--color-text)]">{project.characters?.length || 0}个</span></div>
+            <div><span className="text-[var(--color-text-tertiary)]">场景:</span> <span className="text-[var(--color-text)]">{project.scenes?.length || 0}个</span></div>
           </div>
 
-          {/* 🆕 角色卡和场景卡按钮 - 跳转到对应Tab */}
-          <div className="mt-3 flex gap-2">
+          {/* 角色卡和场景卡按钮 */}
+          <div className="mt-4 flex gap-2">
             <button
               onClick={() => setActiveTab('characters')}
-              className="flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors bg-gray-700 text-gray-300 hover:bg-gray-600"
+              className="flex-1 px-3 py-2 rounded-lg text-[13px] font-medium transition-all btn-secondary"
             >
               👥 角色卡
             </button>
             <button
               onClick={() => setActiveTab('scenes')}
-              className="flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors bg-gray-700 text-gray-300 hover:bg-gray-600"
+              className="flex-1 px-3 py-2 rounded-lg text-[13px] font-medium transition-all btn-secondary"
             >
               🏛️ 场景卡
             </button>
@@ -1066,18 +1066,18 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
         {/* 分卷结构 - 横向展示 */}
         {project.volumes && project.volumes.length > 0 && (
-          <div className={`${cardClass} ${cardPad} lg:col-span-3`}>
-            <h3 className="text-sm font-bold text-white mb-2">📖 分卷 ({project.volumes.length})</h3>
-            <div className="flex flex-wrap gap-2">
+          <div className="glass-card rounded-xl p-5 lg:col-span-3">
+            <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3">📖 分卷 ({project.volumes.length})</h3>
+            <div className="flex flex-wrap gap-3">
               {project.volumes.map((vol) => (
                 <div
                   key={vol.id}
-                  className="flex items-center gap-2 text-xs border-l-2 pl-2 bg-gray-750 rounded-r pr-2 py-1"
-                  style={{ borderColor: vol.color || '#22c55e' }}
+                  className="flex items-center gap-2 text-[13px] border-l-2 pl-3 bg-[var(--color-surface)] rounded-r pr-3 py-2"
+                  style={{ borderColor: vol.color || 'var(--color-accent-green)' }}
                 >
-                  <span className="text-white font-medium">V{vol.volumeNumber}</span>
-                  <span className="text-gray-500">Ep{vol.episodeRange[0]}-{vol.episodeRange[1]}</span>
-                  <span className="text-gray-400">{vol.title}</span>
+                  <span className="text-[var(--color-text)] font-medium">V{vol.volumeNumber}</span>
+                  <span className="text-[var(--color-text-tertiary)]">Ep{vol.episodeRange[0]}-{vol.episodeRange[1]}</span>
+                  <span className="text-[var(--color-text-secondary)]">{vol.title}</span>
                 </div>
               ))}
             </div>
@@ -1086,20 +1086,24 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       </div>
 
       {/* 世界观 - 全宽展开 */}
-      <div className={`${cardClass} ${cardPad}`}>
-        <h3 className="text-sm font-bold text-white mb-2">🌍 世界观</h3>
-        <p className="text-gray-300 text-xs leading-relaxed whitespace-pre-wrap">
+      <div className="glass-card rounded-xl p-5">
+        <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3">🌍 世界观</h3>
+        <p className="text-[var(--color-text-secondary)] text-[14px] leading-relaxed whitespace-pre-wrap">
           {project.settings?.worldView || '未设置'}
         </p>
       </div>
 
       {/* 专有名词 - 全宽展开 */}
       {project.settings?.keyTerms && project.settings.keyTerms.length > 0 && (
-        <div className={`${cardClass} ${cardPad}`}>
-          <h3 className="text-sm font-bold text-white mb-2">📚 名词 ({project.settings.keyTerms.length})</h3>
-          <div className="flex flex-wrap gap-1.5">
+        <div className="glass-card rounded-xl p-5">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3">📚 名词 ({project.settings.keyTerms.length})</h3>
+          <div className="flex flex-wrap gap-2">
             {project.settings.keyTerms.map((term, i) => (
-              <span key={i} className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-600 cursor-help" title={term.explanation}>
+              <span
+                key={i}
+                className="px-2.5 py-1 rounded-md bg-[var(--color-surface)] text-[var(--color-text-secondary)] text-[12px] border border-[var(--color-border)] hover:border-[var(--color-border-hover)] cursor-help transition-colors"
+                title={term.explanation}
+              >
                 {term.term}
               </span>
             ))}
@@ -1109,13 +1113,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       {/* BOSS档案 - 全宽横向展示 */}
       {project.antagonists && project.antagonists.length > 0 && (
-        <div className={`${cardClass} ${cardPad}`}>
-          <h3 className="text-sm font-bold text-white mb-2">👹 BOSS ({project.antagonists.length})</h3>
-          <div className="flex flex-wrap gap-2">
+        <div className="glass-card rounded-xl p-5">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3">👹 BOSS ({project.antagonists.length})</h3>
+          <div className="flex flex-wrap gap-3">
             {project.antagonists.map((boss) => (
-              <div key={boss.id} className="flex items-center gap-2 text-xs bg-gray-750 px-2 py-1 rounded">
-                <span className="text-red-400 font-medium">{boss.name}</span>
-                <span className="text-gray-500">{boss.volumeOrArc}</span>
+              <div key={boss.id} className="flex items-center gap-2 text-[13px] bg-[var(--color-surface)] px-3 py-2 rounded-lg border border-[var(--color-border)]">
+                <span className="text-[var(--color-accent-red)] font-medium">{boss.name}</span>
+                <span className="text-[var(--color-text-tertiary)]">{boss.volumeOrArc}</span>
               </div>
             ))}
           </div>
@@ -1124,14 +1128,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
 
 
-      {/* 🆕 剧集列表（合并到概览页） */}
-      <div className={`${cardClass} ${cardPad}`}>
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
-          <h3 className="text-sm font-bold text-white">📺 剧集列表 ({project.episodes?.length || 0})</h3>
+      {/* 剧集列表 - Neodomain 设计 */}
+      <div className="glass-card rounded-xl p-5">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">📺 剧集列表 ({project.episodes?.length || 0})</h3>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploadingEpisodes}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2.5 py-1.5 rounded text-xs font-medium"
+            className="btn-primary px-4 py-2 rounded-lg text-[14px] disabled:opacity-50"
           >
             {isUploadingEpisodes ? '⏳ 上传中...' : '📤 上传剧集'}
           </button>
@@ -1147,7 +1151,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         </div>
 
         {/* 书本式卡片：左侧集数色块 + 右侧标题/大纲/状态 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {(project.episodes || []).map((ep) => {
             // 从 storyOutline 中找到对应集数的大纲
             const outline = project.storyOutline?.find(o => o.episodeNumber === ep.episodeNumber);
@@ -1159,55 +1163,49 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             return (
               <div
                 key={ep.id}
-                className="bg-gray-800 rounded-lg border border-gray-700/60 hover:border-gray-600/60 overflow-hidden transition-all hover:shadow-lg hover:shadow-blue-500/10 group"
+                className="glass-card rounded-xl overflow-hidden transition-all hover:border-[var(--color-border-hover)] group cursor-pointer"
+                onClick={() => onSelectEpisode(ep)}
               >
                 {/* 书本式布局：左侧色块（集数）+ 右侧内容 */}
                 <div className="flex items-stretch">
-                  {/* 左侧：集数色块（模拟书脊） */}
-                  <div className="bg-gradient-to-b from-blue-600 to-blue-700 w-16 shrink-0 flex flex-col items-center justify-center text-white p-2 border-r-2 border-blue-500/30">
-                    <span className="text-xs font-medium opacity-80">第</span>
-                    <span className="text-2xl font-bold">{ep.episodeNumber}</span>
-                    <span className="text-xs font-medium opacity-80">集</span>
+                  {/* 左侧：集数色块（模拟书脊）- 金色渐变 */}
+                  <div className="bg-gradient-to-b from-[var(--color-primary-dark)] to-[var(--color-primary)] w-16 shrink-0 flex flex-col items-center justify-center text-[#1a1a1e] p-2 border-r-2 border-[var(--color-primary-light)]/30">
+                    <span className="text-[12px] font-medium opacity-80">第</span>
+                    <span className="text-[24px] font-bold">{ep.episodeNumber}</span>
+                    <span className="text-[12px] font-medium opacity-80">集</span>
                   </div>
 
                   {/* 右侧：标题 + 大纲 + 状态 */}
-                  <div className="flex-1 p-3 min-w-0">
+                  <div className="flex-1 p-4 min-w-0">
                     {/* 标题 + 状态 */}
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <h4
-                        className="text-white text-sm font-semibold leading-tight flex-1 min-w-0 group-hover:text-blue-300 transition-colors cursor-pointer"
-                        onClick={() => onSelectEpisode(ep)}
-                      >
+                      <h4 className="text-[var(--color-text)] text-[14px] font-semibold leading-tight flex-1 min-w-0 group-hover:text-[var(--color-primary-light)] transition-colors">
                         {ep.title}
                       </h4>
                       <StatusBadge status={ep.status} />
                     </div>
 
                     {/* 大纲摘要（最多 3 行） */}
-                    <p
-                      className="text-gray-400 text-xs leading-relaxed line-clamp-3 mb-2 cursor-pointer"
-                      onClick={() => onSelectEpisode(ep)}
-                    >
+                    <p className="text-[var(--color-text-secondary)] text-[13px] leading-relaxed line-clamp-3 mb-3">
                       {summary}
                     </p>
 
                     {/* 底部元信息 + 操作按钮 */}
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                      <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]">
                         <span>{ep.shots?.length || 0} 个分镜</span>
                         <span>·</span>
                         <span>{new Date(ep.updatedAt).toLocaleDateString()}</span>
                       </div>
 
-                      {/* 🆕 查看故事板按钮 */}
+                      {/* 查看故事板按钮 */}
                       {hasStoryboard && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectEpisode(ep);
-                            // 需要在 App.tsx 中添加逻辑，检测到有故事板数据时直接跳转到 FINAL_STORYBOARD
                           }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-medium transition-all"
+                          className="px-2.5 py-1 btn-primary rounded-md text-[11px] font-medium"
                           title="查看最终故事板"
                         >
                           📋 故事板
@@ -1227,15 +1225,15 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 渲染角色库 - 紧凑版
   const renderCharacters = () => (
     <div className="space-y-2">
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-          <h3 className="text-sm font-bold text-white">👥 角色库 ({project.characters?.length || 0})</h3>
-          <button className={primaryBtnClass}>+ 添加</button>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)]">👥 角色库 ({project.characters?.length || 0})</h3>
+          <button className="btn-primary px-4 py-2 rounded-lg text-[14px]">+ 添加</button>
         </div>
 
-        {/* 🆕 顶部控制栏：模型 + 风格 */}
-        <div className={`${cardClass} ${cardPad}`}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* 顶部控制栏：模型 + 风格 - Neodomain 设计 */}
+        <div className="glass-card rounded-xl p-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <AIImageModelSelector
               value={characterImageModel}
               onChange={setCharacterImageModel}
@@ -1254,21 +1252,21 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <div className="mt-2 text-[11px] text-gray-400">
+              <div className="mt-2 text-[11px] text-[var(--color-text-tertiary)]">
                 说明：点击角色卡的绿色"🎨 生成设定图"按钮才会生图（消耗积分）。
               </div>
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="text-[11px] text-gray-400 leading-relaxed">
+              <div className="text-[11px] text-[var(--color-text-tertiary)] leading-relaxed">
                 生成内容：单张 16:9 角色设定图（通常为 2×2 四分屏：正/侧/背 + 面部特写）。
               </div>
 
-              {/* 🆕 批量生成按钮 */}
+              {/* 批量生成按钮 */}
               <button
                 onClick={handleBatchGenerateCharacters}
                 disabled={isBatchGeneratingCharacters || !characterImageModel}
-                className={`${primaryBtnClass} w-full disabled:opacity-50 disabled:cursor-not-allowed`}
+                className="btn-primary w-full px-4 py-2 rounded-lg text-[13px] disabled:opacity-50 disabled:cursor-not-allowed"
                 title="批量生成所有未生成设定图的角色"
               >
                 {isBatchGeneratingCharacters ? (
@@ -1308,30 +1306,35 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-gray-900">
-      {/* 顶部导航 - 紧凑 */}
-      <div className="sticky top-0 z-20 bg-gray-800/95 backdrop-blur border-b border-gray-700">
-        <div className={`${containerClass} py-2 flex items-center justify-between gap-3`}>
-          <div className="flex items-center gap-3 min-w-0">
-            <button onClick={onBack} className="text-gray-400 hover:text-white text-sm shrink-0">← 返回</button>
-            <h1 className="text-base font-bold text-white truncate">{project.name}</h1>
+    <div className="min-h-screen">
+      {/* 顶部导航 - Neodomain 设计 */}
+      <div className="sticky top-0 z-20 glass-card border-b border-[var(--color-border)]">
+        <div className={`${containerClass} py-4 flex items-center justify-between gap-4`}>
+          <div className="flex items-center gap-4 min-w-0">
+            <button
+              onClick={onBack}
+              className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary-light)] text-[14px] font-medium shrink-0 transition-colors"
+            >
+              ← 返回
+            </button>
+            <h1 className="text-[20px] font-semibold text-[var(--color-text)] truncate">{project.name}</h1>
             {project.settings?.genre && (
-              <span className="text-gray-500 text-xs bg-gray-900/40 border border-gray-700/60 px-2 py-0.5 rounded-full shrink-0">
+              <span className="text-[var(--color-text-tertiary)] text-[12px] bg-[var(--color-surface)] border border-[var(--color-border)] px-2.5 py-1 rounded-md shrink-0">
                 {project.settings.genre}
               </span>
             )}
           </div>
 
-          {/* 标签页导航 - 小屏横向滚动（不改变交互，仅排版更稳） */}
-          <div className="flex gap-1 overflow-x-auto max-w-[60%] sm:max-w-none">
+          {/* 标签页导航 - Neodomain 设计 */}
+          <div className="flex gap-2 overflow-x-auto max-w-[60%] sm:max-w-none">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors rounded whitespace-nowrap ${
+                className={`px-4 py-2 rounded-lg text-[13px] font-medium transition-all whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                    ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary-light)]'
+                    : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]'
                 }`}
               >
                 {tab.icon} {tab.label}
@@ -1341,8 +1344,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         </div>
       </div>
 
-      {/* 内容区域 - 紧凑padding */}
-      <div className={`${containerClass} py-3`}>
+      {/* 内容区域 */}
+      <div className={`${containerClass} py-6`}>
         {activeTab === 'overview' && renderOverview()}
         {activeTab === 'characters' && renderCharacters()}
         {activeTab === 'scenes' && (
@@ -1367,7 +1370,6 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             batchSceneProgress={batchSceneProgress}
           />
         )}
-        {/* 🔧 移除独立的 episodes tab，已合并到 overview */}
       </div>
 
       {/* 编辑模态框 */}
@@ -1414,11 +1416,11 @@ const CharacterCard: React.FC<{
   const completenessInfo = completeness !== undefined ? getCompletenessLevel(completeness) : null;
 
   return (
-    <div className="bg-gray-800 rounded overflow-hidden">
+    <div className="glass-card rounded-xl overflow-hidden">
       {/* 角色头部信息 */}
-      <div className="p-2 cursor-pointer hover:bg-gray-750 flex items-center gap-2" onClick={onToggle}>
+      <div className="p-3 cursor-pointer hover:bg-[var(--color-surface-hover)] flex items-center gap-3 transition-colors" onClick={onToggle}>
         {/* 头像 */}
-        <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-sm shrink-0">
+        <div className="w-10 h-10 bg-[var(--color-surface)] rounded-full flex items-center justify-center text-[14px] shrink-0 border-2 border-[var(--color-primary)]/30">
           {character.data ? (
             <img src={character.data} alt={character.name} className="w-full h-full rounded-full object-cover" />
           ) : (character.gender === '女' ? '👩' : '👨')}
@@ -1426,21 +1428,21 @@ const CharacterCard: React.FC<{
 
         {/* 信息 */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            <span className="text-white font-medium text-sm">{character.name}</span>
-            <span className="text-gray-500 text-xs">{character.gender}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[var(--color-text)] font-medium text-[14px]">{character.name}</span>
+            <span className="text-[var(--color-text-tertiary)] text-[12px]">{character.gender}</span>
             {character.forms && character.forms.length > 0 && (
-              <span className="text-blue-400 text-xs">({character.forms.length}形态)</span>
+              <span className="text-[var(--color-primary-light)] text-[12px]">({character.forms.length}形态)</span>
             )}
             {/* 完整度指示器 */}
             {completenessInfo && (
-              <span className={`text-xs ${completenessInfo.color}`} title={`完整度: ${completeness}%`}>
+              <span className={`text-[12px] ${completenessInfo.color}`} title={`完整度: ${completeness}%`}>
                 {completenessInfo.emoji} {completeness}%
               </span>
             )}
           </div>
           {character.identityEvolution && (
-            <p className="text-gray-500 text-xs truncate">{character.identityEvolution}</p>
+            <p className="text-[var(--color-text-tertiary)] text-[12px] truncate mt-0.5">{character.identityEvolution}</p>
           )}
         </div>
 
@@ -1448,7 +1450,7 @@ const CharacterCard: React.FC<{
         {character.abilities && character.abilities.length > 0 && (
           <div className="flex flex-wrap gap-1 shrink-0 max-w-[200px]">
             {character.abilities.map((a, i) => (
-              <span key={i} className="bg-blue-900 text-blue-300 px-1 py-0.5 rounded text-[10px]">{a}</span>
+              <span key={i} className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">{a}</span>
             ))}
           </div>
         )}
@@ -1456,13 +1458,13 @@ const CharacterCard: React.FC<{
         {/* 编辑按钮 */}
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="text-gray-500 hover:text-blue-400 text-xs px-1"
+          className="text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[12px] px-1 transition-colors"
           title="编辑角色"
         >
           ✏️
         </button>
 
-        {/* 🆕 生成角色设定图 */}
+        {/* 生成角色设定图 */}
         {onGenerateImage && (
           <button
             onClick={(e) => {
@@ -1470,43 +1472,43 @@ const CharacterCard: React.FC<{
               onGenerateImage();
             }}
             disabled={!!isGenerating}
-            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-medium disabled:cursor-not-allowed transition-colors"
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-[13px] font-medium disabled:cursor-not-allowed transition-colors"
             title={character.imageSheetUrl ? '重新生成角色设定图' : '生成角色设定图'}
           >
-            {isGenerating ? '⏳ 生成中...' : (character.imageSheetUrl ? '� 重新生成' : '🎨 生成设定图')}
+            {isGenerating ? '⏳ 生成中...' : (character.imageSheetUrl ? '🔄 重新生成' : '🎨 生成设定图')}
           </button>
         )}
 
-        <span className="text-gray-500 text-xs">{isExpanded ? '▼' : '▶'}</span>
+        <span className="text-[var(--color-text-tertiary)] text-[12px]">{isExpanded ? '▼' : '▶'}</span>
       </div>
 
-      {/* 🆕 生成进度 */}
+      {/* 生成进度 */}
       {isGenerating && generationProgress && (
-        <div className="border-t border-gray-700 p-2 text-[11px] text-gray-300 bg-gray-850">
+        <div className="border-t border-[var(--color-border)] p-3 text-[11px] text-[var(--color-text-secondary)] bg-[var(--color-surface)]">
           <div className="flex items-center justify-between gap-2">
             <span>⏳ {generationProgress.stage}</span>
-            <span className="text-gray-500">{Math.round(generationProgress.percent)}%</span>
+            <span className="text-[var(--color-text-tertiary)]">{Math.round(generationProgress.percent)}%</span>
           </div>
-          <div className="mt-1 h-1.5 bg-gray-700 rounded overflow-hidden">
+          <div className="mt-1.5 h-1.5 bg-[var(--color-bg-subtle)] rounded overflow-hidden">
             <div
-              className="h-full bg-emerald-500"
+              className="h-full bg-[var(--color-accent-green)]"
               style={{ width: `${Math.max(0, Math.min(100, generationProgress.percent))}%` }}
             />
           </div>
         </div>
       )}
 
-      {/* 🆕 设定图预览（直接展示整张设定图，不做切割） */}
+      {/* 设定图预览（直接展示整张设定图，不做切割） */}
       {character.imageSheetUrl && (
-        <div className="border-t border-gray-700 p-2 bg-gray-850">
+        <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
           <img
             src={character.imageSheetUrl}
             alt={`${character.name} 设定图`}
-            className="w-full rounded bg-gray-900/40 border border-gray-700/60 object-contain max-h-[320px]"
+            className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[320px]"
             loading="lazy"
           />
           {character.imageGenerationMeta && (
-            <div className="mt-1 text-[10px] text-gray-500">
+            <div className="mt-1.5 text-[10px] text-[var(--color-text-tertiary)]">
               模型：{character.imageGenerationMeta.modelName} · 风格：{character.imageGenerationMeta.styleName}
             </div>
           )}
@@ -1515,9 +1517,9 @@ const CharacterCard: React.FC<{
 
       {/* 缺失字段提示和智能补充按钮 */}
       {missingFields && missingFields.length > 0 && completeness !== undefined && (
-        <div className={`border-t border-gray-700 p-2 ${completeness < 85 ? 'bg-yellow-900/20' : 'bg-blue-900/10'}`}>
-          <div className="flex items-center justify-between mb-1">
-            <div className={`text-xs ${completeness < 85 ? 'text-yellow-400' : 'text-blue-400'}`}>
+        <div className={`border-t border-[var(--color-border)] p-3 ${completeness < 85 ? 'bg-[var(--color-accent-amber)]/5' : 'bg-[var(--color-accent-blue)]/5'}`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className={`text-[12px] ${completeness < 85 ? 'text-[var(--color-accent-amber)]' : 'text-[var(--color-accent-blue)]'}`}>
               {completeness < 85 ? '⚠️ 待补充信息：' : '💡 可继续优化：'}
             </div>
             {onSupplement && (
@@ -1527,26 +1529,26 @@ const CharacterCard: React.FC<{
                   onSupplement();
                 }}
                 disabled={isSupplementing}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-[10px] flex items-center gap-1"
+                className="btn-secondary px-2.5 py-1 rounded-md text-[11px] flex items-center gap-1 disabled:opacity-50"
                 title={completeness < 85 ? '使用AI智能补充角色细节' : '继续优化角色信息'}
               >
                 {isSupplementing ? '⏳ 补充中...' : (completeness < 85 ? '✨ 智能补充' : '🔄 继续补充')}
               </button>
             )}
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {missingFields.slice(0, 3).map((field, idx) => {
-              // 🆕 特殊处理形态字段，显示剧本中发现的形态数量
+              // 特殊处理形态字段，显示剧本中发现的形态数量
               const isFormField = field.field === 'forms' && field.label.includes('剧本中发现');
               return (
                 <span
                   key={idx}
-                  className={`px-2 py-0.5 rounded text-[10px] ${
+                  className={`px-2 py-0.5 rounded-md text-[10px] ${
                     isFormField
-                      ? 'bg-purple-900/50 text-purple-300 border border-purple-500'
+                      ? 'bg-[var(--color-accent-violet)]/10 text-[var(--color-accent-violet)] border border-[var(--color-accent-violet)]/30'
                       : completeness < 85
-                        ? 'bg-yellow-900/50 text-yellow-300'
-                        : 'bg-blue-900/50 text-blue-300'
+                        ? 'bg-[var(--color-accent-amber)]/10 text-[var(--color-accent-amber)] border border-[var(--color-accent-amber)]/30'
+                        : 'bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] border border-[var(--color-accent-blue)]/30'
                   }`}
                   title={isFormField ? '点击"智能补充"可自动提取剧本中的形态' : ''}
                 >
@@ -1555,7 +1557,7 @@ const CharacterCard: React.FC<{
               );
             })}
             {missingFields.length > 3 && (
-              <span className={`text-[10px] ${completeness < 85 ? 'text-yellow-500' : 'text-blue-500'}`}>
+              <span className={`text-[10px] ${completeness < 85 ? 'text-[var(--color-accent-amber)]' : 'text-[var(--color-accent-blue)]'}`}>
                 +{missingFields.length - 3}项
               </span>
             )}
@@ -1565,31 +1567,31 @@ const CharacterCard: React.FC<{
 
       {/* 形态列表 - 始终显示（不需要点击展开） */}
       {character.forms && character.forms.length > 0 && (
-        <div className="border-t border-gray-700 p-2 bg-gray-850">
-          <div className="grid grid-cols-2 gap-2">
+        <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
+          <div className="grid grid-cols-2 gap-3">
             {character.forms.map((form) => (
-              <div key={form.id} className="bg-gray-700 rounded p-2 text-xs group relative">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-white font-medium">{form.name}</span>
+              <div key={form.id} className="bg-[var(--color-surface-solid)] rounded-lg p-3 text-[12px] group relative border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-colors">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[var(--color-text)] font-medium">{form.name}</span>
                   <div className="flex items-center gap-1">
                     {form.episodeRange && (
-                      <span className="bg-blue-900 text-blue-300 px-1 py-0.5 rounded text-[10px]">
+                      <span className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">
                         {form.episodeRange}
                       </span>
                     )}
                     <button
                       onClick={() => onEditForm(form)}
-                      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-400 text-[10px]"
+                      className="opacity-0 group-hover:opacity-100 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[11px] transition-all"
                       title="编辑形态"
                     >
                       ✏️
                     </button>
                   </div>
                 </div>
-                {/* 🆕 描述完整显示（不截断） */}
-                <p className="text-gray-300 text-[10px] leading-relaxed whitespace-pre-wrap">{form.description}</p>
+                {/* 描述完整显示（不截断） */}
+                <p className="text-[var(--color-text-secondary)] text-[11px] leading-relaxed whitespace-pre-wrap">{form.description}</p>
                 {form.note && (
-                  <p className="text-gray-500 text-[10px] mt-1 italic">💡 {form.note}</p>
+                  <p className="text-[var(--color-text-tertiary)] text-[10px] mt-1.5 italic">💡 {form.note}</p>
                 )}
               </div>
             ))}
@@ -1643,16 +1645,16 @@ const ScenesTab: React.FC<{
   const [expandedScene, setExpandedScene] = React.useState<string | null>(null);
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-        <h3 className="text-sm font-bold text-white">🏛️ 场景库 ({project.scenes?.length || 0})</h3>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+        <h3 className="text-[15px] font-semibold text-[var(--color-text)]">🏛️ 场景库 ({project.scenes?.length || 0})</h3>
         <div className="flex gap-2">
-          {/* 🆕 重新提取按钮 */}
+          {/* 重新提取按钮 */}
           {onExtractNewScenes && (
             <button
               onClick={onExtractNewScenes}
               disabled={isExtracting}
-              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs flex items-center gap-1"
+              className="px-3 py-2 rounded-lg text-[13px] flex items-center gap-1.5 bg-[var(--color-accent-violet)]/10 text-[var(--color-accent-violet)] border border-[var(--color-accent-violet)]/30 hover:bg-[var(--color-accent-violet)]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               title="从剧本中重新智能提取新场景"
             >
               {isExtracting ? (
@@ -1668,13 +1670,13 @@ const ScenesTab: React.FC<{
               )}
             </button>
           )}
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium">+ 添加</button>
+          <button className="btn-primary px-4 py-2 rounded-lg text-[14px]">+ 添加</button>
         </div>
       </div>
 
-      {/* 🆕 顶部控制栏：模型 + 风格 */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700/60 p-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {/* 顶部控制栏：模型 + 风格 - Neodomain 设计 */}
+      <div className="glass-card rounded-xl p-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <AIImageModelSelector
             value={sceneImageModel}
             onChange={onChangeSceneImageModel}
@@ -1693,22 +1695,22 @@ const ScenesTab: React.FC<{
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
-            <div className="mt-2 text-[11px] text-gray-400">
+            <div className="mt-2 text-[11px] text-[var(--color-text-tertiary)]">
               说明：点击场景卡的绿色"🎨 生成设定图"按钮才会生图（消耗积分）。
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="text-[11px] text-gray-400 leading-relaxed">
+            <div className="text-[11px] text-[var(--color-text-tertiary)] leading-relaxed">
               生成内容：单张 16:9 场景设定图（通常为 2×2 四分屏：多角度 + 关键特写）。
             </div>
 
-            {/* 🆕 批量生成按钮 */}
+            {/* 批量生成按钮 */}
             {onBatchGenerateScenes && (
               <button
                 onClick={onBatchGenerateScenes}
                 disabled={isBatchGeneratingScenes || !sceneImageModel}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2.5 py-1.5 rounded text-xs font-medium w-full disabled:opacity-50"
+                className="btn-primary w-full px-4 py-2 rounded-lg text-[13px] disabled:opacity-50 disabled:cursor-not-allowed"
                 title="批量生成所有未生成设定图的场景"
               >
                 {isBatchGeneratingScenes ? (
@@ -1722,94 +1724,94 @@ const ScenesTab: React.FC<{
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {(project.scenes || []).map((scene) => {
           const isExpanded = expandedScene === scene.id;
           return (
             <div
               key={scene.id}
-              className={`bg-gray-800 rounded-lg border border-gray-700/60 p-3 cursor-pointer transition-all hover:bg-gray-750 hover:border-gray-600/60 group ${
-                isExpanded ? 'col-span-1 md:col-span-2 xl:col-span-3 ring-1 ring-blue-500/70' : ''
+              className={`glass-card rounded-xl p-4 cursor-pointer transition-all hover:border-[var(--color-border-hover)] group ${
+                isExpanded ? 'col-span-1 md:col-span-2 xl:col-span-3 ring-1 ring-[var(--color-primary)]/50' : ''
               }`}
               onClick={() => setExpandedScene(isExpanded ? null : scene.id)}
             >
               <div className="flex justify-between items-start">
-                <h4 className="text-white font-medium text-sm">{scene.name}</h4>
-                <div className="flex items-center gap-1">
-                  {/* 🆕 生成场景设定图 */}
+                <h4 className="text-[var(--color-text)] font-medium text-[14px]">{scene.name}</h4>
+                <div className="flex items-center gap-1.5">
+                  {/* 生成场景设定图 */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onGenerateSceneImageSheet(scene.id);
                     }}
                     disabled={generatingSceneId === scene.id}
-                    className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs font-medium disabled:cursor-not-allowed transition-colors"
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-2.5 py-1.5 rounded-lg text-[12px] font-medium disabled:cursor-not-allowed transition-colors"
                     title={scene.imageSheetUrl ? '重新生成场景设定图' : '生成场景设定图'}
                   >
-                    {generatingSceneId === scene.id ? '⏳ 生成中...' : (scene.imageSheetUrl ? '� 重新生成' : '🎨 生成设定图')}
+                    {generatingSceneId === scene.id ? '⏳ 生成中...' : (scene.imageSheetUrl ? '🔄 重新生成' : '🎨 生成设定图')}
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); onEditScene(scene); }}
-                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-400 text-xs"
+                    className="opacity-0 group-hover:opacity-100 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[12px] transition-all"
                     title="编辑场景"
                   >
                     ✏️
                   </button>
-                  <span className="text-gray-500 text-[10px]">{isExpanded ? '▼' : '▶'}</span>
+                  <span className="text-[var(--color-text-tertiary)] text-[11px]">{isExpanded ? '▼' : '▶'}</span>
                 </div>
               </div>
-              <p className={`text-gray-400 text-xs mt-0.5 ${isExpanded ? '' : 'line-clamp-2'}`}>
+              <p className={`text-[var(--color-text-secondary)] text-[13px] mt-1.5 ${isExpanded ? '' : 'line-clamp-2'}`}>
                 {scene.description}
               </p>
 
-              {/* 🆕 生成进度（仅当前场景显示） */}
+              {/* 生成进度（仅当前场景显示） */}
               {generatingSceneId === scene.id && generationProgress && (
-                <div className="mt-2 text-[11px] text-gray-300">
+                <div className="mt-3 text-[11px] text-[var(--color-text-secondary)]">
                   <div className="flex items-center justify-between gap-2">
                     <span>⏳ {generationProgress.stage}</span>
-                    <span className="text-gray-500">{Math.round(generationProgress.percent)}%</span>
+                    <span className="text-[var(--color-text-tertiary)]">{Math.round(generationProgress.percent)}%</span>
                   </div>
-                  <div className="mt-1 h-1.5 bg-gray-700 rounded overflow-hidden">
+                  <div className="mt-1.5 h-1.5 bg-[var(--color-surface)] rounded overflow-hidden">
                     <div
-                      className="h-full bg-emerald-500"
+                      className="h-full bg-[var(--color-accent-green)]"
                       style={{ width: `${Math.max(0, Math.min(100, generationProgress.percent))}%` }}
                     />
                   </div>
                 </div>
               )}
 
-              {/* 🆕 设定图预览（直接展示整张设定图，不做切割） */}
+              {/* 设定图预览（直接展示整张设定图，不做切割） */}
               {scene.imageSheetUrl && (
-                <div className="mt-2">
+                <div className="mt-3">
                   <img
                     src={scene.imageSheetUrl}
                     alt={`${scene.name} 设定图`}
-                    className="w-full rounded bg-gray-900/40 border border-gray-700/60 object-contain max-h-[320px]"
+                    className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[320px]"
                     loading="lazy"
                   />
                   {scene.imageGenerationMeta && (
-                    <div className="mt-1 text-[10px] text-gray-500">
+                    <div className="mt-1.5 text-[10px] text-[var(--color-text-tertiary)]">
                       模型：{scene.imageGenerationMeta.modelName} · 风格：{scene.imageGenerationMeta.styleName}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* 🆕 智能补充按钮 - 始终显示（如果缺少信息） */}
+              {/* 智能补充按钮 - 始终显示（如果缺少信息） */}
               {onSupplementScene && (!scene.visualPromptCn || !scene.atmosphere) && (
-                <div className="mt-2 pt-2 border-t border-gray-700">
+                <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onSupplementScene(scene.id);
                     }}
                     disabled={isSupplementing && supplementingSceneId === scene.id}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-[10px] flex items-center gap-1 w-full justify-center"
+                    className="btn-secondary w-full px-3 py-2 rounded-lg text-[11px] flex items-center gap-1.5 justify-center disabled:opacity-50"
                     title="使用AI智能补充场景详细信息"
                   >
                     {isSupplementing && supplementingSceneId === scene.id ? '⏳ 补充中...' : '✨ 智能补充'}
                   </button>
-                  <p className="text-gray-500 text-[9px] mt-1 text-center">
+                  <p className="text-[var(--color-text-tertiary)] text-[10px] mt-1.5 text-center">
                     ⚠️ 缺少: {!scene.visualPromptCn && '视觉提示'} {!scene.atmosphere && '氛围'}
                   </p>
                 </div>
@@ -1817,32 +1819,32 @@ const ScenesTab: React.FC<{
 
               {/* 展开时显示更多信息 */}
               {isExpanded && (
-                <div className="mt-2 pt-2 border-t border-gray-700 space-y-1">
+                <div className="mt-3 pt-3 border-t border-[var(--color-border)] space-y-2">
                   {scene.visualPromptCn && (
-                    <div className="text-[10px]">
-                      <span className="text-blue-400">中文提示词：</span>
-                      <span className="text-gray-300">{scene.visualPromptCn}</span>
+                    <div className="text-[11px]">
+                      <span className="text-[var(--color-accent-blue)]">中文提示词：</span>
+                      <span className="text-[var(--color-text-secondary)]">{scene.visualPromptCn}</span>
                     </div>
                   )}
                   {scene.visualPromptEn && (
-                    <div className="text-[10px]">
-                      <span className="text-green-400">English Prompt：</span>
-                      <span className="text-gray-300">{scene.visualPromptEn}</span>
+                    <div className="text-[11px]">
+                      <span className="text-[var(--color-accent-green)]">English Prompt：</span>
+                      <span className="text-[var(--color-text-secondary)]">{scene.visualPromptEn}</span>
                     </div>
                   )}
                   {scene.atmosphere && (
-                    <div className="text-[10px]">
-                      <span className="text-purple-400">氛围：</span>
-                      <span className="text-gray-300">{scene.atmosphere}</span>
+                    <div className="text-[11px]">
+                      <span className="text-[var(--color-accent-violet)]">氛围：</span>
+                      <span className="text-[var(--color-text-secondary)]">{scene.atmosphere}</span>
                     </div>
                   )}
                 </div>
               )}
-              {/* 🆕 集数全部显示（不需要点击） */}
+              {/* 集数全部显示（不需要点击） */}
               {scene.appearsInEpisodes && scene.appearsInEpisodes.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-0.5">
+                <div className="mt-2 flex flex-wrap gap-1">
                   {scene.appearsInEpisodes.map((ep) => (
-                    <span key={ep} className="bg-gray-700 text-gray-400 px-1 py-0.5 rounded text-[10px]">Ep{ep}</span>
+                    <span key={ep} className="bg-[var(--color-surface)] text-[var(--color-text-tertiary)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-border)]">Ep{ep}</span>
                   ))}
                 </div>
               )}
@@ -1856,17 +1858,17 @@ const ScenesTab: React.FC<{
 
 // 🔧 EpisodesTab 已移除，剧集列表已合并到 renderOverview() 中
 
-// 状态徽章 - 紧凑版
+// 状态徽章 - Neodomain 设计
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    draft: { bg: 'bg-gray-600', text: 'text-gray-300', label: '草稿' },
-    cleaned: { bg: 'bg-yellow-600', text: 'text-yellow-100', label: '清洗' },
-    generated: { bg: 'bg-blue-600', text: 'text-blue-100', label: '生成' },
-    reviewed: { bg: 'bg-green-600', text: 'text-green-100', label: '审核' },
-    exported: { bg: 'bg-purple-600', text: 'text-purple-100', label: '导出' },
+    draft: { bg: 'bg-[var(--color-surface)]', text: 'text-[var(--color-text-tertiary)]', label: '草稿' },
+    cleaned: { bg: 'bg-[var(--color-accent-amber)]/10', text: 'text-[var(--color-accent-amber)]', label: '清洗' },
+    generated: { bg: 'bg-[var(--color-accent-blue)]/10', text: 'text-[var(--color-accent-blue)]', label: '生成' },
+    reviewed: { bg: 'bg-[var(--color-accent-green)]/10', text: 'text-[var(--color-accent-green)]', label: '审核' },
+    exported: { bg: 'bg-[var(--color-accent-violet)]/10', text: 'text-[var(--color-accent-violet)]', label: '导出' },
   };
   const c = config[status] || config.draft;
-  return <span className={`${c.bg} ${c.text} px-1 py-0.5 rounded text-[10px]`}>{c.label}</span>;
+  return <span className={`${c.bg} ${c.text} px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-border)]`}>{c.label}</span>;
 };
 
 export default ProjectDashboard;

@@ -452,17 +452,40 @@ const App: React.FC = () => {
   //    点击项目时必须异步获取完整数据（含 settings/characters/scenes/episodes）
   const handleSelectProject = async (project: Project) => {
     try {
+      // 🔧 先清理所有剧集相关状态，避免项目间数据混乱
+      console.log('[handleSelectProject] 清理旧项目状态...');
+      setScript('');
+      setShots([]);
+      setHqUrls([]);
+      setChatHistory([]);
+      setCotStage1(null);
+      setCotStage2(null);
+      setCotStage3(null);
+      setCotStage4(null);
+      setCotStage5(null);
+      setCotRawOutput('');
+      setStreamText('');
+      setProgressMsg('');
+      setCurrentEpisodeNumber(null);
+      selectedEpisodeIdRef.current = null;
+      setCharacterRefs([]); // 🔧 也清理角色库
+
       const fullProject = await getProject(project.id);
       if (!fullProject) {
         alert('无法加载项目数据，项目可能已被删除');
         return;
       }
+
+      console.log(`[handleSelectProject] 加载项目: ${fullProject.name}`);
       setCurrentProject(fullProject);
       setCurrentProjectId(fullProject.id);
+
       // 加载项目的角色库
       if (fullProject.characters && fullProject.characters.length > 0) {
         setCharacterRefs(fullProject.characters);
+        console.log(`[handleSelectProject] 加载了 ${fullProject.characters.length} 个角色`);
       }
+
       // 进入项目主界面
       setCurrentStep(AppStep.PROJECT_DASHBOARD);
     } catch (error) {
@@ -626,6 +649,22 @@ const App: React.FC = () => {
 	  };
 
   const goToProjectList = () => {
+    // 🔧 清理所有剧集相关状态，避免项目间数据混乱
+    setScript('');
+    setShots([]);
+    setHqUrls([]);
+    setChatHistory([]);
+    setCotStage1(null);
+    setCotStage2(null);
+    setCotStage3(null);
+    setCotStage4(null);
+    setCotStage5(null);
+    setCotRawOutput('');
+    setStreamText('');
+    setProgressMsg('');
+    setCurrentEpisodeNumber(null);
+    selectedEpisodeIdRef.current = null;
+
     setCurrentStep(AppStep.PROJECT_LIST);
   };
 
@@ -651,9 +690,13 @@ const App: React.FC = () => {
       }
 
       // 🔧 确保 script 始终是字符串
-      setScript(typeof fullEpisode.script === 'string' ? fullEpisode.script : '');
+      const episodeScript = typeof fullEpisode.script === 'string' ? fullEpisode.script : '';
+      console.log(`[handleSelectEpisode] 剧本前100字: ${episodeScript.substring(0, 100)}...`);
+      setScript(episodeScript);
       setCurrentEpisodeNumber(fullEpisode.episodeNumber);
 	      if (fullEpisode.shots && fullEpisode.shots.length > 0) {
+	        console.log(`[handleSelectEpisode] 加载 ${fullEpisode.shots.length} 个镜头`);
+	        console.log(`[handleSelectEpisode] 第1个镜头剧情: ${typeof fullEpisode.shots[0].storyBeat === 'string' ? fullEpisode.shots[0].storyBeat : fullEpisode.shots[0].storyBeat?.event || '未知'}`);
 	        setShots(fullEpisode.shots);
 
 	        // 🆕 从 shots 中恢复九宫格 URLs（用于“绘制”步骤展示与下载）
@@ -682,8 +725,9 @@ const App: React.FC = () => {
         setHqUrls([]);
       }
 
-      // 加载当集出现的角色
-      if (currentProject) {
+      // 🔧 加载当集出现的角色（仅在角色库为空时加载，避免覆盖项目角色库）
+      // 注意：handleSelectProject 已经加载了项目角色库，这里不应该覆盖
+      if (currentProject && characterRefs.length === 0) {
         const episodeSummary = currentProject.storyOutline?.find(
           s => s.episodeNumber === fullEpisode.episodeNumber
         );
@@ -704,6 +748,8 @@ const App: React.FC = () => {
         } else {
           if (currentProject.characters) setCharacterRefs(currentProject.characters);
         }
+      } else {
+        console.log(`[剧集${fullEpisode.episodeNumber}] 使用已加载的 ${characterRefs.length} 个角色`);
       }
 
 
@@ -1799,6 +1845,10 @@ const App: React.FC = () => {
       if (currentProject && currentEpisodeNumber !== null) {
         const currentEpisode = currentProject.episodes?.find(ep => ep.episodeNumber === currentEpisodeNumber);
         if (currentEpisode) {
+          // 🔧 验证项目ID和剧集ID是否匹配
+          console.log(`[D1存储] 准备保存分镜 - 项目: ${currentProject.name} (${currentProject.id}), 剧集: 第${currentEpisodeNumber}集 (${currentEpisode.id})`);
+          console.log(`[D1存储] 分镜数量: ${finalShots.length}, 第1个镜头: ${typeof finalShots[0]?.storyBeat === 'string' ? finalShots[0].storyBeat : finalShots[0]?.storyBeat?.event || '未知'}`);
+
           const updatedEpisode: Episode = {
             ...currentEpisode,
             shots: finalShots,
@@ -1808,12 +1858,16 @@ const App: React.FC = () => {
 
           try {
             await saveEpisode(currentProject.id, updatedEpisode);
-            console.log(`[D1存储] 第${currentEpisodeNumber}集分镜保存成功`);
+            console.log(`[D1存储] ✅ 第${currentEpisodeNumber}集分镜保存成功`);
           } catch (error) {
-            console.error('[D1存储] 保存剧集失败:', error);
+            console.error('[D1存储] ❌ 保存剧集失败:', error);
             // 不阻断用户操作，只记录错误
           }
+        } else {
+          console.warn(`[D1存储] ⚠️ 未找到第${currentEpisodeNumber}集的元信息，跳过保存`);
         }
+      } else {
+        console.warn(`[D1存储] ⚠️ 缺少项目或剧集信息，跳过保存 - currentProject: ${!!currentProject}, currentEpisodeNumber: ${currentEpisodeNumber}`);
       }
 
     } catch (error) {
@@ -2258,21 +2312,39 @@ const App: React.FC = () => {
       return;
     }
 
+    // 🔧 验证项目和剧集信息
+    if (!currentProject) {
+      alert('⚠️ 未选择项目，无法重新生成九宫格');
+      return;
+    }
+
+    if (currentEpisodeNumber === null) {
+      alert('⚠️ 未选择剧集，无法重新生成九宫格');
+      return;
+    }
+
+    const currentEpisode = currentProject.episodes?.find(
+      ep => ep.episodeNumber === currentEpisodeNumber
+    );
+
+    if (!currentEpisode) {
+      alert('⚠️ 未找到当前剧集信息，无法重新生成九宫格');
+      return;
+    }
+
+    const episodeId = currentEpisode.id;
+    const projectId = currentProject.id;
+
     setIsLoading(true);
     setProgressMsg(`正在重新生成第 ${gridIndex + 1} 张九宫格...`);
+
+    // 🔧 记录重新生成信息
+    console.log(`[九宫格重绘] 项目: ${currentProject.name} (${projectId}), 剧集: 第${currentEpisodeNumber}集 (${episodeId}), grid#${gridIndex + 1}`);
 
     try {
       // 🆕 单格重绘：任务创建后立即持久化 taskCode，便于断网/刷新后自动恢复
       // 获取美术风格
-      const artStyle = currentProject
-        ? detectArtStyleType(currentProject.settings.genre, currentProject.settings.visualStyle)
-        : undefined;
-
-      // 🆕 获取 episodeId，用于持久化九宫格任务 taskCode
-      const currentEpisode = currentProject?.episodes?.find(
-        ep => ep.episodeNumber === currentEpisodeNumber
-      );
-      const episodeId = currentEpisode?.id;
+      const artStyle = detectArtStyleType(currentProject.settings.genre, currentProject.settings.visualStyle);
 
       // 调用单独生成函数
       const { generateSingleGrid } = await import('./services/openrouter');
@@ -2282,16 +2354,12 @@ const App: React.FC = () => {
         characterRefs,
         imageModel,
         selectedStyle,
-        currentEpisodeNumber || undefined,
-        currentProject?.scenes || [],
+        currentEpisodeNumber,
+        currentProject.scenes || [],
 	        artStyle,
 	        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
 	        async (taskCode) => {
-	          if (!episodeId) {
-	            console.warn('[NineGrid] 未找到 episodeId，跳过 taskCode 持久化');
-	            return;
-	          }
-
+	          console.log(`[九宫格重绘] taskCode创建: grid#${gridIndex + 1}, taskCode=${taskCode}`);
 	          const taskCreatedAt = new Date().toISOString();
 	          const GRID_SIZE = 9;
 	          const startIdx = gridIndex * GRID_SIZE;
@@ -2316,7 +2384,7 @@ const App: React.FC = () => {
 	            return next;
 	          });
 	        },
-        currentProject?.id  // 🆕 传入项目 ID，用于上传到 OSS
+        projectId  // 🔧 传入项目 ID（已验证），用于上传到 OSS
       );
 
       if (imageUrl) {
@@ -2361,17 +2429,40 @@ const App: React.FC = () => {
     setCurrentGeneratingGrid(0);
 
     try {
+      // 🔧 验证项目和剧集信息
+      if (!currentProject) {
+        alert('⚠️ 未选择项目，无法生成九宫格');
+        setIsLoading(false);
+        return;
+      }
+
+      if (currentEpisodeNumber === null) {
+        alert('⚠️ 未选择剧集，无法生成九宫格');
+        setIsLoading(false);
+        return;
+      }
+
+      const currentEpisode = currentProject.episodes?.find(
+        ep => ep.episodeNumber === currentEpisodeNumber
+      );
+
+      if (!currentEpisode) {
+        alert('⚠️ 未找到当前剧集信息，无法生成九宫格');
+        setIsLoading(false);
+        return;
+      }
+
+      const episodeId = currentEpisode.id;
+      const projectId = currentProject.id;
+
+      // 🔧 记录生成信息
+      console.log(`[九宫格生成] 项目: ${currentProject.name} (${projectId}), 剧集: 第${currentEpisodeNumber}集 (${episodeId})`);
+      console.log(`[九宫格生成] 镜头数量: ${shots.length}, 第1个镜头: ${typeof shots[0]?.storyBeat === 'string' ? shots[0].storyBeat : shots[0]?.storyBeat?.event || '未知'}`);
+
       // 使用选中的图像模型和风格生成分镜图
       // 生成一张就显示一张
       // 🆕 传入当前集数、场景库和美术风格，用于匹配角色形态、场景描述和风格约束
-      const artStyle = currentProject
-        ? detectArtStyleType(currentProject.settings.genre, currentProject.settings.visualStyle)
-        : undefined;
-
-	      const currentEpisode = currentProject?.episodes?.find(
-	        ep => ep.episodeNumber === currentEpisodeNumber
-	      );
-	      const episodeId = currentEpisode?.id;
+      const artStyle = detectArtStyleType(currentProject.settings.genre, currentProject.settings.visualStyle);
       const results = await generateMergedStoryboardSheet(
         shots,
         characterRefs,
@@ -2387,6 +2478,7 @@ const App: React.FC = () => {
         },
         // 单张完成回调 - 生成一张显示一张
         (gridIndex, imageUrl) => {
+          console.log(`[九宫格生成] ✅ 第${gridIndex + 1}张完成，URL: ${imageUrl.substring(0, 80)}...`);
           setHqUrls(prev => {
             const newUrls = [...prev];
             newUrls[gridIndex] = imageUrl;
@@ -2397,10 +2489,7 @@ const App: React.FC = () => {
         },
 	        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
 	        async (taskCode, gridIndex) => {
-	          if (!episodeId) {
-	            console.warn('[NineGrid] 未找到 episodeId，跳过 taskCode 持久化');
-	            return;
-	          }
+	          console.log(`[九宫格生成] taskCode创建: grid#${gridIndex + 1}, taskCode=${taskCode}`);
 	          const taskCreatedAt = new Date().toISOString();
 	          const GRID_SIZE = 9;
 	          const startIdx = gridIndex * GRID_SIZE;
@@ -2423,10 +2512,10 @@ const App: React.FC = () => {
 	            return next;
 	          });
 	        },
-        currentEpisodeNumber || undefined,  // 🆕 传入当前集数
-        currentProject?.scenes || [],       // 🆕 传入场景库
+        currentEpisodeNumber,               // 🆕 传入当前集数
+        currentProject.scenes || [],        // 🆕 传入场景库
         artStyle,                           // 🆕 传入美术风格类型
-        currentProject?.id,                 // 🆕 传入项目 ID，用于上传到 OSS
+        projectId,                          // 🔧 传入项目 ID（已验证），用于上传到 OSS
         controller.signal                   // 🆕 传入取消信号
       );
 
@@ -3380,24 +3469,24 @@ const App: React.FC = () => {
           <main className="max-w-[1600px] mx-auto mt-4">
             {/* 项目信息栏 */}
             {currentProject && (
-              <div className="mb-3 bg-gray-800 border border-gray-700 rounded-lg p-2 flex items-center justify-between">
+              <div className="mb-3 glass-card rounded-lg p-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className="text-lg">📁</span>
                   <div>
-                    <span className="font-bold text-white text-sm">{currentProject.name}</span>
+                    <span className="font-bold text-[var(--color-text)] text-sm">{currentProject.name}</span>
                     {currentEpisodeNumber && (
-                      <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                      <span className="ml-2 px-2 py-0.5 bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] text-xs rounded-full border border-[var(--color-accent-blue)]/30">
                         第{currentEpisodeNumber}集
                       </span>
                     )}
                   </div>
-                  <span className="text-gray-400 text-xs">
+                  <span className="text-[var(--color-text-tertiary)] text-xs">
                     {currentProject.settings.genre || '未设置类型'}
                   </span>
                 </div>
                 <button
                   onClick={goToProjectList}
-                  className="px-2 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-all"
+                  className="px-2 py-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] hover:bg-[var(--color-surface-hover)] rounded transition-all"
                 >
                   ← 返回项目
                 </button>
@@ -4448,6 +4537,10 @@ const App: React.FC = () => {
 	                        );
 	                        if (currentEpisode) {
 	                          try {
+	                            // 🔧 验证项目ID和剧集ID是否匹配
+	                            console.log(`[D1存储] 准备保存提示词 - 项目: ${currentProject.name} (${currentProject.id}), 剧集: 第${currentEpisodeNumber}集 (${currentEpisode.id})`);
+	                            console.log(`[D1存储] 镜头数量: ${updatedShots.length}, 第1个镜头: ${typeof updatedShots[0]?.storyBeat === 'string' ? updatedShots[0].storyBeat : updatedShots[0]?.storyBeat?.event || '未知'}`);
+
 	                            const updatedEpisode: Episode = {
 	                              ...currentEpisode,
 	                              script: script || '',
@@ -4456,13 +4549,13 @@ const App: React.FC = () => {
 	                            };
 
 	                            await saveEpisode(currentProject.id, updatedEpisode);
-	                            console.log(`[D1存储] 第${currentEpisodeNumber}集提示词保存成功`);
+	                            console.log(`[D1存储] ✅ 第${currentEpisodeNumber}集提示词保存成功`);
 	                            setExtractProgress(prev => (prev.includes('✅') ? `${prev}（已保存到云端）` : prev));
 	                          } catch (error) {
-	                            console.error('[D1存储] 保存提示词失败:', error);
+	                            console.error('[D1存储] ❌ 保存提示词失败:', error);
 	                          }
 	                        } else {
-	                          console.warn('[D1存储] 未找到当前剧集元信息，跳过保存提示词');
+	                          console.warn('[D1存储] ⚠️ 未找到当前剧集元信息，跳过保存提示词');
 	                        }
 	                      }
 
