@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppStep, Shot, ReviewSuggestion, CharacterRef, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight } from './types';
 import { StepTracker } from './components/StepTracker';
 import Login from './components/Login';
-import { isLoggedIn, logout, getUserInfo } from './services/auth';
+import { isLoggedIn, logout, getUserInfo, getUserPoints, type PointsInfo } from './services/auth';
 // 使用 OpenRouter 统一 API（支持多模型切换）
 import {
   generateShotListStream,
@@ -146,6 +146,23 @@ const App: React.FC = () => {
   // 🆕 用户认证检查
   // ═══════════════════════════════════════════════════════════════
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
+  const [userPoints, setUserPoints] = useState<PointsInfo | null>(null);
+
+  // 🆕 获取用户积分信息
+  useEffect(() => {
+    if (!loggedIn) return;
+
+    const fetchPoints = async () => {
+      try {
+        const points = await getUserPoints();
+        setUserPoints(points);
+      } catch (error) {
+        console.error('[App] 获取积分信息失败:', error);
+      }
+    };
+
+    fetchPoints();
+  }, [loggedIn]);
 
   // 如果未登录，显示登录页面
   if (!loggedIn) {
@@ -3218,6 +3235,12 @@ const App: React.FC = () => {
                   <img src={userInfo.avatar} alt="avatar" className="w-6 h-6 rounded-full" />
                 )}
                 <span className="text-xs text-gray-300">{userInfo.nickname || userInfo.mobile || userInfo.email}</span>
+                {/* 🆕 积分余额显示 */}
+                {userPoints && (
+                  <span className="text-yellow-400 font-medium text-xs ml-2 flex items-center gap-1">
+                    💰 {userPoints.totalAvailablePoints.toLocaleString()}
+                  </span>
+                )}
               </div>
             ) : null;
           })()}

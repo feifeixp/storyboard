@@ -18,6 +18,37 @@ export interface UserInfo {
   status: number;
 }
 
+// 积分详情接口
+export interface PointsDetail {
+  pointsType: number;
+  pointsTypeName: string;
+  currentPoints: number;
+  resetTime: string | null;
+  description: string | null;
+  sortOrder: number;
+  expireTime: string | null;
+}
+
+// 会员信息接口
+export interface MembershipInfo {
+  levelCode: string;
+  levelName: string;
+  status: number;
+  statusDesc: string;
+  expireTime: string;
+  isExpiringSoon: boolean;
+  dailyPointsQuota: number;
+  membershipType: number;
+  membershipTypeDesc: string;
+}
+
+// 积分信息接口
+export interface PointsInfo {
+  totalAvailablePoints: number;
+  pointsDetails: PointsDetail[];
+  membershipInfo: MembershipInfo;
+}
+
 // API响应接口
 interface ApiResponse<T> {
   success: boolean;
@@ -186,5 +217,31 @@ export function validateCode(code: string): {
   }
 
   return { isValid: true };
+}
+
+/**
+ * 获取用户积分信息
+ * 🆕 调用 Neodomain API
+ */
+export async function getUserPoints(): Promise<PointsInfo> {
+  const accessToken = getAccessToken();
+  if (!accessToken) {
+    throw new Error('未登录，无法获取积分信息');
+  }
+
+  const response = await fetch(`${NEODOMAIN_API_BASE}/agent/user/points/info`, {
+    method: 'GET',
+    headers: {
+      'accessToken': accessToken,
+    },
+  });
+
+  const result: ApiResponse<PointsInfo> = await response.json();
+
+  if (!result.success || !result.data) {
+    throw new Error(result.errMessage || '获取积分信息失败');
+  }
+
+  return result.data;
 }
 
