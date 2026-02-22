@@ -4,6 +4,8 @@ import { AppStep, Shot, ReviewSuggestion, CharacterRef, STORYBOARD_STYLES, Story
 import { StepTracker } from './components/StepTracker';
 import Login from './components/Login';
 import { isLoggedIn, logout, getUserInfo, getUserPoints, type PointsInfo } from './services/auth';
+// 🆕 导入自定义 Hooks
+import { useScriptManagement, useCharacterManagement } from './src/hooks';
 // 使用 OpenRouter 统一 API（支持多模型切换）
 import {
   generateShotListStream,
