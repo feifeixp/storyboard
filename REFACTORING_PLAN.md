@@ -84,19 +84,20 @@
 ## 🚀 执行顺序
 
 1. ✅ 创建 `src/hooks/` 目录
-2. ⏳ 提取 useScriptManagement Hook
-3. ⏳ 提取 useCharacterManagement Hook
-4. ⏳ 提取 useShotGeneration Hook
-5. ⏳ 提取 useImageGeneration Hook
-6. ⏳ 提取 useProjectManagement Hook
-7. ⏳ 创建 `src/pages/` 目录
-8. ⏳ 提取 ScriptInputPage
-9. ⏳ 提取 ScriptCleaningPage
-10. ⏳ 提取 ShotGenerationPage
-11. ⏳ 提取 PromptExtractionPage
-12. ⏳ 提取 ImageGenerationPage
-13. ⏳ 测试所有功能
-14. ⏳ 提交代码
+2. ✅ 提取 useScriptManagement Hook
+3. ✅ 提取 useCharacterManagement Hook
+4. ✅ 提取 useShotGeneration Hook
+5. ✅ 提取 useImageGeneration Hook
+6. ✅ 提取 useProjectManagement Hook
+7. ⏳ 在 App.tsx 中集成 Hooks
+8. ⏳ 创建 `src/pages/` 目录
+9. ⏳ 提取 ScriptInputPage
+10. ⏳ 提取 ScriptCleaningPage
+11. ⏳ 提取 ShotGenerationPage
+12. ⏳ 提取 PromptExtractionPage
+13. ⏳ 提取 ImageGenerationPage
+14. ⏳ 测试所有功能
+15. ⏳ 提交代码
 
 ## ⚠️ 注意事项
 

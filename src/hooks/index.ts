@@ -4,4 +4,7 @@
 
 export { useScriptManagement } from './useScriptManagement';
 export { useCharacterManagement } from './useCharacterManagement';
+export { useShotGeneration } from './useShotGeneration';
+export { useImageGeneration } from './useImageGeneration';
+export { useProjectManagement } from './useProjectManagement';
 
