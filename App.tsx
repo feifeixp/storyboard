@@ -3722,10 +3722,27 @@ const App: React.FC = () => {
         )}
 
         {/* 🆕 提取AI提示词页面 */}
-        {/* TODO: PromptExtractionPage 和 ImageGenerationPage 需要重新设计，移除对渲染函数的依赖 */}
-        {/* {currentStep === AppStep.EXTRACT_PROMPTS && (
-          <PromptExtractionPage ... />
-        )} */}
+        {currentStep === AppStep.EXTRACT_PROMPTS && (
+          <PromptExtractionPage
+            shots={shots}
+            setShots={setShots}
+            isExtracting={isExtracting}
+            setIsExtracting={setIsExtracting}
+            extractProgress={extractProgress}
+            setExtractProgress={setExtractProgress}
+            isValidatingPrompts={isValidatingPrompts}
+            promptValidationResults={promptValidationResults}
+            setPromptValidationResults={setPromptValidationResults}
+            extractImagePromptsStream={extractImagePromptsStream}
+            validatePrompts={validatePrompts}
+            analysisModel={analysisModel}
+            setCurrentStep={setCurrentStep}
+            currentProject={currentProject}
+            currentEpisodeNumber={currentEpisodeNumber}
+            script={script}
+            saveEpisode={saveEpisode}
+          />
+        )}
 
         {/* {currentStep === AppStep.GENERATE_IMAGES && (
           <ImageGenerationPage ... />
