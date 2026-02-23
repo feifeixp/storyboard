@@ -1,17 +1,18 @@
 import React from 'react';
-import { Shot } from '../../types';
+import { Shot, StoryboardStyle, STORYBOARD_STYLES, CharacterRef } from '../../types';
 
 interface ImageGenerationPageProps {
   // 分镜数据
   shots: Shot[];
+  characterRefs: CharacterRef[];
 
   // 九宫格数据
   hqUrls: string[];
   setHqUrls: (urls: string[]) => void;
 
   // 风格选择
-  selectedStyle: any;
-  setSelectedStyle: (style: any) => void;
+  selectedStyle: StoryboardStyle;
+  setSelectedStyle: (style: StoryboardStyle) => void;
   showStyleCards: boolean;
   setShowStyleCards: (show: boolean) => void;
   customStylePrompt: string;
@@ -23,16 +24,32 @@ interface ImageGenerationPageProps {
   // 上传相关
   uploadGridIndex: number | null;
   setUploadGridIndex: (index: number | null) => void;
-  openUploadDialog: (index: number) => void;
-  updateGridUrl: (index: number, url: string) => void;
-  updateAllGridUrls: (urls: string[]) => void;
+  uploadDialogOpen: boolean;
+  setUploadDialogOpen: (open: boolean) => void;
+  uploadUrl: string;
+  setUploadUrl: (url: string) => void;
+  uploadFile: File | null;
+  setUploadFile: (file: File | null) => void;
+
+  // 生成相关
+  isLoading: boolean;
+  progressMsg: string;
+  generateHQ: () => Promise<void>;
+  handleRegenerateGrid: (gridIndex: number) => Promise<void>;
+  handleUploadGrid: () => Promise<void>;
+  handleRefreshGrid: (gridIndex: number, meta: any) => Promise<void>;
+  applyGridsToShots: () => Promise<void>;
+
+  // 中止控制
+  abortController: AbortController | null;
+  setAbortController: (controller: AbortController | null) => void;
 
   // 导航
   setCurrentStep: (step: number) => void;
 
-  // 渲染函数
-  renderStyleCards: () => React.ReactNode;
-  renderGrids: () => React.ReactNode;
+  // 项目信息
+  currentProject: any;
+  currentEpisodeNumber: number | null;
 }
 
 /**
@@ -41,7 +58,9 @@ interface ImageGenerationPageProps {
  */
 export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
   shots,
+  characterRefs,
   hqUrls,
+  setHqUrls,
   selectedStyle,
   setSelectedStyle,
   showStyleCards,
@@ -49,9 +68,26 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
   customStylePrompt,
   setCustomStylePrompt,
   imageModel,
+  uploadGridIndex,
+  setUploadGridIndex,
+  uploadDialogOpen,
+  setUploadDialogOpen,
+  uploadUrl,
+  setUploadUrl,
+  uploadFile,
+  setUploadFile,
+  isLoading,
+  progressMsg,
+  generateHQ,
+  handleRegenerateGrid,
+  handleUploadGrid,
+  handleRefreshGrid,
+  applyGridsToShots,
+  abortController,
+  setAbortController,
   setCurrentStep,
-  renderStyleCards,
-  renderGrids,
+  currentProject,
+  currentEpisodeNumber,
 }) => {
   return (
     <div className="space-y-4 pb-20">
@@ -111,11 +147,147 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
         </div>
 
         {/* 风格卡片 */}
-        {showStyleCards && renderStyleCards()}
+        {showStyleCards && (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-4">
+            {STORYBOARD_STYLES.map((style) => (
+              <button
+                key={style.id}
+                onClick={() => setSelectedStyle(style)}
+                className={`p-3 rounded-lg border-2 transition-all text-left ${
+                  selectedStyle.id === style.id
+                    ? 'border-blue-500 bg-blue-900/30'
+                    : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: style.previewColor }}
+                  ></div>
+                  <span className="font-bold text-sm text-white">{style.name}</span>
+                </div>
+                <p className="text-xs text-gray-400">{style.description}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 九宫格展示 */}
-      {renderGrids()}
+      <div className="space-y-4">
+        {/* 生成控制面板 */}
+        <div className="glass-card p-4 rounded-xl">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={generateHQ}
+              disabled={isLoading || shots.length === 0}
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              🎨 生成九宫格
+            </button>
+
+            {hqUrls.filter(Boolean).length > 0 && (
+              <>
+                <button
+                  onClick={applyGridsToShots}
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ✅ 应用到分镜表
+                </button>
+
+                <button
+                  onClick={() => setHqUrls([])}
+                  className="px-4 py-2 bg-gray-600 text-white font-medium text-xs rounded-md hover:bg-gray-500"
+                >
+                  🔄 重新生成
+                </button>
+              </>
+            )}
+
+            {abortController && (
+              <button
+                onClick={() => {
+                  abortController.abort();
+                  setAbortController(null);
+                }}
+                className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-all"
+              >
+                ⏸️ 停止生成
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 九宫格图片网格 */}
+        {hqUrls.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {hqUrls.map((url, idx) => (
+              <div key={idx} className="bg-gray-800 rounded-lg overflow-hidden border border-green-700">
+                <div className="flex justify-between items-center px-3 py-2 bg-gray-900 border-b border-gray-700">
+                  <span className="text-sm font-bold text-gray-200">第 {idx + 1} 页</span>
+                  <div className="flex gap-2">
+                    {url ? (
+                      <>
+                        <button
+                          onClick={() => handleRegenerateGrid(idx)}
+                          disabled={isLoading}
+                          className="px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="重新生成这张九宫格"
+                        >
+                          🔄 重新生成
+                        </button>
+                        <button
+                          onClick={() => {
+                            setUploadGridIndex(idx);
+                            setUploadDialogOpen(true);
+                          }}
+                          disabled={isLoading}
+                          className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="上传自定义图片"
+                        >
+                          📤 上传
+                        </button>
+                        <a
+                          href={url}
+                          download={`storyboard_grid_${idx + 1}_${Date.now()}.png`}
+                          className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                        >
+                          📥 下载
+                        </a>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-xs text-orange-400">生成中...</span>
+                        {shots[idx * 9]?.storyboardGridGenerationMeta?.taskCode && (
+                          <button
+                            onClick={() => handleRefreshGrid(idx, shots[idx * 9]?.storyboardGridGenerationMeta)}
+                            disabled={isLoading}
+                            className="px-2 py-1 bg-cyan-600 text-white rounded text-xs hover:bg-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                            title="刷新任务状态，获取生成结果"
+                          >
+                            🔄 刷新任务
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                {url ? (
+                  <img src={url} alt={`Storyboard Grid ${idx + 1}`} className="w-full" />
+                ) : (
+                  <div className="h-64 bg-gray-700 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                      <p className="text-sm text-gray-400">正在生成第 {idx + 1} 张九宫格...</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* 统计信息 */}
       <div className="glass-card p-4 rounded-xl">

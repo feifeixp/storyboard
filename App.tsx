@@ -3744,9 +3744,41 @@ const App: React.FC = () => {
           />
         )}
 
-        {/* {currentStep === AppStep.GENERATE_IMAGES && (
-          <ImageGenerationPage ... />
-        )} */}
+        {currentStep === AppStep.GENERATE_IMAGES && (
+          <ImageGenerationPage
+            shots={shots}
+            characterRefs={characterRefs}
+            hqUrls={hqUrls}
+            setHqUrls={setHqUrls}
+            selectedStyle={selectedStyle}
+            setSelectedStyle={setSelectedStyle}
+            showStyleCards={showStyleCards}
+            setShowStyleCards={setShowStyleCards}
+            customStylePrompt={customStylePrompt}
+            setCustomStylePrompt={setCustomStylePrompt}
+            imageModel={imageModel}
+            uploadGridIndex={uploadGridIndex}
+            setUploadGridIndex={setUploadGridIndex}
+            uploadDialogOpen={uploadDialogOpen}
+            setUploadDialogOpen={setUploadDialogOpen}
+            uploadUrl={uploadUrl}
+            setUploadUrl={setUploadUrl}
+            uploadFile={uploadFile}
+            setUploadFile={setUploadFile}
+            isLoading={isLoading}
+            progressMsg={progressMsg}
+            generateHQ={generateHQ}
+            handleRegenerateGrid={regenerateSingleGrid}
+            handleUploadGrid={handleUploadGrid}
+            handleRefreshGrid={handleRefreshGrid}
+            applyGridsToShots={applyGridsToShots}
+            abortController={abortController}
+            setAbortController={setAbortController}
+            setCurrentStep={setCurrentStep}
+            currentProject={currentProject}
+            currentEpisodeNumber={currentEpisodeNumber}
+          />
+        )}
 
         {/* 🆕 最终故事板预览 */}
         {currentStep === AppStep.FINAL_STORYBOARD && (
