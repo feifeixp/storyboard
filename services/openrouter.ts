@@ -230,11 +230,13 @@ ${episodeScenes.map(s => `• ${s.name}：${s.description}
 
 /**
  * 🆕 美术风格类型
+ * 🔧 新增 '3d_anime' 复合类型，用于3D国漫/3D动漫等项目
  */
-export type ArtStyleType = 'anime' | 'realistic' | '3d' | 'illustration' | 'unknown';
+export type ArtStyleType = 'anime' | 'realistic' | '3d' | '3d_anime' | 'illustration' | 'unknown';
 
 /**
  * 🆕 根据项目类型和视觉风格判断美术风格类型
+ * 🔧 修复优先级问题：3D+动漫组合时应返回 '3d_anime' 而非 'anime'
  */
 export function detectArtStyleType(genre: string, visualStyle: string): ArtStyleType {
   const combined = `${genre} ${visualStyle}`.toLowerCase();
@@ -242,7 +244,13 @@ export function detectArtStyleType(genre: string, visualStyle: string): ArtStyle
   // 二次元/动漫风格关键词
   const animeKeywords = [
     '动漫', '动画', '二次元', 'anime', '日系', '漫画',
-    '赛璐璐', '卡通', '插画', '番剧', '短剧动画'
+    '赛璐璐', '卡通', '番剧', '短剧动画', '国漫'
+  ];
+
+  // 3D风格关键词
+  const threeDKeywords = [
+    '3d', '三维', 'cg', '渲染', 'render', 'unreal', 'unity',
+    'c4d', 'octane', 'blender', '皮克斯', 'pixar'
   ];
 
   // 写实风格关键词
@@ -251,25 +259,32 @@ export function detectArtStyleType(genre: string, visualStyle: string): ArtStyle
     '实拍', 'live action', '真实'
   ];
 
-  // 3D风格关键词
-  const threeDKeywords = [
-    '3d', '三维', 'cg', '渲染', 'render', 'unreal', 'unity'
-  ];
-
   // 插画风格关键词
   const illustrationKeywords = [
     '插画', '水彩', '油画', '手绘', 'illustration', 'painting'
   ];
 
-  for (const keyword of animeKeywords) {
-    if (combined.includes(keyword)) return 'anime';
+  // 🔧 关键修复：先检测是否同时包含 3D 和 动漫 关键词
+  // 如果同时存在，说明是"3D国漫"类复合风格，应优先匹配
+  const has3D = threeDKeywords.some(k => combined.includes(k));
+  const hasAnime = animeKeywords.some(k => combined.includes(k));
+
+  if (has3D && hasAnime) {
+    return '3d_anime';  // 3D + 动漫 = 3D国漫复合风格
   }
+
+  // 纯3D（无动漫关键词）
+  if (has3D) return '3d';
+
+  // 纯动漫（无3D关键词）
+  if (hasAnime) return 'anime';
+
+  // 写实
   for (const keyword of realisticKeywords) {
     if (combined.includes(keyword)) return 'realistic';
   }
-  for (const keyword of threeDKeywords) {
-    if (combined.includes(keyword)) return '3d';
-  }
+
+  // 插画
   for (const keyword of illustrationKeywords) {
     if (combined.includes(keyword)) return 'illustration';
   }
@@ -279,13 +294,14 @@ export function detectArtStyleType(genre: string, visualStyle: string): ArtStyle
 
 /**
  * 🆕 根据美术风格生成提示词约束
+ * 🔧 新增 '3d_anime' 复合风格约束；增强 '3d' 约束（加禁止项）
  */
 export function getArtStyleConstraints(artStyle: ArtStyleType): string {
   switch (artStyle) {
     case 'anime':
       return `
 ═══════════════════════════════════════════════════════════════
-【🎨 美术风格约束：二次元/动漫】
+【🎨 美术风格约束：二次元/动漫（纯2D）】
 ═══════════════════════════════════════════════════════════════
 ⚠️ 提示词禁止使用写实描述：
   ❌ "realistic skin", "photorealistic", "skin pores", "skin texture"
@@ -303,6 +319,35 @@ export function getArtStyleConstraints(artStyle: ArtStyleType): string {
   - 线条：清晰的轮廓线
   - 着色：平涂或渐变，避免复杂光影
 `;
+    case '3d_anime':
+      return `
+═══════════════════════════════════════════════════════════════
+【🎨 美术风格约束：3D国漫/3D动漫】
+═══════════════════════════════════════════════════════════════
+⚠️ 这是 3D渲染 + 动漫角色设计 的复合风格！必须严格遵守！
+
+❌ 绝对禁止的描述（会导致风格偏移！）：
+  ❌ "2D", "flat color", "cel-shaded", "2D cel-shaded" — 禁止2D平涂风格
+  ❌ "hand-drawn", "sketch", "line art" — 禁止手绘线条风格
+  ❌ "photorealistic", "real skin", "skin pores" — 禁止真人写实风格
+  ❌ "watercolor", "ink wash" — 禁止水彩水墨风格
+
+✅ 必须使用的描述（3D渲染质感）：
+  ✅ "3D animation style", "3D rendered", "CGI quality"
+  ✅ "Pixar-like rendering", "Cinema 4D", "Octane render"
+  ✅ "subsurface scattering (SSS)", "volumetric lighting"
+  ✅ "smooth 3D model", "clean 3D textures", "global illumination"
+  ✅ "soft studio lighting", "ambient occlusion"
+
+✅ 角色设计要点（动漫化的3D角色）：
+  - 眼睛：大而有神，带有高光反射，3D渲染质感（非平涂）
+  - 皮肤：光滑有质感的3D渲染皮肤，带SSS次表面散射效果
+  - 头发：3D建模的动漫发型，有体积感和光泽
+  - 整体：像《完美世界》《斗破苍穹》等3D国漫的画面风格
+  - 材质：有3D模型的塑料/陶瓷质感，不是2D平涂
+
+🎯 风格参考：3D Chinese anime, like Perfect World / Battle Through the Heavens style
+`;
     case 'realistic':
       return `
 ═══════════════════════════════════════════════════════════════
@@ -318,10 +363,16 @@ export function getArtStyleConstraints(artStyle: ArtStyleType): string {
 ═══════════════════════════════════════════════════════════════
 【🎨 美术风格约束：3D渲染】
 ═══════════════════════════════════════════════════════════════
+❌ 禁止使用的描述（会导致风格偏移）：
+  ❌ "2D", "flat color", "cel-shaded" — 禁止2D平涂风格
+  ❌ "hand-drawn", "sketch", "line art" — 禁止手绘线条风格
+  ❌ "watercolor", "ink wash" — 禁止水彩水墨风格
+
 ✅ 使用3D渲染描述：
-  - 3D模型质感、材质反射
-  - 全局光照、环境光遮蔽
-  - 虚幻引擎/Unity风格的画面
+  ✅ "3D rendered", "CGI quality", "3D model"
+  ✅ "global illumination", "ambient occlusion"
+  ✅ "volumetric lighting", "material reflections"
+  ✅ "Unreal Engine / Unity style rendering"
 `;
     default:
       return '';
@@ -3793,11 +3844,42 @@ export async function generateSingleGrid(
   const styleName = style?.name || '粗略线稿';
   const styleSuffix = style?.promptSuffix || 'rough sketch, black and white, storyboard style';
 
-  // ✅ 强制锁定生图模型：始终使用 nanobanana-pro
-  const requestedModel = imageModel;
-  const effectiveModel = 'nanobanana-pro';
-  const ignoredHint = requestedModel && requestedModel !== effectiveModel ? `, 忽略请求模型: ${requestedModel}` : '';
-  console.log(`[OpenRouter] 单独生成第 ${gridIndex + 1}/${totalGrids} 张九宫格, 锁定模型: ${effectiveModel}${ignoredHint}, 风格: ${styleName}`);
+  // 🔧 动态获取模型列表（与批量生成保持一致，获取 max_reference_images 信息）
+  const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
+
+  console.log('[OpenRouter] 单格重绘 - 获取分镜场景可用模型列表...');
+  let availableModels;
+  try {
+    availableModels = await getModelsByScenario(ScenarioType.STORYBOARD);
+  } catch (error) {
+    console.error('[OpenRouter] 获取模型列表失败:', error);
+    throw new Error('无法获取可用模型列表，请稍后重试');
+  }
+
+  // 🔍 查找目标模型（与批量生成逻辑一致）
+  const PRIMARY_MODEL_KEYWORDS = ['nano', 'banana', 'pro'];
+  const FALLBACK_MODEL_KEYWORDS = ['seedream'];
+  const findModelByKeywords = (keywords: string[]) => {
+    return availableModels.find(m => {
+      const displayNameLower = m.model_display_name.toLowerCase();
+      const modelNameLower = m.model_name.toLowerCase();
+      return keywords.every(keyword =>
+        displayNameLower.includes(keyword.toLowerCase()) ||
+        modelNameLower.includes(keyword.toLowerCase())
+      );
+    });
+  };
+
+  const primaryModel = findModelByKeywords(PRIMARY_MODEL_KEYWORDS);
+  const fallbackModel = findModelByKeywords(FALLBACK_MODEL_KEYWORDS);
+  const preferredModel = primaryModel || fallbackModel;
+
+  if (!preferredModel) {
+    throw new Error('未找到可用的生图模型');
+  }
+
+  const effectiveModel = preferredModel.model_name;
+  console.log(`[OpenRouter] 单独生成第 ${gridIndex + 1}/${totalGrids} 张九宫格, 模型: ${effectiveModel} (${preferredModel.model_display_name}), 风格: ${styleName}`);
 
   // 计算该九宫格包含的镜头范围
   const startIdx = gridIndex * GRID_SIZE;
@@ -3810,14 +3892,19 @@ export async function generateSingleGrid(
   // 构建美术风格约束
   const artStyleSection = artStyleType ? getArtStyleConstraints(artStyleType) : '';
 
-  // 🆕 获取角色参考图信息（根据集数匹配形态的设定图）
+  // 🔧 获取角色参考图并按模型限制截断（与批量生成保持一致）
   const characterRefImages = getCharacterReferenceImagesForEpisode(characterRefs, episodeNumber);
-  const referenceImageUrls = characterRefImages.map(r => r.imageUrl);
-  if (characterRefImages.length > 0) {
-    console.log(`[OpenRouter] 📸 单格重绘 - 角色参考图: ${characterRefImages.length}张`, characterRefImages.map(r => `${r.name}(${r.briefDesc})`));
+  const maxRefImages = preferredModel.max_reference_images || 0;
+  const limitedRefImages = maxRefImages > 0 ? characterRefImages.slice(0, maxRefImages) : characterRefImages;
+  const referenceImageUrls = limitedRefImages.map(r => r.imageUrl);
+  if (limitedRefImages.length > 0) {
+    console.log(`[OpenRouter] 📸 单格重绘 - 角色参考图: ${limitedRefImages.length}张（模型最大支持${maxRefImages}张）`, limitedRefImages.map(r => `${r.name}(${r.briefDesc})`));
+    if (characterRefImages.length > limitedRefImages.length) {
+      console.warn(`[OpenRouter] ⚠️ 角色参考图超过模型限制，已截断: ${characterRefImages.length} → ${limitedRefImages.length}`);
+    }
   }
 
-  // 构建九宫格提示词（🆕 传入角色参考图信息）
+  // 构建九宫格提示词（传入截断后的角色参考图信息）
   const gridPrompt = buildNineGridPrompt(
     gridShots,
     gridIndex + 1,
@@ -3828,11 +3915,47 @@ export async function generateSingleGrid(
     episodeNumber,
     sceneSection,
     artStyleSection,
-    characterRefImages
+    limitedRefImages
   );
 
-  // 调用AI生成九宫格图（🆕 传入角色参考图 URL）
-  const tempImageUrl = await generateSingleImage(gridPrompt, effectiveModel, [], onTaskCreated, referenceImageUrls);
+  // 🔧 直接调用 Neodomain API（与批量生成一致，不再调用 generateSingleImage 避免重复获取模型）
+  console.log(`[OpenRouter] 提交单格重绘任务 #${gridIndex + 1}...`);
+  const task = await generateImage({
+    prompt: gridPrompt,
+    negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
+    modelName: effectiveModel,
+    imageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+    numImages: '1',
+    aspectRatio: '16:9',
+    size: '2K',
+    outputFormat: 'jpeg',
+    guidanceScale: 7.5,
+    showPrompt: false,
+  });
+
+  // 任务创建后立即回调
+  if (onTaskCreated) {
+    try {
+      await Promise.resolve(onTaskCreated(task.task_code));
+    } catch (err) {
+      console.warn(`[OpenRouter] 单格重绘任务回调失败:`, err);
+    }
+  }
+
+  // 轮询查询结果
+  console.log(`[OpenRouter] 开始轮询单格重绘任务...`);
+  const result = await pollGenerationResult(
+    task.task_code,
+    (status, attempt) => {
+      if (attempt % 5 === 0) {
+        console.log(`[OpenRouter] 单格重绘状态: ${status}, 第${attempt}次查询`);
+      }
+    }
+  );
+
+  const tempImageUrl = (result.status === TaskStatus.SUCCESS && result.image_urls && result.image_urls.length > 0)
+    ? result.image_urls[0]
+    : null;
 
   if (tempImageUrl) {
     // 🔧 Neodomain 返回的 URL 已经是 OSS 永久 URL，无需再次上传
