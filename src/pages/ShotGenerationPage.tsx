@@ -7,6 +7,7 @@ import {
   ShotDesign,
   QualityCheck,
 } from '../../prompts/chain-of-thought/types';
+import type { GeneratedEpisodeSummary } from '../../types/project';
 
 interface ShotGenerationPageProps {
   // Tab 状态
@@ -59,8 +60,8 @@ interface ShotGenerationPageProps {
   // 渲染函数
   renderShotTable: (editable: boolean, showActions: boolean) => React.ReactNode;
 
-  // 剧集概述
-  episodeSummary: string | null;
+  // 剧集概述（对象类型）
+  episodeSummary: GeneratedEpisodeSummary | null;
 }
 
 /**
@@ -85,7 +86,49 @@ export const ShotGenerationPage: React.FC<ShotGenerationPageProps> = (props) => 
           <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
             📋 剧集概述
           </h3>
-          <p className="text-xs text-gray-300 whitespace-pre-wrap">{episodeSummary}</p>
+          <div className="text-xs text-gray-300 space-y-2">
+            <div>
+              <span className="text-gray-400">标题：</span>
+              <span className="text-white font-medium">{episodeSummary.episodeTitle}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">时长：</span>
+              <span>{episodeSummary.totalDuration}</span>
+              <span className="mx-2 text-gray-600">|</span>
+              <span className="text-gray-400">镜头数：</span>
+              <span>{episodeSummary.totalShots}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">故事梗概：</span>
+              <p className="mt-1 text-gray-200 whitespace-pre-wrap">{episodeSummary.storySummary}</p>
+            </div>
+            {episodeSummary.characters && episodeSummary.characters.length > 0 && (
+              <div>
+                <span className="text-gray-400">出场角色：</span>
+                <span className="ml-2">
+                  {episodeSummary.characters.map((c, i) => (
+                    <span key={i}>
+                      {c.name}
+                      {c.role && <span className="text-gray-500">（{c.role}）</span>}
+                      {i < episodeSummary.characters.length - 1 && '、'}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+            {episodeSummary.emotionCurve && (
+              <div>
+                <span className="text-gray-400">情绪曲线：</span>
+                <span className="ml-2">{episodeSummary.emotionCurve}</span>
+              </div>
+            )}
+            {episodeSummary.visualStyle && (
+              <div>
+                <span className="text-gray-400">视觉风格：</span>
+                <span className="ml-2">{episodeSummary.visualStyle}</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
