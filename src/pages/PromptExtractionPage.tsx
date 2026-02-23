@@ -1,0 +1,204 @@
+import React from 'react';
+import { Shot } from '../../types';
+
+interface PromptExtractionPageProps {
+  // 分镜数据
+  shots: Shot[];
+  setShots: (shots: Shot[]) => void;
+
+  // 提取状态
+  isExtracting: boolean;
+  setIsExtracting: (extracting: boolean) => void;
+  extractProgress: string;
+  setExtractProgress: (progress: string) => void;
+
+  // 校验状态
+  isValidatingPrompts: boolean;
+  promptValidationResults: any[];
+  setPromptValidationResults: (results: any[]) => void;
+
+  // 操作函数
+  extractImagePromptsStream: (shots: Shot[], model: string) => AsyncGenerator<string>;
+  validatePrompts: () => void;
+  analysisModel: string;
+
+  // 导航
+  setCurrentStep: (step: number) => void;
+
+  // 项目信息
+  currentProject: any;
+  currentEpisodeNumber: number | null;
+  script: string;
+  saveEpisode: (projectId: string, episode: any) => Promise<void>;
+
+  // 渲染函数
+  renderPromptTable: () => React.ReactNode;
+}
+
+/**
+ * 提示词提取页面
+ * 从分镜脚本提取AI生图提示词
+ */
+export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
+  shots,
+  setShots,
+  isExtracting,
+  setIsExtracting,
+  extractProgress,
+  setExtractProgress,
+  isValidatingPrompts,
+  promptValidationResults,
+  setPromptValidationResults,
+  extractImagePromptsStream,
+  validatePrompts,
+  analysisModel,
+  setCurrentStep,
+  currentProject,
+  currentEpisodeNumber,
+  script,
+  saveEpisode,
+  renderPromptTable,
+}) => {
+  const handleExtractPrompts = async () => {
+    setIsExtracting(true);
+    setExtractProgress('正在分析分镜脚本，提取AI生图提示词...');
+
+    try {
+      const stream = extractImagePromptsStream(shots, analysisModel);
+      let fullText = '';
+      for await (const text of stream) {
+        fullText = text;
+        setExtractProgress(`提取中... (${Math.round(fullText.length / 50)}%)`);
+      }
+
+      // 解析JSON并更新shots
+      const extracted = JSON.parse(fullText);
+      const { removeChinese } = await import('../../services/openrouter');
+
+      const updatedShots = shots.map(shot => {
+        const match = extracted.find((e: any) => e.shotNumber === shot.shotNumber);
+        if (match) {
+          return {
+            ...shot,
+            imagePromptCn: match.imagePromptCn || '',
+            imagePromptEn: removeChinese(match.imagePromptEn || ''),
+            endImagePromptCn: match.endImagePromptCn || '',
+            endImagePromptEn: removeChinese(match.endImagePromptEn || ''),
+            videoGenPrompt: match.videoGenPrompt || ''
+          };
+        }
+        return shot;
+      });
+
+      setShots(updatedShots);
+      setExtractProgress(`✅ 提取完成！已更新 ${extracted.length} 个镜头的AI提示词`);
+
+      // 保存到云端
+      if (currentProject && currentEpisodeNumber !== null) {
+        const currentEpisode = currentProject.episodes?.find(
+          (ep: any) => ep.episodeNumber === currentEpisodeNumber
+        );
+        if (currentEpisode) {
+          try {
+            const updatedEpisode = {
+              ...currentEpisode,
+              script: script || '',
+              shots: updatedShots,
+              updatedAt: new Date().toISOString(),
+            };
+            await saveEpisode(currentProject.id, updatedEpisode);
+            setExtractProgress(prev => (prev.includes('✅') ? `${prev}（已保存到云端）` : prev));
+          } catch (error) {
+            console.error('[D1存储] ❌ 保存提示词失败:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('提取失败:', error);
+      setExtractProgress(`❌ 提取失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 pb-10">
+      {/* 顶部栏 */}
+      <div className="glass-card p-4 rounded-xl">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              🎯 提取AI生图提示词
+            </h2>
+            <p className="text-[var(--color-text-secondary)] text-xs mt-1">
+              根据 Nano Banana Pro 官方手册，从分镜脚本提取纯画面描述的AI提示词（中英文双版本）
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setCurrentStep(4)} // AppStep.MANUAL_EDIT
+              className="px-3 py-1.5 bg-[var(--color-surface)] text-[var(--color-text-secondary)] rounded-lg font-medium text-xs hover:bg-[var(--color-surface-hover)] transition-all"
+            >
+              ← 返回精修
+            </button>
+            <button
+              onClick={() => setCurrentStep(6)} // AppStep.GENERATE_IMAGES
+              disabled={!shots.some(s => s.imagePromptEn)}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium text-sm hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+            >
+              下一步: 绘制草图 →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="glass-card p-4 rounded-xl">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleExtractPrompts}
+            disabled={isExtracting || shots.length === 0}
+            className="px-6 py-3 bg-purple-600 text-white rounded-lg font-bold text-sm hover:bg-purple-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {isExtracting ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                提取中...
+              </>
+            ) : (
+              <>🎯 一键提取AI提示词</>
+            )}
+          </button>
+
+          <button
+            onClick={validatePrompts}
+            disabled={isValidatingPrompts || !shots.some(s => s.imagePromptCn || s.imagePromptEn)}
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium text-sm hover:bg-amber-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {isValidatingPrompts ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                自检中...
+              </>
+            ) : (
+              <>🔍 自检提示词</>
+            )}
+          </button>
+
+          <span className="text-sm text-[var(--color-text-secondary)]">{extractProgress}</span>
+        </div>
+
+        {/* 校验结果 */}
+        {promptValidationResults.length > 0 && (
+          <div className="mt-4 p-3 bg-red-900/20 border border-red-700/50 rounded-lg">
+            <h4 className="font-bold text-red-400">⚠️ 发现 {promptValidationResults.length} 个提示词问题</h4>
+          </div>
+        )}
+      </div>
+
+      {/* 提示词表格 */}
+      {renderPromptTable()}
+    </div>
+  );
+};
+
