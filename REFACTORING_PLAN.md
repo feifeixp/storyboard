@@ -95,7 +95,10 @@
 10. ✅ 提取 ShotGenerationPage（636行）
 11. ✅ 提取 PromptExtractionPage（200行）
 12. ✅ 提取 ImageGenerationPage（140行）
-13. ⏳ 在 App.tsx 中集成 Hooks 和 Pages
+13. 🔄 在 App.tsx 中集成 Hooks 和 Pages（进行中）
+    - ✅ 添加 Hooks 和 Pages 导入
+    - ⏳ 替换 useState 为 Hook 调用
+    - ⏳ 替换 JSX 为 Page 组件
 14. ⏳ 测试所有功能
 15. ⏳ 提交代码
 

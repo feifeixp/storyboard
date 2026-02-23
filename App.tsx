@@ -5,7 +5,22 @@ import { StepTracker } from './components/StepTracker';
 import Login from './components/Login';
 import { isLoggedIn, logout, getUserInfo, getUserPoints, type PointsInfo } from './services/auth';
 // 🆕 导入自定义 Hooks
-import { useScriptManagement, useCharacterManagement } from './src/hooks';
+import {
+  useScriptManagement,
+  useCharacterManagement,
+  useShotGeneration,
+  useImageGeneration,
+  useProjectManagement,
+} from './src/hooks';
+
+// 🆕 导入页面组件
+import {
+  ScriptInputPage,
+  ScriptCleaningPage,
+  ShotGenerationPage,
+  PromptExtractionPage,
+  ImageGenerationPage,
+} from './src/pages';
 // 使用 OpenRouter 统一 API（支持多模型切换）
 import {
   generateShotListStream,
