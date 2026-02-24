@@ -1,6 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { Shot, CharacterRef } from '../types';
+import React, { useState, useRef, useMemo } from 'react';
+import { Shot, CharacterRef, VideoGroup, VideoGroupPrompt } from '../types';
 import { SceneRef } from '../types/project';
+import {
+  groupShotsBySceneAndDuration,
+  generateAllVideoGroupPrompts,
+  getShotStoryBeat,
+} from '../src/utils/videoGrouping';
 // 静态导入（避免动态 import chunk 在 Cloudflare Pages 部署时因 MIME 类型错误导致加载失败）
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -14,15 +19,26 @@ interface FinalStoryboardProps {
   onBack: () => void;
 }
 
+type ViewMode = 'original' | 'grouped';
+
 /**
  * 最终故事板预览组件
  * - 将九宫格图片虚拟切割为独立镜头
+ * - 支持分组视图（按场景和时长限制分组）
  * - 美观的卡片布局展示
  * - 支持导出 JSON、CSV、MD、PDF
  */
 export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, projectName, onBack }: FinalStoryboardProps) {
   const [isExporting, setIsExporting] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('original');
   const storyboardRef = useRef<HTMLDivElement>(null);
+
+  // 生成分组数据
+  const { videoGroups, videoGroupPrompts } = useMemo(() => {
+    const groups = groupShotsBySceneAndDuration(shots, scenes, 15);
+    const prompts = generateAllVideoGroupPrompts(groups);
+    return { videoGroups: groups, videoGroupPrompts: prompts };
+  }, [shots, scenes]);
 
   // 检查是否有九宫格数据
   const hasStoryboardData = shots.some(shot => shot.storyboardGridUrl);
@@ -46,22 +62,42 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
     );
   }
 
+  // ==================== 导出函数 ====================
+
   // 导出为 JSON
   const exportJSON = () => {
-    const data = shots.map(shot => ({
-      shotNumber: shot.shotNumber,
-      storyBeat: typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event,
-      dialogue: shot.dialogue,
-      shotSize: shot.shotSize,
-      angleDirection: shot.angleDirection,
-      angleHeight: shot.angleHeight,
-      cameraMove: shot.cameraMove,
-      duration: shot.duration,
-      foreground: shot.foreground,
-      midground: shot.midground,
-      background: shot.background,
-      lighting: shot.lighting,
-    }));
+    const data = {
+      meta: {
+        project: projectName || '未命名项目',
+        episode: episodeNumber,
+        totalShots: shots.length,
+        totalGroups: videoGroups.length,
+      },
+      shots: shots.map(shot => ({
+        shotNumber: shot.shotNumber,
+        storyBeat: typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event,
+        dialogue: shot.dialogue,
+        shotSize: shot.shotSize,
+        angleDirection: shot.angleDirection,
+        angleHeight: shot.angleHeight,
+        cameraMove: shot.cameraMove,
+        duration: shot.duration,
+        foreground: shot.foreground,
+        midground: shot.midground,
+        background: shot.background,
+        lighting: shot.lighting,
+        sceneId: shot.sceneId,
+      })),
+      groups: videoGroups.map(group => ({
+        groupId: group.id,
+        groupName: group.groupName,
+        sceneId: group.sceneId,
+        sceneName: group.sceneName,
+        totalDuration: group.totalDuration,
+        shotNumbers: group.shots.map(s => s.shotNumber),
+        videoPrompt: videoGroupPrompts.find(p => p.groupId === group.id)?.fullPromptCn || '',
+      })),
+    };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -72,43 +108,103 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
     URL.revokeObjectURL(url);
   };
 
-  // 导出为 CSV（含图片提示词和视频提示词）
+  // 导出为 CSV（按分组组织）
   const exportCSV = () => {
-    const headers = [
-      '编号', '剧情描述', '对话', '景别', '角度朝向', '角度高度', '运镜', '时长',
-      '图片提示词', '尾帧提示词', '视频提示词',
-    ];
-    const rows = shots.map(shot => [
-      shot.shotNumber,
-      typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event,
-      shot.dialogue || '',
-      shot.shotSize,
-      shot.angleDirection,
-      shot.angleHeight,
-      shot.cameraMove,
-      shot.duration,
-      shot.imagePromptCn || '',
-      shot.endImagePromptCn || '',
-      shot.videoGenPrompt || '',
-    ]);
+    // 生成多Sheet的CSV内容（用分隔符区分分组）
+    const csvContent: string[] = [];
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
+    // 第一部分：摘要信息
+    csvContent.push('===== 故事板摘要 =====');
+    csvContent.push(`项目名称,${projectName || '未命名项目'}`);
+    csvContent.push(`集数,第${episodeNumber || '?'}集`);
+    csvContent.push(`镜头总数,${shots.length}`);
+    csvContent.push(`分组数量,${videoGroups.length}`);
+    csvContent.push('');
 
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    // 第二部分：分组视图（每个分组一张表）
+    csvContent.push('===== 视频分组视图（每个视频不超过15秒）=====');
+    csvContent.push('');
+
+    for (const group of videoGroups) {
+      const prompt = videoGroupPrompts.find(p => p.groupId === group.id);
+      csvContent.push(`--- 分组: ${group.groupName} (${group.totalDuration.toFixed(1)}秒) ---`);
+      csvContent.push('');
+
+      // 分组信息
+      csvContent.push('分组信息');
+      csvContent.push(`分组ID,${group.id}`);
+      csvContent.push(`场景名称,${group.sceneName || '无'}`);
+      csvContent.push(`时长,${group.totalDuration.toFixed(1)}秒`);
+      csvContent.push(`镜头数量,${group.shots.length}`);
+      csvContent.push('');
+
+      // 视频提示词
+      if (prompt) {
+        csvContent.push('视频生成提示词（Seedance 2.0规范）');
+        csvContent.push(`提示词,"${prompt.timelineScript.replace(/"/g, '""').replace(/\n/g, ' ')}"`);
+        csvContent.push('');
+      }
+
+      // 该分组的镜头详情
+      csvContent.push('镜头详情');
+      csvContent.push('编号,起始秒,结束秒,剧情描述,对话,景别,角度朝向,角度高度,运镜,时长,图片提示词,尾帧提示词');
+      for (const shotRange of group.shots) {
+        const shot = shotRange.shot;
+        const storyBeat = getShotStoryBeat(shot);
+        csvContent.push([
+          shot.shotNumber,
+          shotRange.startSecond.toFixed(1),
+          shotRange.endSecond.toFixed(1),
+          storyBeat,
+          shot.dialogue || '',
+          shot.shotSize,
+          shot.angleDirection,
+          shot.angleHeight,
+          shot.cameraMove,
+          shot.duration,
+          shot.imagePromptCn || '',
+          shot.endImagePromptCn || '',
+        ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','));
+      }
+      csvContent.push('');
+    }
+
+    // 第三部分：原始镜头列表（完整视图）
+    csvContent.push('===== 原始镜头列表（完整视图）=====');
+    csvContent.push('');
+    csvContent.push('编号,分组ID,剧情描述,对话,景别,角度朝向,角度高度,运镜,时长,图片提示词,尾帧提示词,视频提示词');
+    for (const shot of shots) {
+      const storyBeat = getShotStoryBeat(shot);
+      const group = videoGroups.find(g => g.shots.some(s => s.shot.id === shot.id));
+      csvContent.push([
+        shot.shotNumber,
+        group?.id || '',
+        storyBeat,
+        shot.dialogue || '',
+        shot.shotSize,
+        shot.angleDirection,
+        shot.angleHeight,
+        shot.cameraMove,
+        shot.duration,
+        shot.imagePromptCn || '',
+        shot.endImagePromptCn || '',
+        shot.videoGenPrompt || '',
+      ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','));
+    }
+
+    const blob = new Blob(['\ufeff' + csvContent.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `storyboard_ep${episodeNumber || 'unknown'}_${Date.now()}.csv`;
+    a.download = `storyboard_grouped_ep${episodeNumber || 'unknown'}_${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // 导出为 Markdown（含角色设定、场景设定、图片提示词和视频提示词）
+  // 导出为 Markdown（按分组组织）
   const exportMarkdown = () => {
     const title = `# 故事板 - ${projectName || '未命名项目'} - 第${episodeNumber || '?'}集\n\n`;
+    const summary = `## 摘要信息\n\n- **镜头总数**: ${shots.length}\n- **分组数量**: ${videoGroups.length}（每个视频不超过15秒）\n\n---\n\n`;
 
     // 角色设定部分
     let characterSection = '';
@@ -145,10 +241,50 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
       sceneSection += `\n---\n\n`;
     }
 
-    const content = shots.map((shot, idx) => {
-      const storyBeat = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event;
+    // 分组视图部分
+    let groupedSection = `## 视频分组视图\n\n`;
+    groupedSection += `> 分组规则：按场景优先分组，每组时长不超过15秒，遵循 Seedance 2.0 视频生成规范\n\n`;
 
-      // 构建提示词部分（仅在有内容时输出，只保留中文）
+    for (const group of videoGroups) {
+      const prompt = videoGroupPrompts.find(p => p.groupId === group.id);
+
+      groupedSection += `### ${group.groupName}\n\n`;
+      groupedSection += `- **分组ID**: ${group.id}\n`;
+      groupedSection += `- **场景**: ${group.sceneName || '无'}\n`;
+      groupedSection += `- **时长**: ${group.totalDuration.toFixed(1)}秒\n`;
+      groupedSection += `- **镜头数量**: ${group.shots.length}（${group.shots.map(s => s.shotNumber).join(', ')}）\n\n`;
+
+      // 视频生成提示词
+      if (prompt) {
+        groupedSection += `#### 📹 视频生成提示词（Seedance 2.0）\n\n`;
+        groupedSection += '```\n' + prompt.timelineScript + '\n```\n\n';
+      }
+
+      // 该组镜头详情
+      groupedSection += `#### 镜头详情\n\n`;
+      for (const shotRange of group.shots) {
+        const shot = shotRange.shot;
+        const storyBeat = getShotStoryBeat(shot);
+
+        groupedSection += `**镜头 ${shot.shotNumber}** (${shotRange.startSecond.toFixed(0)}-${shotRange.endSecond.toFixed(0)}秒)\n\n`;
+        groupedSection += `- **剧情**: ${storyBeat}\n`;
+        if (shot.dialogue) groupedSection += `- **对话**: "${shot.dialogue}"\n`;
+        groupedSection += `- **景别**: ${shot.shotSize}\n`;
+        groupedSection += `- **角度**: ${shot.angleDirection} ${shot.angleHeight}\n`;
+        groupedSection += `- **运镜**: ${shot.cameraMove}\n`;
+        if (shot.imagePromptCn) groupedSection += `- **图片提示词**: ${shot.imagePromptCn}\n`;
+        if (shot.endImagePromptCn) groupedSection += `- **尾帧提示词**: ${shot.endImagePromptCn}\n`;
+        groupedSection += '\n';
+      }
+      groupedSection += `---\n\n`;
+    }
+
+    // 原始镜头列表
+    let originalSection = `## 原始镜头列表（完整）\n\n`;
+    for (const shot of shots) {
+      const storyBeat = getShotStoryBeat(shot);
+      const group = videoGroups.find(g => g.shots.some(s => s.shot.id === shot.id));
+
       let promptSection = '';
       if (shot.imagePromptCn) {
         promptSection += `- **图片提示词**: ${shot.imagePromptCn}\n`;
@@ -160,7 +296,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
         promptSection += `- **视频提示词**: ${shot.videoGenPrompt}\n`;
       }
 
-      return `## 镜头 ${shot.shotNumber}\n\n` +
+      originalSection += `### 镜头 ${shot.shotNumber} ${group ? `(归属: ${group.groupName})` : ''}\n\n` +
         `- **剧情**: ${storyBeat}\n` +
         `- **对话**: ${shot.dialogue || '无'}\n` +
         `- **景别**: ${shot.shotSize}\n` +
@@ -174,22 +310,20 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
         `- **光影**: ${shot.lighting}\n` +
         (promptSection ? `\n### 提示词\n\n${promptSection}` : '') +
         `\n---\n\n`;
-    }).join('');
+    }
 
-    const blob = new Blob([title + characterSection + sceneSection + content], { type: 'text/markdown;charset=utf-8;' });
+    const blob = new Blob([title + summary + characterSection + sceneSection + groupedSection + originalSection], { type: 'text/markdown;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `storyboard_ep${episodeNumber || 'unknown'}_${Date.now()}.md`;
+    a.download = `storyboard_grouped_ep${episodeNumber || 'unknown'}_${Date.now()}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   /**
    * 导出为 PDF（html2canvas + jsPDF）
-   * 说明：
-   * - 支持多页分页（避免长页面只导出一页/被裁切）
-   * - 强依赖图片源 CORS：若九宫格图片域名未正确配置 Access-Control-Allow-Origin，将导致 canvas 被污染，无法导出。
+   * 支持按分组导出，每组占一页或连续多页
    */
   const exportPDF = async () => {
     setIsExporting(true);
@@ -198,11 +332,10 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
         throw new Error('未找到故事板容器节点');
       }
 
-      // 让浏览器有机会完成图片加载与布局（降低导出空白概率）
+      // 让浏览器有机会完成图片加载与布局
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
       const canvas = await html2canvas(storyboardRef.current, {
-        // scale 越大越清晰，但也更吃内存；2 在多数机器上可接受
         scale: 2,
         useCORS: true,
         allowTaint: false,
@@ -210,17 +343,12 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
         logging: false,
       });
 
-      // ⚠️ 若 canvas 被污染（跨域图片无 CORS），此处可能抛错
       const imgData = canvas.toDataURL('image/png');
-
       const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-
-      // 将整张长图按宽度等比缩放到 PDF 宽度
       const imgHeight = (canvas.height * pdfWidth) / canvas.width;
 
-      // 分页：通过在不同页用负 y 偏移重复绘制同一张长图
       let remainingHeight = imgHeight;
       let y = 0;
       let pageIndex = 0;
@@ -231,13 +359,10 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
         remainingHeight -= pageHeight;
         y -= pageHeight;
         pageIndex += 1;
-        // 避免极端情况死循环
         if (pageIndex > 200) break;
       }
 
-      const filename = `storyboard_ep${episodeNumber || 'unknown'}_${Date.now()}.pdf`;
-
-      // 用 Blob 触发下载，比 pdf.save 在某些环境更稳定
+      const filename = `storyboard_grouped_ep${episodeNumber || 'unknown'}_${Date.now()}.pdf`;
       const blob = pdf.output('blob');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -275,7 +400,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
               📋 最终故事板预览
             </h1>
             <p className="text-[var(--color-text-secondary)]">
-              {projectName || '未命名项目'} - 第{episodeNumber || '?'}集 - 共 {shots.length} 个镜头
+              {projectName || '未命名项目'} - 第{episodeNumber || '?'}集 - 共 {shots.length} 个镜头 · {videoGroups.length} 个视频分组
             </p>
           </div>
 
@@ -312,13 +437,60 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
           </div>
         </div>
 
-        {/* 故事板网格 */}
-        <div ref={storyboardRef} className="bg-white p-8 rounded-lg">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {shots.map((shot, idx) => (
-              <StoryboardCard key={shot.id} shot={shot} index={idx} />
-            ))}
+        {/* 视图模式切换 */}
+        <div className="mb-6 flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-[var(--color-surface)] rounded-lg p-1 border border-[var(--color-border)]">
+            <button
+              onClick={() => setViewMode('original')}
+              className={`px-4 py-2 rounded-md transition-all ${
+                viewMode === 'original'
+                  ? 'bg-[var(--color-primary)] text-white'
+                  : 'text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]'
+              }`}
+            >
+              🎬 原始镜头视图
+            </button>
+            <button
+              onClick={() => setViewMode('grouped')}
+              className={`px-4 py-2 rounded-md transition-all ${
+                viewMode === 'grouped'
+                  ? 'bg-[var(--color-primary)] text-white'
+                  : 'text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]'
+              }`}
+            >
+              📦 分组视频视图
+            </button>
           </div>
+          <span className="text-sm text-[var(--color-text-secondary)]">
+            {viewMode === 'grouped' ? '按场景+15秒限制分组，适合视频生成' : '按原始顺序展示所有镜头'}
+          </span>
+        </div>
+
+        {/* 故事板内容 */}
+        <div ref={storyboardRef} className="bg-white p-8 rounded-lg">
+          {viewMode === 'original' ? (
+            /* 原始视图 */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {shots.map((shot, idx) => (
+                <StoryboardCard key={shot.id} shot={shot} index={idx} />
+              ))}
+            </div>
+          ) : (
+            /* 分组视图 */
+            <div className="space-y-8">
+              {videoGroups.map((group, groupIdx) => {
+                const prompt = videoGroupPrompts.find(p => p.groupId === group.id);
+                return (
+                  <VideoGroupCard
+                    key={group.id}
+                    group={group}
+                    prompt={prompt}
+                    groupIndex={groupIdx}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -329,7 +501,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
  * 单个故事板卡片组件
  */
 function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
-  const storyBeat = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event;
+  const storyBeat = getShotStoryBeat(shot);
 
   return (
     <div className="rounded-lg overflow-hidden border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-all bg-[var(--color-surface-solid)]">
@@ -384,6 +556,118 @@ function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
             <span className="ml-1 text-[#fafaf9]">{shot.cameraMove}</span>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 视频分组卡片组件
+ */
+function VideoGroupCard({
+  group,
+  prompt,
+  groupIndex,
+}: {
+  group: VideoGroup;
+  prompt: VideoGroupPrompt | undefined;
+  groupIndex: number;
+}) {
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  return (
+    <div className="border-2 border-[var(--color-primary)]/30 rounded-lg overflow-hidden bg-gradient-to-br from-gray-50 to-white">
+      {/* 分组标题 */}
+      <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-dark)] text-white px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-bold">📦 {group.groupName}</h3>
+            <p className="text-sm opacity-80 mt-1">
+              {group.sceneName && `场景: ${group.sceneName} · `}
+              时长: {group.totalDuration.toFixed(1)}秒 · {group.shots.length} 个镜头
+            </p>
+          </div>
+          <span className="text-4xl opacity-50">{groupIndex + 1}</span>
+        </div>
+      </div>
+
+      {/* 分组内容 */}
+      <div className="p-6">
+        {/* 视频生成提示词 */}
+        {prompt && (
+          <div className="mb-6">
+            <button
+              onClick={() => setShowPrompt(!showPrompt)}
+              className="flex items-center gap-2 text-[var(--color-primary)] font-semibold mb-3 hover:underline"
+            >
+              📹 视频生成提示词 (Seedance 2.0)
+              <span className="text-xs bg-[var(--color-primary)]/10 px-2 py-1 rounded">
+                {showPrompt ? '收起' : '展开'}
+              </span>
+            </button>
+            {showPrompt && (
+              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4">
+                <pre className="text-sm text-[var(--color-text)] whitespace-pre-wrap font-mono">
+                  {prompt.timelineScript}
+                </pre>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(prompt.fullPromptCn);
+                  }}
+                  className="mt-3 text-xs text-[var(--color-primary)] hover:underline"
+                >
+                  📋 复制完整提示词
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 镜头网格 */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {group.shots.map((shotRange, idx) => (
+            <GroupedShotCard key={shotRange.shot.id} shotRange={shotRange} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 分组视图中的单个镜头卡片
+ */
+function GroupedShotCard({ shotRange }: { shotRange: { shot: Shot; startSecond: number; endSecond: number; shotNumber: string } }) {
+  const { shot } = shotRange;
+  const storyBeat = getShotStoryBeat(shot);
+
+  return (
+    <div className="rounded-lg overflow-hidden border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-all bg-[var(--color-surface-solid)]">
+      {/* 镜头编号 + 时间段 */}
+      <div className="bg-gradient-to-r from-[var(--color-primary-light)] to-[var(--color-primary)]/80 text-white px-3 py-2 flex justify-between items-center">
+        <span className="font-bold text-sm">镜头 {shot.shotNumber}</span>
+        <span className="text-xs bg-black/20 px-2 py-1 rounded">
+          {shotRange.startSecond.toFixed(0)}-{shotRange.endSecond.toFixed(0)}s
+        </span>
+      </div>
+
+      {/* 图片 */}
+      <div className="relative bg-black" style={{ paddingTop: '56.25%' }}>
+        {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' ? (
+          <GridCellImage gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-xs">
+            暂无图片
+          </div>
+        )}
+      </div>
+
+      {/* 信息 */}
+      <div className="p-3">
+        <div className="text-xs text-[#fafaf9] line-clamp-2 mb-2">{storyBeat}</div>
+        {shot.dialogue && (
+          <div className="text-xs text-[#e8c9a0] italic truncate">"{shot.dialogue}"</div>
+        )}
       </div>
     </div>
   );
@@ -445,4 +729,3 @@ function GridCellImage({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: num
     </div>
   );
 }
-

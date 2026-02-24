@@ -403,3 +403,50 @@ export enum AppStep {
  * 用于在统一的分镜编辑页面中切换不同的功能
  */
 export type EditTab = 'generate' | 'review' | 'manual';
+
+// ═══════════ 🆕 视频分组相关类型 ═══════════
+
+/**
+ * 单个镜头的时间段（用于视频提示词中的时间轴描述）
+ */
+export interface ShotTimeRange {
+  shotIndex: number;        // 在 shots 数组中的索引
+  shotNumber: string;       // 镜头编号
+  startSecond: number;      // 开始秒数
+  endSecond: number;        // 结束秒数
+  shot: Shot;               // 完整的镜头数据
+}
+
+/**
+ * 视频分组（根据场景和时长限制生成的分组）
+ * 每组最多15秒，优先按场景分组
+ */
+export interface VideoGroup {
+  id: string;               // 分组ID，格式："{sceneId}_{groupIndex}" 或 "ungrouped_{groupIndex}"
+  groupName: string;        // 分组名称，如 "场景1-1" 或 "未分组-1"
+  sceneId?: string;         // 关联的场景ID
+  sceneName?: string;       // 场景名称
+  totalDuration: number;    // 总时长（秒）
+  shots: ShotTimeRange[];   // 该组包含的镜头及其时间段
+}
+
+/**
+ * 视频生成提示词（遵循 Seedance 2.0 规范）
+ * 公式：[素材@定义] + [整体风格与画质基调] + [0-N秒：镜头A+动作A+台词] + [转场方式] + [N-M秒：镜头B+动作B+特效] + [M-15秒：落版与字幕]
+ */
+export interface VideoGroupPrompt {
+  groupId: string;          // 分组ID
+  groupName: string;        // 分组名称
+  // 素材定义（如果有图片/视频参考）— 核心规范一
+  assets?: string;          // 素材@定义部分，如"以@图片1为首帧"
+  // 整体风格与画质基调
+  style?: string;           // 风格描述
+  // 时间轴脚本（X-Y秒画面描述）— 核心规范二
+  timelineScript: string;   // 时间轴分段描述（含运镜+动作+台词+转场）
+  // 运镜备注 — 核心规范三
+  cameraNotes?: string;     // 运镜语言描述（如"一镜到底"/"多镜头切换"）
+  // 转场备注 — 核心规范二补充
+  transitionNotes?: string; // 转场方式汇总（如"硬切""无缝渐变转场"）
+  // 完整的中文提示词（组合以上内容）
+  fullPromptCn: string;     // 完整的中文提示词
+}
