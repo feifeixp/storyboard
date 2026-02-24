@@ -3706,6 +3706,13 @@ export async function generateMergedStoryboardSheet(
   // 创建所有生成任务
   const generationTasks = Array.from({ length: totalGrids }, (_, gridIndex) => {
     return (async () => {
+      // 🆕 错开提交时间：每张延迟 gridIndex * 1500ms，避免同时冲击 Neodomain API 导致并发冲突
+      if (gridIndex > 0) {
+        const staggerDelay = gridIndex * 1500;
+        console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} 错开 ${staggerDelay}ms 后提交...`);
+        await new Promise(resolve => setTimeout(resolve, staggerDelay));
+      }
+
       // 检查是否被取消
       if (abortSignal?.aborted) {
         console.log(`[OpenRouter] 九宫格 #${gridIndex + 1} 已被用户停止`);
@@ -3734,20 +3741,38 @@ export async function generateMergedStoryboardSheet(
 
       try {
         // 🔧 直接调用 Neodomain API（不再调用 generateSingleImage，避免重复获取模型）
-        console.log(`[OpenRouter] 提交生成任务 #${gridIndex + 1}...`);
-
-        const task = await generateImage({
-          prompt: gridPrompt,
-          negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
-          modelName: preferredModelName,
-          imageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,  // 🆕 上传角色参考图
-          numImages: '1',
-          aspectRatio: '16:9',
-          size: '2K',
-          outputFormat: 'jpeg',
-          guidanceScale: 7.5,
-          showPrompt: false,
-        });
+        // 🆕 添加并发冲突自动重试：遇到 BIZ_ERROR/数据并发冲突时，指数退避后重试
+        const MAX_SUBMIT_RETRIES = 3;
+        let task;
+        for (let attempt = 0; attempt < MAX_SUBMIT_RETRIES; attempt++) {
+          try {
+            console.log(`[OpenRouter] 提交生成任务 #${gridIndex + 1}${attempt > 0 ? ` (第${attempt + 1}次尝试)` : ''}...`);
+            task = await generateImage({
+              prompt: gridPrompt,
+              negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
+              modelName: preferredModelName,
+              imageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,  // 🆕 上传角色参考图
+              numImages: '1',
+              aspectRatio: '16:9',
+              size: '2K',
+              outputFormat: 'jpeg',
+              guidanceScale: 7.5,
+              showPrompt: false,
+            });
+            break; // 提交成功，退出重试循环
+          } catch (submitError) {
+            const errMsg = String((submitError as any)?.message || submitError);
+            const isConflict = errMsg.includes('并发冲突') || errMsg.includes('BIZ_ERROR');
+            if (isConflict && attempt < MAX_SUBMIT_RETRIES - 1) {
+              const retryDelay = (attempt + 1) * 3000; // 3s, 6s 指数退避
+              console.warn(`[OpenRouter] ⚠️ 任务 #${gridIndex + 1} 并发冲突，${retryDelay / 1000}s 后重试...`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+            } else {
+              throw submitError; // 非冲突错误或已达最大重试次数，直接抛出
+            }
+          }
+        }
+        if (!task) throw new Error(`任务 #${gridIndex + 1} 提交失败`);
 
         console.log(`[OpenRouter] ✅ 任务 #${gridIndex + 1} 已提交: ${task.task_code}`);
 
