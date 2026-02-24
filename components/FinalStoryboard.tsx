@@ -1,6 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Shot, CharacterRef } from '../types';
 import { SceneRef } from '../types/project';
+// 静态导入（避免动态 import chunk 在 Cloudflare Pages 部署时因 MIME 类型错误导致加载失败）
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface FinalStoryboardProps {
   shots: Shot[];
@@ -191,10 +194,6 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
   const exportPDF = async () => {
     setIsExporting(true);
     try {
-      // 动态导入库（避免首屏包体积膨胀）
-      const html2canvas = (await import('html2canvas')).default;
-      const { jsPDF } = await import('jspdf');
-
       if (!storyboardRef.current) {
         throw new Error('未找到故事板容器节点');
       }
