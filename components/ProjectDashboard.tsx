@@ -311,9 +311,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             styleName: characterStyle?.name || '未知风格',
             generatedAt: createdTaskAt, taskCode, taskCreatedAt: createdTaskAt,
           };
-          const updatedProject: Project = {
-            ...project, updatedAt: new Date().toISOString(),
-            characters: (project.characters || []).map(c => {
+          // 🔧 使用 projectRef.current 获取最新状态，避免批量生成时覆盖其他角色的数据
+          const pTask = projectRef.current;
+          const taskMetaProject: Project = {
+            ...pTask, updatedAt: new Date().toISOString(),
+            characters: (pTask.characters || []).map(c => {
               if (c.id !== characterId) return c;
               if (targetForm) {
                 // 更新形态的 imageGenerationMeta
@@ -323,9 +325,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               return { ...c, imageGenerationMeta: metaData };
             }),
           };
-          await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
-          try { await patchProject(project.id, { characters: updatedProject.characters }); }
-          catch (err) { console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err); await Promise.resolve(onUpdateProject(updatedProject)); }
+          try { await patchProject(pTask.id, { characters: taskMetaProject.characters }); }
+          catch (err) { console.warn('[ProjectDashboard] patchProject(characters/taskCode) 失败，回退到全量保存:', err); await Promise.resolve(onUpdateProject(taskMetaProject)); }
+          await Promise.resolve(onUpdateProject(taskMetaProject, { persist: false }));
         },
         { skipOSSUpload: true }
       );
@@ -358,7 +360,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       // 🔧 先持久化到数据库，再更新前端状态
       try {
-        await patchProject(project.id, { characters: updatedProject.characters });
+        await patchProject(latestProject.id, { characters: updatedProject.characters });
         console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已保存到数据库: ${targetLabel}`);
       } catch (err) {
         console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
@@ -552,8 +554,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // =============================
   // 🆕 生成场景设定图（单张 16:9，通常为 2×2 四分屏：多角度 + 关键特写）
   // =============================
-  const handleGenerateSceneImageSheet = async (sceneId: string) => {
-    const scene = (project.scenes || []).find(s => s.id === sceneId);
+  // skipConfirm: 批量生成时跳过确认对话框
+  const handleGenerateSceneImageSheet = async (sceneId: string, skipConfirm = false) => {
+    // 🔧 使用 projectRef.current 获取最新状态，避免 stale closure 覆盖已保存数据
+    const latestProject = projectRef.current;
+    const scene = (latestProject.scenes || []).find(s => s.id === sceneId);
     if (!scene) return;
 
     if (!sceneImageModel) {
@@ -566,10 +571,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       return;
     }
 
-    const confirmGenerate = confirm(
-      `将为场景「${scene.name}」生成 1 张设定图（会消耗积分）。\n\n是否继续？`
-    );
-    if (!confirmGenerate) return;
+    if (!skipConfirm) {
+      const confirmGenerate = confirm(
+        `将为场景「${scene.name}」生成 1 张设定图（会消耗积分）。\n\n是否继续？`
+      );
+      if (!confirmGenerate) return;
+    }
 
     setGeneratingSceneId(sceneId);
     setSceneGenProgress({ stage: '准备中', percent: 0 });
@@ -579,7 +586,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 		      let createdTaskAt: string | null = null;
 
       const styleSuffix = sceneStyle?.promptSuffix || '';
-      const projectVisualStyle = project.settings?.visualStyle || '';
+      const projectVisualStyle = latestProject.settings?.visualStyle || '';
 
       const baseInfoCn = [
         `场景设定图`,
@@ -598,7 +605,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         styleSuffix,
       ].filter(Boolean).join(' ');
 
-		      const imageUrls = await generateAndUploadImage(
+      const imageUrls = await generateAndUploadImage(
         {
           prompt,
           negativePrompt: NEGATIVE_PROMPT,
@@ -607,53 +614,56 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           numImages: '1',
           outputFormat: 'jpg',
         },
-        project.id,
+        latestProject.id,
         `scene_sheet_${sceneId}`,
-	        (stage, percent) => setSceneGenProgress({ stage, percent }),
-		        async (taskCode) => {
-	          createdTaskCode = taskCode;
-	          createdTaskAt = new Date().toISOString();
-	          setSceneGenProgress({ stage: '保存任务信息', percent: 15 });
+        (stage, percent) => setSceneGenProgress({ stage, percent }),
+        async (taskCode) => {
+          createdTaskCode = taskCode;
+          createdTaskAt = new Date().toISOString();
+          setSceneGenProgress({ stage: '保存任务信息', percent: 15 });
 
-	          const updatedProject: Project = {
-	            ...project,
-	            updatedAt: new Date().toISOString(),
-	            scenes: (project.scenes || []).map(s => {
-	              if (s.id !== sceneId) return s;
-	              return {
-	                ...s,
-	                imageGenerationMeta: {
-	                  modelName: sceneImageModel,
-	                  styleName: sceneStyle?.name || '未知风格',
-	                  generatedAt: createdTaskAt,
-	                  taskCode,
-	                  taskCreatedAt: createdTaskAt,
-	                },
-	              };
-	            }),
-	          };
+          // 🔧 使用 projectRef.current 获取最新状态，避免覆盖其他已保存场景的数据
+          const p = projectRef.current;
+          const taskMetaProject: Project = {
+            ...p,
+            updatedAt: new Date().toISOString(),
+            scenes: (p.scenes || []).map(s => {
+              if (s.id !== sceneId) return s;
+              return {
+                ...s,
+                imageGenerationMeta: {
+                  modelName: sceneImageModel,
+                  styleName: sceneStyle?.name || '未知风格',
+                  generatedAt: createdTaskAt,
+                  taskCode,
+                  taskCreatedAt: createdTaskAt,
+                },
+              };
+            }),
+          };
 
-		          // 1) 先更新本地 UI（不触发全量保存）
-		          await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
-		          // 2) 再做最小化持久化（PATCH 只更新 scenes 字段）
-		          try {
-		            await patchProject(project.id, { scenes: updatedProject.scenes });
-		          } catch (err) {
-		            console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
-		            await Promise.resolve(onUpdateProject(updatedProject));
-		          }
-		        },
-		        // S3：设定图直接保存 Neodomain 的永久 image_urls，跳过 OSS
-		        { skipOSSUpload: true }
-	      );
+          // 先持久化 taskCode 到数据库，再更新前端状态
+          try {
+            await patchProject(p.id, { scenes: taskMetaProject.scenes });
+          } catch (err) {
+            console.warn('[ProjectDashboard] patchProject(scenes/taskCode) 失败，回退到全量保存:', err);
+            await Promise.resolve(onUpdateProject(taskMetaProject));
+          }
+          await Promise.resolve(onUpdateProject(taskMetaProject, { persist: false }));
+        },
+        // S3：设定图直接保存 Neodomain 的永久 image_urls，跳过 OSS
+        { skipOSSUpload: true }
+      );
 
-	      const sheetUrl = imageUrls?.[0];
-	      if (!sheetUrl) throw new Error('未获取到生成图片URL');
+      const sheetUrl = imageUrls?.[0];
+      if (!sheetUrl) throw new Error('未获取到生成图片URL');
 
+      // 🔧 生成完成：再次用 projectRef.current 获取最新状态，避免覆盖已保存的其他场景数据
+      const finalProject = projectRef.current;
       const updatedProject: Project = {
-        ...project,
+        ...finalProject,
         updatedAt: new Date().toISOString(),
-        scenes: (project.scenes || []).map(s => {
+        scenes: (finalProject.scenes || []).map(s => {
           if (s.id !== sceneId) return s;
           return {
             ...s,
@@ -662,25 +672,24 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               modelName: sceneImageModel,
               styleName: sceneStyle?.name || '未知风格',
               generatedAt: new Date().toISOString(),
-	              taskCode: createdTaskCode || s.imageGenerationMeta?.taskCode,
-	              taskCreatedAt: createdTaskAt || s.imageGenerationMeta?.taskCreatedAt,
+              taskCode: createdTaskCode || s.imageGenerationMeta?.taskCode,
+              taskCreatedAt: createdTaskAt || s.imageGenerationMeta?.taskCreatedAt,
             },
           };
         }),
       };
 
-	      // 🔧 修复：先持久化到数据库，再更新前端状态
-	      // 这样即使用户离开页面，数据也已经保存了
-	      try {
-	        await patchProject(project.id, { scenes: updatedProject.scenes });
-	        console.log(`[ProjectDashboard] ✅ 场景设定图已保存到数据库: ${scene.name}`);
-	      } catch (err) {
-	        console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
-	        await saveProject(updatedProject);
-	      }
+      // 先持久化到数据库，再更新前端状态
+      try {
+        await patchProject(finalProject.id, { scenes: updatedProject.scenes });
+        console.log(`[ProjectDashboard] ✅ 场景设定图已保存到数据库: ${scene.name}`);
+      } catch (err) {
+        console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
+        await saveProject(updatedProject);
+      }
 
-	      // 最后更新前端状态（persist: false 避免重复保存）
-	      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+      // 最后更新前端状态（persist: false 避免重复保存）
+      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
     } catch (error: any) {
       console.error('生成场景设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
@@ -725,8 +734,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       setBatchSceneProgress({ current: i + 1, total: scenesToGenerate.length });
 
       try {
-        // 调用单个场景生成函数
-        await handleGenerateSceneImageSheet(scene.id);
+        // 调用单个场景生成函数（跳过单次确认框，批量已统一确认）
+        await handleGenerateSceneImageSheet(scene.id, true);
         successCount++;
 
         // 等待一小段时间，避免请求过快
