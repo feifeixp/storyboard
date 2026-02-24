@@ -165,7 +165,7 @@ const App: React.FC = () => {
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
   const [userPoints, setUserPoints] = useState<PointsInfo | null>(null);
 
-  // 🆕 获取用户积分信息
+  // 🆕 获取用户积分信息（登录时初始化）
   useEffect(() => {
     if (!loggedIn) return;
 
@@ -179,6 +179,23 @@ const App: React.FC = () => {
     };
 
     fetchPoints();
+  }, [loggedIn]);
+
+  // 🆕 监听图片生成完成事件，自动刷新左上角积分余额
+  useEffect(() => {
+    if (!loggedIn) return;
+
+    const handleImageGenerated = async () => {
+      try {
+        const points = await getUserPoints();
+        setUserPoints(points);
+      } catch (error) {
+        console.error('[App] 刷新积分信息失败:', error);
+      }
+    };
+
+    window.addEventListener('neodomain:image-generated', handleImageGenerated);
+    return () => window.removeEventListener('neodomain:image-generated', handleImageGenerated);
   }, [loggedIn]);
 
   // 如果未登录，显示登录页面

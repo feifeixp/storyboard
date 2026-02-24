@@ -266,7 +266,12 @@ export async function pollGenerationResult(
       }
 
       // 成功或失败时返回结果
-      if (result.status === TaskStatus.SUCCESS || result.status === TaskStatus.FAILED) {
+      if (result.status === TaskStatus.SUCCESS) {
+        // 🆕 派发自定义事件：通知 App.tsx 图片生成成功，刷新左上角积分显示
+        window.dispatchEvent(new CustomEvent('neodomain:image-generated'));
+        return result;
+      }
+      if (result.status === TaskStatus.FAILED) {
         return result;
       }
     } catch (err) {
