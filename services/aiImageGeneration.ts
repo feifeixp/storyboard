@@ -156,30 +156,44 @@ export async function generateImage(
     prompt: request.prompt.substring(0, 100) + '...',
   });
 
-  // 🔧 尝试使用 Authorization header（标准 JWT 认证方式）
-  const response = await fetch(
-    `${API_BASE_URL}/agent/ai-image-generation/generate`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'accessToken': accessToken,  // 同时保留 accessToken header
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
+  // 🆕 并发冲突自动重试：遇到 BIZ_ERROR/数据并发冲突时，指数退避后最多重试3次
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    // 🔧 尝试使用 Authorization header（标准 JWT 认证方式）
+    const response = await fetch(
+      `${API_BASE_URL}/agent/ai-image-generation/generate`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'accessToken': accessToken,  // 同时保留 accessToken header
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      }
+    );
+
+    const result: ApiResponse<ImageGenerationResult> = await response.json();
+
+    console.log('[Neodomain] 图像生成响应:', result);
+
+    if (!result.success || !result.data) {
+      const errMsg = result.errMessage || '图片生成请求失败';
+      const isConflict = errMsg.includes('并发冲突') || result.errCode === 'BIZ_ERROR';
+      if (isConflict && attempt < MAX_RETRIES - 1) {
+        const retryDelay = (attempt + 1) * 3000; // 3s, 6s 指数退避
+        console.warn(`[Neodomain] ⚠️ 并发冲突，${retryDelay / 1000}s 后重试 (第${attempt + 1}次)...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        continue;
+      }
+      console.error('[Neodomain] 图像生成失败:', result);
+      throw new Error(errMsg);
     }
-  );
 
-  const result: ApiResponse<ImageGenerationResult> = await response.json();
-
-  console.log('[Neodomain] 图像生成响应:', result);
-
-  if (!result.success || !result.data) {
-    console.error('[Neodomain] 图像生成失败:', result);
-    throw new Error(result.errMessage || '图片生成请求失败');
+    return result.data;
   }
 
-  return result.data;
+  throw new Error('图像生成失败：超过最大重试次数');
 }
 
 /**

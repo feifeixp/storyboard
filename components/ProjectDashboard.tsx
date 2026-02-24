@@ -510,14 +510,31 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setIsBatchGeneratingCharacters(true);
     setBatchCharacterProgress({ current: 0, total: tasks.length });
 
-    // 🔧 并发执行所有生成任务
-    const results = await Promise.allSettled(
-      tasks.map(task => handleGenerateCharacterImageSheet(task.characterId, true, task.formId))
-    );
+    // 🆕 顺序执行所有生成任务（避免并发冲突），每个任务间隔 2s
+    // （底层 generateImage 已添加并发冲突自动重试，此处改串行进一步减少冲突概率）
+    let successCount = 0;
+    let failCount = 0;
+    const failedLabels: string[] = [];
 
-    const successCount = results.filter(r => r.status === 'fulfilled').length;
-    const failCount = results.filter(r => r.status === 'rejected').length;
-    const failedLabels = tasks.filter((_, i) => results[i].status === 'rejected').map(t => t.label);
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
+      setBatchCharacterProgress({ current: i + 1, total: tasks.length });
+
+      // 错开提交：每个任务提交前等待 2s（第一个立即执行）
+      if (i > 0) {
+        console.log(`[ProjectDashboard] 批量角色生成 #${i + 1} 等待 2s 后提交...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      try {
+        await handleGenerateCharacterImageSheet(task.characterId, true, task.formId);
+        successCount++;
+      } catch (error) {
+        console.error(`[ProjectDashboard] 生成角色「${task.label}」失败:`, error);
+        failCount++;
+        failedLabels.push(task.label);
+      }
+    }
 
     setIsBatchGeneratingCharacters(false);
     setBatchCharacterProgress(null);
