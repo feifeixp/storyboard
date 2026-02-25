@@ -8,6 +8,8 @@ import {
   QualityCheck,
 } from '../../prompts/chain-of-thought/types';
 import type { GeneratedEpisodeSummary } from '../../types/project';
+import { MODEL_NAMES } from '../../services/openrouter';
+import { ModelSelector } from '../../components/ModelSelector';
 
 interface ShotGenerationPageProps {
   // Tab 状态
@@ -22,6 +24,12 @@ interface ShotGenerationPageProps {
   // 生成模式
   generationMode: 'traditional' | 'chain-of-thought';
   analysisModel: string;
+
+  // 模型选择（方案 B：各步骤独立选择）
+  reviewModel: string;
+  setReviewModel: (model: string) => void;
+  editModel: string;
+  setEditModel: (model: string) => void;
 
   // 思维链状态
   cotCurrentStage: number | null;
@@ -216,7 +224,7 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
             )}
           </h2>
           <p className="text-xs text-gray-400 mt-1">
-            模型: {analysisModel.split('/')[1]} | 模式: {generationMode === 'chain-of-thought' ? '思维链' : '传统'}
+            模型: {MODEL_NAMES[analysisModel] || analysisModel.split('/')[1]} | 模式: {generationMode === 'chain-of-thought' ? '思维链' : '传统'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -387,6 +395,17 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
               ? `发现 ${suggestions.length} 条建议，已选 ${getSelectedSuggestionsCount()} 条`
               : ''}
           </span>
+          <div className="flex items-center gap-2 ml-4">
+            <span className="text-xs text-gray-400">自检模型:</span>
+            <div className="w-56">
+              <ModelSelector
+                value={reviewModel}
+                onChange={setReviewModel}
+                type="all"
+                showLabel={false}
+              />
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -558,8 +577,16 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
             <p className="text-[10px] text-gray-400">讨论剧情/镜头，确认后执行修改</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="py-1 px-2 bg-gray-700 text-white text-xs rounded border border-gray-600">
-              🔮 Gemini 2.5 Flash
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">精修模型:</span>
+              <div className="w-64">
+                <ModelSelector
+                  value={editModel}
+                  onChange={setEditModel}
+                  type="all"
+                  showLabel={false}
+                />
+              </div>
             </div>
             <button
               onClick={handleExecuteChanges}

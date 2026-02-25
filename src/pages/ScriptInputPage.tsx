@@ -1,5 +1,6 @@
 import React from 'react';
 import { CharacterRef } from '../../types';
+import { ModelSelector } from '../../components/ModelSelector';
 
 interface ScriptInputPageProps {
   // 剧本相关
@@ -7,6 +8,10 @@ interface ScriptInputPageProps {
   setScript: (script: string) => void;
   handleScriptUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   startScriptCleaning: () => void;
+
+  // 模型选择
+  analysisModel: string;
+  setAnalysisModel: (model: string) => void;
 
   // 角色相关
   characterRefs: CharacterRef[];
@@ -34,6 +39,8 @@ export const ScriptInputPage: React.FC<ScriptInputPageProps> = ({
   setScript,
   handleScriptUpload,
   startScriptCleaning,
+  analysisModel,
+  setAnalysisModel,
   characterRefs,
   setCharacterRefs,
   newCharName,
@@ -68,14 +75,21 @@ export const ScriptInputPage: React.FC<ScriptInputPageProps> = ({
             value={script}
             onChange={(e) => setScript(e.target.value)}
           />
-          <div className="flex items-center gap-2">
-            <div className="flex-1 bg-gray-800 rounded px-3 py-2 text-xs text-gray-400 flex items-center gap-2">
-              <span className="text-gray-500">🤖 分析模型:</span>
-              <span className="text-white">🔮 Gemini 2.5 Flash ($0.30) ⭐推荐</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400 whitespace-nowrap">🤖 分析模型:</span>
+              <div className="flex-1">
+                <ModelSelector
+                  value={analysisModel}
+                  onChange={setAnalysisModel}
+                  type="all"
+                  showLabel={false}
+                />
+              </div>
             </div>
             <button
               onClick={startScriptCleaning}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all text-xs"
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all text-xs"
             >
               🧹 清洗剧本
             </button>

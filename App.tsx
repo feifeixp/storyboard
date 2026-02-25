@@ -34,6 +34,7 @@ import {
   extractCharactersFromScript,
   detectArtStyleType,  // 🆕 美术风格检测
   MODELS,
+  MODEL_NAMES,  // 🆕 模型显示名称
   // 思维链API
   generateStage1Analysis,
   generateStage2Analysis,
@@ -3482,7 +3483,7 @@ const App: React.FC = () => {
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">分析模型</label>
                       <div className="bg-gray-800 rounded px-3 py-2 text-sm text-white flex items-center gap-2">
-                        🔮 Gemini 2.5 Flash ($0.30) ⭐推荐
+                        {MODEL_NAMES[analysisModel] || analysisModel}
                       </div>
                     </div>
                     <div>
@@ -3667,6 +3668,8 @@ const App: React.FC = () => {
                 setScript={setScript}
                 handleScriptUpload={handleScriptUpload}
                 startScriptCleaning={startScriptCleaning}
+                analysisModel={analysisModel}
+                setAnalysisModel={setAnalysisModel}
                 characterRefs={characterRefs}
                 setCharacterRefs={setCharacterRefs}
                 newCharName={newCharName}
@@ -3707,6 +3710,10 @@ const App: React.FC = () => {
             progressMsg={progressMsg}
             generationMode={generationMode}
             analysisModel={analysisModel}
+            reviewModel={reviewModel}
+            setReviewModel={setReviewModel}
+            editModel={editModel}
+            setEditModel={setEditModel}
             cotCurrentStage={cotCurrentStage}
             cotStage1={cotStage1}
             cotStage2={cotStage2}

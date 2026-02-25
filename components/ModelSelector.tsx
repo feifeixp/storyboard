@@ -23,15 +23,20 @@ export type ModelCapability = 'weak' | 'medium' | 'strong';
 
 // 模型能力评级
 export const MODEL_CAPABILITIES: Record<string, ModelCapability> = {
+  // === UI 可选的 6 个主力模型 ===
+  [MODELS.GPT_5_MINI]: 'strong',           // 强：OpenAI最新
+  [MODELS.GEMINI_2_5_FLASH]: 'medium',     // 中等：大多数任务可用（推荐）
+  [MODELS.MINIMAX_M2_5]: 'medium',         // 中等：高性价比
+  [MODELS.KIMI_K_2_5]: 'strong',           // 强：长文本思考能力强
+  [MODELS.GEMINI_3_FLASH_PREVIEW]: 'medium', // 中等：大多数任务可用
+  [MODELS.CLAUDE_HAIKU_4_5]: 'medium',     // 中等：快速响应
+
+  // === 保留模型（内部备用）===
   [MODELS.DEEPSEEK_CHAT]: 'weak',          // ⚠️ 弱：提取信息可能不完整
   [MODELS.GPT_4O_MINI]: 'weak',            // ⚠️ 弱：提取信息可能不完整
-  [MODELS.GEMINI_2_5_FLASH]: 'medium',     // 中等：大多数任务可用
-  [MODELS.GEMINI_3_FLASH_PREVIEW]: 'medium', // 中等：大多数任务可用（推荐）
-  [MODELS.CLAUDE_HAIKU_4_5]: 'medium',     // 中等
   [MODELS.GEMINI_2_5_PRO]: 'strong',       // 强：复杂任务推荐
   [MODELS.GEMINI_3_PRO_PREVIEW]: 'strong', // 强：复杂任务推荐
-  [MODELS.GPT_5_MINI]: 'strong',           // 强
-  [MODELS.CLAUDE_SONNET_4_5]: 'strong',    // 强
+  [MODELS.CLAUDE_SONNET_4_5]: 'strong',    // 强：最高质量
 };
 
 // 获取模型能力等级提示
@@ -58,34 +63,40 @@ const getCapabilityLabel = (model: string): string => {
 
 // 获取模型列表（按价格从便宜到贵排序）
 const getModelList = (type: ModelType): string[] => {
-  // 按价格从便宜到贵排序的完整模型列表（排除图像生成专用模型）
-  const sortedByPrice = [
-    MODELS.DEEPSEEK_CHAT,           // ¥1/¥2 最便宜
-    MODELS.GPT_4O_MINI,             // $0.15/$0.60
-    MODELS.GEMINI_2_5_FLASH,        // $0.30/$2.50
-    MODELS.GEMINI_3_FLASH_PREVIEW,  // $0.50/$3.00 ⭐默认
+  // ⚠️ UI 可选的 6 个主力模型（按价格从便宜到贵排序）
+  // 其他模型保留在 MODELS 常量中供内部使用，但不在 UI 中展示
+  const uiAvailableModels = [
+    MODELS.GPT_5_MINI,              // $0.25/$2
+    MODELS.GEMINI_2_5_FLASH,        // $0.30/$2.50 ⭐默认推荐
+    MODELS.MINIMAX_M2_5,            // $0.30/$1.10
+    MODELS.KIMI_K_2_5,              // $0.45/$2.20
+    MODELS.GEMINI_3_FLASH_PREVIEW,  // $0.50/$3.00
     MODELS.CLAUDE_HAIKU_4_5,        // $1.00/$5.00
-    MODELS.GEMINI_2_5_PRO,          // $1.25/$10.00
-    MODELS.GEMINI_3_PRO_PREVIEW,    // $1.25/$10.00
-    MODELS.GPT_5_MINI,              // 价格未知
-    MODELS.CLAUDE_SONNET_4_5,       // $3.00/$15.00
   ];
 
   switch (type) {
     case 'thinking':
-      return MODEL_CATEGORIES.THINKING as unknown as string[];
+      // 从 UI 可选模型中筛选思考型模型
+      return uiAvailableModels.filter(m =>
+        [MODELS.KIMI_K_2_5, MODELS.CLAUDE_HAIKU_4_5, MODELS.GPT_5_MINI].includes(m)
+      );
     case 'fast':
-      return MODEL_CATEGORIES.FAST as unknown as string[];
+      // 从 UI 可选模型中筛选快速型模型
+      return uiAvailableModels.filter(m =>
+        [MODELS.GPT_5_MINI, MODELS.GEMINI_2_5_FLASH, MODELS.MINIMAX_M2_5, MODELS.GEMINI_3_FLASH_PREVIEW].includes(m)
+      );
     case 'image':
       return MODEL_CATEGORIES.IMAGE as unknown as string[];
     case 'all':
     default:
-      return sortedByPrice;
+      return uiAvailableModels;
   }
 };
 
 // 模型图标
 const getModelIcon = (model: string): string => {
+  if (model.includes('minimax')) return '⚡';
+  if (model.includes('kimi')) return '🌙';
   if (model.includes('deepseek')) return '🐋';
   if (model.includes('gemini')) return '🔮';
   if (model.includes('gpt')) return '🤖';
@@ -112,19 +123,23 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const models = getModelList(type as ModelType);
 
   return (
-    <div className={`model-selector ${className}`}>
+    <div className={className}>
       {showLabel && (
-        <label className="model-selector-label">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
           {label}
         </label>
       )}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="model-selector-select"
+        className="w-full px-3 py-2 bg-gray-800 text-white border border-gray-700 rounded-lg text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer"
       >
         {models.map((model) => (
-          <option key={model} value={model}>
+          <option
+            key={model}
+            value={model}
+            className="bg-gray-800 text-white"
+          >
             {getModelIcon(model)} {getModelDisplayName(model)}
           </option>
         ))}
@@ -155,17 +170,21 @@ export const ImageModelSelector: React.FC<ImageModelSelectorProps> = ({
   className = '',
 }) => {
   return (
-    <div className={`model-selector ${className}`}>
-      <label className="model-selector-label">
+    <div className={className}>
+      <label className="block text-sm font-medium text-gray-300 mb-2">
         生图模型
       </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="model-selector-select"
+        className="w-full px-3 py-2 bg-gray-800 text-white border border-gray-700 rounded-lg text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer"
       >
         {Object.entries(IMAGE_MODEL_NAMES).map(([model, name]) => (
-          <option key={model} value={model}>
+          <option
+            key={model}
+            value={model}
+            className="bg-gray-800 text-white"
+          >
             {name}
           </option>
         ))}

@@ -18,6 +18,59 @@
 
 ---
 
+## [2026-02-25 22:30] ✨ 新功能 (feature)
+
+**修改内容**：新增 MiniMax M2.5 模型支持，将可选文本模型从 5 个扩展到 6 个（GPT-5 Mini、Gemini 2.5 Flash、MiniMax M2.5、Kimi k2.5、Gemini 3 Flash Preview、Claude Haiku 4.5）。MiniMax M2.5 具有 196K 上下文和高性价比（$0.30/$1.10），适合成本敏感的场景。
+
+**影响范围**：
+- 文件/模块：
+  - services/openrouter.ts（新增 MINIMAX_M2_5 常量，更新 MODEL_NAMES 和 MODEL_CATEGORIES）
+  - components/ModelSelector.tsx（更新 MODEL_CAPABILITIES，将 MiniMax M2.5 添加到可选模型列表，添加 ⚡ 图标）
+
+**修改原因**：用户需要更多高性价比的模型选择，MiniMax M2.5 的输出价格（$1.10/M）比 Gemini 2.5 Flash（$2.50/M）更便宜，适合大量输出的场景。
+
+**预期效果**：
+- ✅ 用户可以在所有模型选择器中看到 MiniMax M2.5 选项
+- ✅ MiniMax M2.5 显示为"⚡ MiniMax M2.5 (196K ctx, $0.30/$1.10)"
+- ✅ 适合需要大量输出但成本敏感的场景
+
+**相关文档**：
+- https://openrouter.ai/models/minimax/minimax-m2.5
+
+---
+
+## [2026-02-25 22:00] ✨ 新功能 (feature)
+
+**修改内容**：开放全剧 LLM 模型选择能力，在新建项目向导、剧本导入、分镜生成、分镜自检与精修等关键步骤中接入统一的模型选择组件（ModelSelector），并将可选文本模型限制为主力模型（GPT-5 Mini、Gemini 2.5 Flash、Kimi k2.5、Gemini 3 Flash Preview、Claude Haiku 4.5），同时保留旧模型常量作为内部备用。默认模型统一设置为 Gemini 2.5 Flash（性价比最高）。
+
+**影响范围**：
+- 文件/模块：
+  - services/openrouter.ts（新增 KIMI_K_2_5 常量，更新 MODEL_NAMES 和 MODEL_CATEGORIES，调整价格表注释）
+  - components/ModelSelector.tsx（更新 MODEL_CAPABILITIES，限制 getModelList 只返回 5 个主力模型，添加 Kimi 图标）
+  - components/ProjectWizard.tsx（将固定的模型显示改为 ModelSelector 下拉选择）
+  - src/pages/ScriptInputPage.tsx（添加 analysisModel/setAnalysisModel props，使用 ModelSelector）
+  - src/pages/ShotGenerationPage.tsx（添加 reviewModel/editModel props，在自检和精修 Tab 中添加模型选择器）
+  - App.tsx（向各页面传递模型状态，导入 MODEL_NAMES，更新"重新分析项目"区域的模型显示）
+
+**修改原因**：以前为简化成本控制临时锁死了模型选择，导致上传剧本、清洗剧本、分镜生成等流程无法按项目需求切换 LLM。用户反馈需要在不同场景使用不同模型（如长剧本用 Kimi、快速测试用 Gemini Flash、高质量用 Claude Haiku），需要恢复灵活选择并统一到受控的 5 个模型集合。
+
+**预期效果**：
+- ✅ 用户可以在项目创建时选择全剧分析模型（影响角色/场景提取质量）
+- ✅ 用户可以在剧本导入阶段选择分析模型（影响清洗、分镜生成、CoT 5 阶段）
+- ✅ 用户可以在分镜自检阶段独立选择自检模型
+- ✅ 用户可以在分镜精修阶段独立选择精修模型
+- ✅ 所有模型选择仅限于 5 个主力模型，避免选项过多导致混乱
+- ✅ 保留旧模型常量供内部使用，不影响现有备用逻辑
+
+**相关文档**：
+- PROJECT.md 中 AI 服务章节
+- docs/rules/角度规则优化总结.ini
+- docs/rules/提示词规范标准.ini
+- .augment/rules/global-rules.md（规则 R001、R002、R007）
+- .augment/rules/project-rules.md（规则 R008）
+
+---
+
 ## [2026-02-08 20:12] ✨ 新功能 + 🐛 问题修复
 
 **修改内容**：为九宫格分镜图生成增加 task_code 持久化与断网/刷新自动恢复；新增 episodes 局部更新（PATCH）用于仅更新 shots，并在应用九宫格后清理任务元信息，避免重复生成与多余写入。

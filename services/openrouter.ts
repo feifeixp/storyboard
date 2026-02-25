@@ -461,48 +461,60 @@ const getClient = (model?: string) => {
  * 可用的模型配置
  *
  * ╔════════════════════════════════════════════════════════════════════════════════╗
- * ║                   OpenRouter 模型价格表 (2025年12月)                             ║
+ * ║                   OpenRouter 模型价格表 (2026年2月)                              ║
  * ╠══════════════════════════════╦═══════════════╦═══════════════╦════════════════╣
- * ║ 模型                         ║ 输入 ($/M)    ║ 输出 ($/M)    ║ 备注           ║
+ * ║ 模型                         ║ 上下文        ║ 输入/输出     ║ 备注           ║
  * ╠══════════════════════════════╬═══════════════╬═══════════════╬════════════════╣
- * ║ GPT-4o Mini                  ║ $0.15         ║ $0.60         ║ OpenAI经济型    ║
- * ║ Gemini 2.5 Flash             ║ $0.30         ║ $2.50         ║ Google快速型    ║
- * ║ Gemini 3 Flash Preview       ║ $0.50         ║ $3.00         ║ Google新版      ║
- * ║ Claude Haiku 4.5             ║ $1.00         ║ $5.00         ║ Anthropic快速型 ║
- * ║ Gemini 2.5 Pro               ║ $1.25         ║ $10.00        ║ ✅ 默认推荐     ║
- * ║ Gemini 3 Pro Preview         ║ $1.25         ║ $10.00        ║ 思维链推理      ║
- * ║ Claude Sonnet 4.5            ║ $3.00         ║ $15.00        ║ 最高质量        ║
+ * ║ GPT-5 Mini                   ║ 400K          ║ $0.25/$2      ║ OpenAI最新      ║
+ * ║ Gemini 2.5 Flash             ║ 1.05M         ║ $0.30/$2.50   ║ ✅ 默认推荐     ║
+ * ║ MiniMax M2.5                 ║ 196K          ║ $0.30/$1.10   ║ 高性价比        ║
+ * ║ Kimi k2.5                    ║ 262K          ║ $0.45/$2.20   ║ Moonshot高性价比║
+ * ║ Gemini 3 Flash Preview       ║ 1.05M         ║ $0.50/$3      ║ Google新版      ║
+ * ║ Claude Haiku 4.5             ║ 200K          ║ $1/$5         ║ Anthropic快速型 ║
  * ╚══════════════════════════════╩═══════════════╩═══════════════╩════════════════╝
  *
- * 数据来源: https://openrouter.ai/models (2025-12-23)
+ * 数据来源: https://openrouter.ai/models (2026-02-25)
+ *
+ * 注：以下模型常量保留供内部使用，但不在UI中展示：
+ * - DeepSeek Chat, GPT-4o Mini, Gemini 2.5 Pro, Gemini 3 Pro Preview, Claude Sonnet 4.5
  */
 // 按价格从便宜到贵排序
 export const MODELS = {
-  // 1. DeepSeek Chat - ¥1/¥2 (约$0.14/$0.28) 最便宜
-  DEEPSEEK_CHAT: 'deepseek-chat',
+  // === UI 可选的 6 个主力模型（按价格排序）===
 
-  // 2. GPT-4o Mini - $0.15/$0.60
-  GPT_4O_MINI: 'openai/gpt-4o-mini',
-
-  // 3. Gemini 2.5 Flash - $0.30/$2.50
-  GEMINI_2_5_FLASH: 'google/gemini-2.5-flash',
-
-  // 4. Gemini 3 Flash Preview - $0.50/$3.00 ✅ 默认推荐
-  GEMINI_3_FLASH_PREVIEW: 'google/gemini-3-flash-preview',
-
-  // 5. Claude Haiku 4.5 - $1.00/$5.00
-  CLAUDE_HAIKU_4_5: 'anthropic/claude-haiku-4.5',
-
-  // 6. Gemini 2.5 Pro - $1.25/$10.00
-  GEMINI_2_5_PRO: 'google/gemini-2.5-pro',
-
-  // 7. Gemini 3 Pro Preview - $1.25/$10.00
-  GEMINI_3_PRO_PREVIEW: 'google/gemini-3-pro-preview',
-
-  // 8. GPT-5 Mini (价格未知，暂列此处)
+  // 1. GPT-5 Mini - $0.25/$2 (400K context)
   GPT_5_MINI: 'openai/gpt-5-mini',
 
-  // 9. Claude Sonnet 4.5 - $3.00/$15.00 最贵
+  // 2. Gemini 2.5 Flash - $0.30/$2.50 (1.05M context) ✅ 默认推荐
+  GEMINI_2_5_FLASH: 'google/gemini-2.5-flash',
+
+  // 3. MiniMax M2.5 - $0.30/$1.10 (196K context)
+  MINIMAX_M2_5: 'minimax/minimax-m2.5',
+
+  // 4. Kimi k2.5 - $0.45/$2.20 (262K context)
+  KIMI_K_2_5: 'moonshotai/kimi-k2.5',
+
+  // 5. Gemini 3 Flash Preview - $0.50/$3.00 (1.05M context)
+  GEMINI_3_FLASH_PREVIEW: 'google/gemini-3-flash-preview',
+
+  // 6. Claude Haiku 4.5 - $1.00/$5.00 (200K context)
+  CLAUDE_HAIKU_4_5: 'anthropic/claude-haiku-4.5',
+
+  // === 保留模型（内部备用，不在UI展示）===
+
+  // DeepSeek Chat - ¥1/¥2 (约$0.14/$0.28)
+  DEEPSEEK_CHAT: 'deepseek-chat',
+
+  // GPT-4o Mini - $0.15/$0.60
+  GPT_4O_MINI: 'openai/gpt-4o-mini',
+
+  // Gemini 2.5 Pro - $1.25/$10.00
+  GEMINI_2_5_PRO: 'google/gemini-2.5-pro',
+
+  // Gemini 3 Pro Preview - $1.25/$10.00 (思维链)
+  GEMINI_3_PRO_PREVIEW: 'google/gemini-3-pro-preview',
+
+  // Claude Sonnet 4.5 - $3.00/$15.00
   CLAUDE_SONNET_4_5: 'anthropic/claude-sonnet-4.5',
 
   // 图像生成专用（不在文本列表中）
@@ -516,20 +528,25 @@ export const isDeepSeekModel = (model: string): boolean => {
 
 /**
  * 模型分类（按价格从便宜到贵排序）
+ * 注：THINKING 和 FAST 主要包含 UI 可选的 6 个主力模型
  */
 export const MODEL_CATEGORIES = {
   THINKING: [
-    MODELS.GEMINI_3_PRO_PREVIEW,   // $1.25/$10
+    MODELS.KIMI_K_2_5,              // $0.45/$2.20 (适合长文本思考)
+    MODELS.CLAUDE_HAIKU_4_5,        // $1/$5
+    // 保留模型（内部备用）
+    MODELS.GEMINI_3_PRO_PREVIEW,    // $1.25/$10
     MODELS.GEMINI_2_5_PRO,          // $1.25/$10
     MODELS.CLAUDE_SONNET_4_5,       // $3/$15
   ],
   FAST: [
-    MODELS.DEEPSEEK_CHAT,           // ¥1/¥2 最便宜
+    MODELS.GPT_5_MINI,              // $0.25/$2 ✅ UI可选
+    MODELS.GEMINI_2_5_FLASH,        // $0.30/$2.50 ✅ 默认推荐
+    MODELS.MINIMAX_M2_5,            // $0.30/$1.10 ✅ UI可选
+    MODELS.GEMINI_3_FLASH_PREVIEW,  // $0.50/$3 ✅ UI可选
+    // 保留模型（内部备用）
+    MODELS.DEEPSEEK_CHAT,           // ¥1/¥2
     MODELS.GPT_4O_MINI,             // $0.15/$0.60
-    MODELS.GEMINI_2_5_FLASH,        // $0.30/$2.50
-    MODELS.GEMINI_3_FLASH_PREVIEW,  // $0.50/$3 ✅ 默认
-    MODELS.CLAUDE_HAIKU_4_5,        // $1/$5
-    MODELS.GPT_5_MINI,
   ],
   IMAGE: [
     MODELS.GEMINI_3_PRO_IMAGE_PREVIEW,
@@ -540,14 +557,19 @@ export const MODEL_CATEGORIES = {
  * 模型显示名称（含价格信息，按价格从便宜到贵排序）
  */
 export const MODEL_NAMES: Record<string, string> = {
+  // === UI 可选的 6 个主力模型 ===
+  [MODELS.GPT_5_MINI]: 'GPT-5 Mini (400K ctx, $0.25/$2)',
+  [MODELS.GEMINI_2_5_FLASH]: 'Gemini 2.5 Flash (1.05M ctx, $0.30/$2.50, $1/M audio) ⭐推荐',
+  [MODELS.MINIMAX_M2_5]: 'MiniMax M2.5 (196K ctx, $0.30/$1.10，速度较慢，建议耐心等待结果)',
+  [MODELS.KIMI_K_2_5]: 'Kimi k2.5 (262K ctx, $0.45/$2.20，速度非常慢，仅在需要深度思考时使用)',
+  [MODELS.GEMINI_3_FLASH_PREVIEW]: 'Gemini 3 Flash Preview (1.05M ctx, $0.50/$3, $1/M audio)',
+  [MODELS.CLAUDE_HAIKU_4_5]: 'Claude Haiku 4.5 (200K ctx, $1/$5)',
+
+  // === 保留模型（内部备用）===
   [MODELS.DEEPSEEK_CHAT]: 'DeepSeek V3 (¥1) 🔥最便宜',
   [MODELS.GPT_4O_MINI]: 'GPT-4o Mini ($0.15)',
-  [MODELS.GEMINI_2_5_FLASH]: 'Gemini 2.5 Flash ($0.30) ⭐推荐',
-  [MODELS.GEMINI_3_FLASH_PREVIEW]: 'Gemini 3 Flash Preview ($0.50)',
-  [MODELS.CLAUDE_HAIKU_4_5]: 'Claude Haiku 4.5 ($1.00)',
   [MODELS.GEMINI_2_5_PRO]: 'Gemini 2.5 Pro ($1.25)',
   [MODELS.GEMINI_3_PRO_PREVIEW]: 'Gemini 3 Pro Preview ($1.25) 思维链',
-  [MODELS.GPT_5_MINI]: 'GPT-5 Mini (最新)',
   [MODELS.CLAUDE_SONNET_4_5]: 'Claude Sonnet 4.5 ($3.00) 最强',
   [MODELS.GEMINI_3_PRO_IMAGE_PREVIEW]: 'Gemini 3 Pro Image (图像理解)',
 };
