@@ -472,7 +472,9 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
             /* 原始视图 */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {shots.map((shot, idx) => (
-                <StoryboardCard key={shot.id} shot={shot} index={idx} />
+                <React.Fragment key={shot.id}>
+                  <StoryboardCard shot={shot} index={idx} />
+                </React.Fragment>
               ))}
             </div>
           ) : (
@@ -481,12 +483,13 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
               {videoGroups.map((group, groupIdx) => {
                 const prompt = videoGroupPrompts.find(p => p.groupId === group.id);
                 return (
-                  <VideoGroupCard
-                    key={group.id}
-                    group={group}
-                    prompt={prompt}
-                    groupIndex={groupIdx}
-                  />
+                  <React.Fragment key={group.id}>
+                    <VideoGroupCard
+                      group={group}
+                      prompt={prompt}
+                      groupIndex={groupIdx}
+                    />
+                  </React.Fragment>
                 );
               })}
             </div>
@@ -626,7 +629,9 @@ function VideoGroupCard({
         {/* 镜头网格 */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {group.shots.map((shotRange, idx) => (
-            <GroupedShotCard key={shotRange.shot.id} shotRange={shotRange} />
+            <React.Fragment key={shotRange.shot.id}>
+              <GroupedShotCard shotRange={shotRange} />
+            </React.Fragment>
           ))}
         </div>
       </div>

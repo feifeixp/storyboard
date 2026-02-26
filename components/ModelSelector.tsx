@@ -78,12 +78,12 @@ const getModelList = (type: ModelType): string[] => {
     case 'thinking':
       // 从 UI 可选模型中筛选思考型模型
       return uiAvailableModels.filter(m =>
-        [MODELS.KIMI_K_2_5, MODELS.CLAUDE_HAIKU_4_5, MODELS.GPT_5_MINI].includes(m)
+        ([MODELS.KIMI_K_2_5, MODELS.CLAUDE_HAIKU_4_5, MODELS.GPT_5_MINI] as string[]).includes(m)
       );
     case 'fast':
       // 从 UI 可选模型中筛选快速型模型
       return uiAvailableModels.filter(m =>
-        [MODELS.GPT_5_MINI, MODELS.GEMINI_2_5_FLASH, MODELS.MINIMAX_M2_5, MODELS.GEMINI_3_FLASH_PREVIEW].includes(m)
+        ([MODELS.GPT_5_MINI, MODELS.GEMINI_2_5_FLASH, MODELS.MINIMAX_M2_5, MODELS.GEMINI_3_FLASH_PREVIEW] as string[]).includes(m)
       );
     case 'image':
       return MODEL_CATEGORIES.IMAGE as unknown as string[];

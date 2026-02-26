@@ -76,6 +76,10 @@ export const ShotGenerationPage: React.FC<ShotGenerationPageProps> = (props) => 
     chatHistory,
     suggestions,
     episodeSummary,
+    reviewModel,
+    setReviewModel,
+    editModel,
+    setEditModel,
   } = props;
 
   return (
@@ -410,6 +414,8 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
   toggleSuggestionSelection,
   setCurrentStep,
   renderShotTable,
+  reviewModel,
+  setReviewModel,
 }) => {
   return (
     <div className="space-y-4 animate-fadeIn">
@@ -588,6 +594,8 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
   downloadScript,
   setCurrentStep,
   renderShotTable,
+  editModel,
+  setEditModel,
 }) => {
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">

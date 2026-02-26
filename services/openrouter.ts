@@ -295,8 +295,8 @@ const getGeminiClient = () => {
       );
     }
 
-    // 直连 OpenRouter HTTPS 接口，无需 Worker 代理（全链路 HTTPS，无 Mixed Content 问题）
-    const baseURL = 'https://openrouter.ai/api/v1';
+    // 自建 LLM 代理接口
+    const baseURL = 'http://alb-r3li6yh4ktpwq7ugkg.ap-southeast-1.alb.aliyuncsslbintl.com:7000/v1';
 
     geminiClient = new OpenAI({
       baseURL,

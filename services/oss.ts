@@ -94,13 +94,13 @@ export async function uploadToOSS(
   try {
     // 上传文件
     const result = await client.put(fileName, file, {
-      // 上传进度回调
+      // 上传进度回调（ali-oss 类型定义未包含 progress，使用类型断言）
       progress: (p: number) => {
         if (onProgress) {
           onProgress(Math.floor(p * 100));
         }
       },
-    });
+    } as Parameters<typeof client.put>[2]);
 
     // 返回文件URL
     return result.url;
