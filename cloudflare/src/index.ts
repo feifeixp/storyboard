@@ -46,18 +46,9 @@ app.use('/*', cors({
 	origin: '*',  // 允许所有来源
 	// 🆕 PATCH：用于项目局部更新（避免全量保存）
 	allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-	// 扩展允许的请求头以支持 OpenAI JS SDK（Stainless）自动添加的 x-stainless-* headers
-	allowHeaders: [
-		'Content-Type',
-		'Authorization',
-		'accessToken',
-		'x-stainless-os',
-		'x-stainless-arch',
-		'x-stainless-runtime',
-		'x-stainless-runtime-version',
-		'x-stainless-package-name',
-		'x-stainless-package-version',
-	],
+	// 使用通配符允许所有请求头（credentials=false 时支持 *）
+	// 避免因 OpenAI SDK（Stainless）版本升级添加新 x-stainless-* 头而频繁更新
+	allowHeaders: ['*'],
 	exposeHeaders: ['Content-Length'],
 	maxAge: 600,
 	credentials: false,  // 允许所有来源时必须设置为 false
