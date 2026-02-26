@@ -2,6 +2,24 @@
 
 本文件记录项目的重大功能开发、架构调整、问题修复等关键变更，用于项目回顾、避免重复工作和保持开发一致性。
 
+## [2026-02-26 23:30] 🏗️ AI 接口回滚：从 ALB+Worker 代理切回 OpenRouter 直连 (arch)
+
+**修改内容**：将 AI 调用链路从「Cloudflare Worker 代理 → 自建 ALB HTTP 接口」回滚为直连 OpenRouter HTTPS 接口。① 修改 `services/openrouter.ts` 中 `getGeminiClient` 的 `baseURL`，从条件判断（生产走 Worker、本地走 Vite proxy）改为固定使用 `https://openrouter.ai/api/v1`；② 移除 `vite.config.ts` 中 `/api/ai-proxy` → ALB 的本地开发代理配置。
+
+**影响范围**：
+- 文件/模块：
+  - `services/openrouter.ts`（baseURL 逻辑简化）
+  - `vite.config.ts`（移除 ALB proxy 配置）
+
+**修改原因**：CORS 预检问题（`x-stainless-os is not allowed`）修复后，线上出现 `ERR_CONNECTION_TIMED_OUT`——Cloudflare Worker 的出口网络无法访问阿里云 ALB（`http://alb-...:7000`），属于 Cloudflare ↔ 阿里云跨网络路由问题，纯代码层面无法解决。因此回滚到更稳定的 OpenRouter 直连方案。
+
+**预期效果**：前端（本地和线上）直接调用 `https://openrouter.ai/api/v1`，全链路为 HTTPS，无 Mixed Content 问题，无需 Worker 代理，AI 请求可正常响应。
+
+**相关文档**：
+- .augment/rules/global-rules.md（R001、R007）
+
+---
+
 ## [2026-02-26 23:00] 🐛 修复 Cloudflare Worker AI 代理 CORS 预检请求头限制 (fix)
 
 **修改内容**：将 cloudflare/src/index.ts 中 Hono 全局 CORS 中间件的 allowHeaders 从仅允许 Content-Type、Authorization、accessToken 扩展为同时允许 OpenAI JS SDK（Stainless）自动附加的 x-stainless-os、x-stainless-arch、x-stainless-runtime、x-stainless-runtime-version、x-stainless-package-name、x-stainless-package-version 等请求头，确保 AI 请求在 OPTIONS 预检阶段不会被浏览器拦截。

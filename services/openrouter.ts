@@ -404,10 +404,8 @@ const getGeminiClient = () => {
       );
     }
 
-    // 生产环境通过 Cloudflare Worker 代理（解决 Mixed Content），本地开发走 Vite proxy
-    const baseURL = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-      ? 'https://storyboard-api.feifeixp.workers.dev/api/ai-proxy'
-      : '/api/ai-proxy';
+    // 直连 OpenRouter HTTPS 接口，无需 Worker 代理（全链路 HTTPS，无 Mixed Content 问题）
+    const baseURL = 'https://openrouter.ai/api/v1';
 
     geminiClient = new OpenAI({
       baseURL,
