@@ -404,8 +404,13 @@ const getGeminiClient = () => {
       );
     }
 
+    // 生产环境通过 Cloudflare Worker 代理（解决 Mixed Content），本地开发走 Vite proxy
+    const baseURL = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? 'https://storyboard-api.feifeixp.workers.dev/api/ai-proxy'
+      : '/api/ai-proxy';
+
     geminiClient = new OpenAI({
-      baseURL: 'http://alb-r3li6yh4ktpwq7ugkg.ap-southeast-1.alb.aliyuncsslbintl.com:7000/v1',
+      baseURL,
       apiKey,
       dangerouslyAllowBrowser: true,
     });

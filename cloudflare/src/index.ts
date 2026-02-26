@@ -8,11 +8,13 @@ import { cors } from 'hono/cors';
 import { projectRoutes } from './routes/projects';
 import { episodeRoutes } from './routes/episodes';
 import { authRoutes } from './routes/auth';
+import { aiProxyRoutes } from './routes/aiProxy';
 
 // 环境变量类型定义
 export interface Env {
   DB: D1Database;
   ENVIRONMENT: string;
+  VITE_OPENROUTER1_API_KEY: string;
 }
 
 /**
@@ -63,6 +65,7 @@ app.get('/health', (c) => {
 app.route('/api/auth', authRoutes);
 app.route('/api/projects', projectRoutes);
 app.route('/api/episodes', episodeRoutes);
+app.route('/api/ai-proxy', aiProxyRoutes);
 
 // 404 处理
 app.notFound((c) => {
