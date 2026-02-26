@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AppStep, Shot, ReviewSuggestion, CharacterRef, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight } from './types';
+import { AppStep, Shot, ReviewSuggestion, CharacterRef, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight, EpisodeSplit } from './types';
 import { StepTracker } from './components/StepTracker';
 import Login from './components/Login';
 import { isLoggedIn, logout, getUserInfo, getUserPoints, type PointsInfo } from './services/auth';
@@ -11,6 +11,7 @@ import {
   useShotGeneration,
   useImageGeneration,
   useProjectManagement,
+  detectAndSplitEpisodes,  // 🆕 剧集拆分函数
 } from './src/hooks';
 
 // 🆕 导入页面组件
@@ -401,6 +402,13 @@ const App: React.FC = () => {
   );
   const [isCleaning, setIsCleaning] = useState(false);
 
+  // 🆕 剧集拆分相关状态
+  const [episodes, setEpisodes] = useState<EpisodeSplit[]>([]);
+  const [currentEpisodeIndex, setCurrentEpisodeIndex] = useState<number | null>(null);
+  const [currentScript, setCurrentScript] = useState(() =>
+    loadFromStorage(STORAGE_KEYS.SCRIPT, '')
+  );
+
   // 🆕 思维链模式状态
   const [generationMode, setGenerationMode] = useState<'traditional' | 'chain-of-thought'>('chain-of-thought');
   const [cotCurrentStage, setCotCurrentStage] = useState<1 | 2 | 3 | 4 | 5 | null>(null);
@@ -514,9 +522,55 @@ const App: React.FC = () => {
       reader.onload = (event) => {
         const text = event.target?.result as string;
         setScript(text);
+        // 自动检测并拆分剧集
+        const detectedEpisodes = detectAndSplitEpisodes(text);
+        if (detectedEpisodes.length > 0) {
+          setEpisodes(detectedEpisodes);
+          setCurrentEpisodeIndex(0);
+          setCurrentScript(detectedEpisodes[0].script);
+          console.log(`[剧集拆分] 检测到 ${detectedEpisodes.length} 集`);
+        } else {
+          setEpisodes([]);
+          setCurrentEpisodeIndex(null);
+          setCurrentScript(text);
+        }
       };
       reader.readAsText(file);
     }
+  };
+
+  // 🆕 处理剧本文本变化（用于粘贴文本时自动检测剧集）
+  const handleScriptTextChange = (text: string) => {
+    setScript(text);
+    // 重新检测剧集
+    const detectedEpisodes = detectAndSplitEpisodes(text);
+    if (detectedEpisodes.length > 0) {
+      setEpisodes(detectedEpisodes);
+      setCurrentEpisodeIndex(0);
+      setCurrentScript(detectedEpisodes[0].script);
+    } else {
+      setEpisodes([]);
+      setCurrentEpisodeIndex(null);
+      setCurrentScript(text);
+    }
+  };
+
+  // 🆕 切换当前处理的剧集
+  const selectEpisode = (index: number) => {
+    if (index >= 0 && index < episodes.length) {
+      setCurrentEpisodeIndex(index);
+      setCurrentScript(episodes[index].script);
+      // 切换剧集后清空之前的清洗结果
+      setCleaningResult(null);
+      setCleaningProgress('');
+    }
+  };
+
+  // 🆕 取消剧集拆分，使用完整剧本
+  const cancelEpisodeSplit = () => {
+    setEpisodes([]);
+    setCurrentEpisodeIndex(null);
+    setCurrentScript(script);
   };
 
   const handleCharUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1264,14 +1318,16 @@ const App: React.FC = () => {
 
   // 🆕 清洗剧本
   const startScriptCleaning = async () => {
-    if (!script.trim()) return alert("请输入脚本内容");
+    // 🆕 使用 currentScript（可能是单集或完整剧本）
+    const scriptToClean = currentScript || script;
+    if (!scriptToClean.trim()) return alert("请输入脚本内容");
     setCleaningResult(null);
     setCleaningProgress('');
     setCurrentStep(AppStep.SCRIPT_CLEANING);
     setIsCleaning(true);
 
     try {
-      const stream = cleanScriptStream(script);
+      const stream = cleanScriptStream(scriptToClean);
       let lastText = '';
       for await (const text of stream) {
         lastText = text;
@@ -1299,7 +1355,7 @@ const App: React.FC = () => {
           // 规范化所有 string[] 字段，防止不同模型返回对象/数组嵌套导致渲染崩溃
           setCleaningResult(normalizeCleaningResult({
             ...parsed,
-            originalScript: script
+            originalScript: scriptToClean
           }));
         } catch (parseError) {
           console.error('解析清洗结果失败:', parseError, '\n原始文本:', lastText.substring(0, 500));
@@ -1308,7 +1364,7 @@ const App: React.FC = () => {
             cleanedScenes: [],
             constraints: [],
             sceneWeights: [],
-            originalScript: script,
+            originalScript: scriptToClean,
             rawOutput: lastText,
             parseError: true
           });
@@ -3713,9 +3769,15 @@ const App: React.FC = () => {
             {currentStep === AppStep.INPUT_SCRIPT && (
               <ScriptInputPage
                 script={script}
+                currentScript={currentScript}
                 setScript={setScript}
                 handleScriptUpload={handleScriptUpload}
                 startScriptCleaning={startScriptCleaning}
+                // 🆕 剧集拆分相关
+                episodes={episodes}
+                currentEpisodeIndex={currentEpisodeIndex}
+                selectEpisode={selectEpisode}
+                cancelEpisodeSplit={cancelEpisodeSplit}
                 characterRefs={characterRefs}
                 setCharacterRefs={setCharacterRefs}
                 newCharName={newCharName}

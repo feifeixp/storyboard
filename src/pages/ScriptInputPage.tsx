@@ -1,12 +1,18 @@
 import React from 'react';
-import { CharacterRef } from '../../types';
+import { CharacterRef, EpisodeSplit } from '../../types';
 
 interface ScriptInputPageProps {
   // 剧本相关
   script: string;
+  currentScript: string;  // 🆕 当前处理的剧本（可能是单集）
   setScript: (script: string) => void;
   handleScriptUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   startScriptCleaning: () => void;
+  // 🆕 剧集拆分相关
+  episodes: EpisodeSplit[];
+  currentEpisodeIndex: number | null;
+  selectEpisode: (index: number) => void;
+  cancelEpisodeSplit: () => void;
 
   // 角色相关
   characterRefs: CharacterRef[];
@@ -31,9 +37,16 @@ interface ScriptInputPageProps {
  */
 export const ScriptInputPage: React.FC<ScriptInputPageProps> = ({
   script,
+  currentScript,  // 🆕
   setScript,
   handleScriptUpload,
   startScriptCleaning,
+  // 🆕 剧集拆分相关
+  episodes,
+  currentEpisodeIndex,
+  selectEpisode,
+  cancelEpisodeSplit,
+  // 角色相关
   characterRefs,
   setCharacterRefs,
   newCharName,
@@ -51,6 +64,45 @@ export const ScriptInputPage: React.FC<ScriptInputPageProps> = ({
 }) => {
   return (
     <div className="flex flex-col gap-3">
+      {/* 🆕 剧集拆分提示 */}
+      {episodes.length > 0 && (
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-300 text-sm">📺 检测到 {episodes.length} 个剧集</span>
+              <span className="text-xs text-blue-400">已自动拆分</span>
+            </div>
+            <button
+              onClick={cancelEpisodeSplit}
+              className="text-xs text-blue-300 hover:text-blue-200 underline"
+            >
+              使用完整剧本
+            </button>
+          </div>
+          {/* 剧集选择器 */}
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {episodes.map((ep, idx) => (
+              <button
+                key={idx}
+                onClick={() => selectEpisode(idx)}
+                className={`flex-shrink-0 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                  currentEpisodeIndex === idx
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                <div className="font-bold">第{ep.episodeNumber}集</div>
+                {ep.title && (
+                  <div className="text-[10px] opacity-80 mt-0.5 truncate max-w-[100px]">
+                    {ep.title}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 上半部分：剧本 + 角色 */}
       <div className="grid lg:grid-cols-2 gap-3">
         {/* 左边：剧本导入 */}
@@ -65,8 +117,9 @@ export const ScriptInputPage: React.FC<ScriptInputPageProps> = ({
           <textarea
             className="w-full flex-1 p-2 rounded-md bg-gray-900 border border-gray-700 focus:ring-1 focus:ring-blue-500 outline-none text-gray-200 text-xs font-mono resize-none mb-2"
             placeholder="粘贴您的剧本..."
-            value={script}
+            value={episodes.length > 0 ? currentScript : script}
             onChange={(e) => setScript(e.target.value)}
+            disabled={episodes.length > 0}  // 有剧集拆分时禁用编辑
           />
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">

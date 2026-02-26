@@ -380,6 +380,18 @@ export interface SceneWeight {
   reason: string;                     // 权重原因
 }
 
+/**
+ * 剧集拆分结果
+ */
+export interface EpisodeSplit {
+  episodeNumber: number;    // 剧集编号（从1开始）
+  title?: string;           // 剧集标题（可选）
+  script: string;          // 该剧集的剧本内容
+  marker: string;          // 检测到的标记文本（如"第一集"、"EP1"）
+  startIndex: number;       // 在原剧本中的起始位置
+  endIndex: number;         // 在原剧本中的结束位置
+}
+
 export enum AppStep {
   // 🆕 项目管理
   PROJECT_LIST = -2,       // 项目列表
