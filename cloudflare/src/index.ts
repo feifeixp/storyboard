@@ -43,13 +43,24 @@ const app = new Hono<AppEnv>();
 
 // CORS 中间件 - 允许所有来源（生产环境建议限制为特定域名）
 app.use('/*', cors({
-  origin: '*',  // 允许所有来源
-  // 🆕 PATCH：用于项目局部更新（避免全量保存）
-  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'accessToken'],
-  exposeHeaders: ['Content-Length'],
-  maxAge: 600,
-  credentials: false,  // 允许所有来源时必须设置为 false
+	origin: '*',  // 允许所有来源
+	// 🆕 PATCH：用于项目局部更新（避免全量保存）
+	allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+	// 扩展允许的请求头以支持 OpenAI JS SDK（Stainless）自动添加的 x-stainless-* headers
+	allowHeaders: [
+		'Content-Type',
+		'Authorization',
+		'accessToken',
+		'x-stainless-os',
+		'x-stainless-arch',
+		'x-stainless-runtime',
+		'x-stainless-runtime-version',
+		'x-stainless-package-name',
+		'x-stainless-package-version',
+	],
+	exposeHeaders: ['Content-Length'],
+	maxAge: 600,
+	credentials: false,  // 允许所有来源时必须设置为 false
 }));
 
 // 健康检查

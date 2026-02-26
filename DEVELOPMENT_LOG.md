@@ -2,6 +2,25 @@
 
 本文件记录项目的重大功能开发、架构调整、问题修复等关键变更，用于项目回顾、避免重复工作和保持开发一致性。
 
+## [2026-02-26 23:00] 🐛 修复 Cloudflare Worker AI 代理 CORS 预检请求头限制 (fix)
+
+**修改内容**：将 cloudflare/src/index.ts 中 Hono 全局 CORS 中间件的 allowHeaders 从仅允许 Content-Type、Authorization、accessToken 扩展为同时允许 OpenAI JS SDK（Stainless）自动附加的 x-stainless-os、x-stainless-arch、x-stainless-runtime、x-stainless-runtime-version、x-stainless-package-name、x-stainless-package-version 等请求头，确保 AI 请求在 OPTIONS 预检阶段不会被浏览器拦截。
+
+**影响范围**：
+- 文件/模块：
+  - cloudflare/src/index.ts（CORS allowHeaders 扩展）
+
+**修改原因**：前端改用 OpenAI 官方 JS SDK 并通过 Cloudflare Worker 代理自建 ALB 接口后，SDK 在请求中自动添加了一组 x-stainless-* 头；而 Worker 的 CORS 配置仍然只允许 Content-Type、Authorization、accessToken，导致浏览器在预检 OPTIONS 时收到不包含这些头的 Access-Control-Allow-Headers，从而报错 “Request header field x-stainless-os is not allowed by Access-Control-Allow-Headers in preflight response”，所有线上 AI 请求在发出前就被拦截。
+
+**预期效果**：浏览器对 https://storyboard-api.feifeixp.workers.dev/api/ai-proxy/* 发起的 OPTIONS 预检能够顺利通过，后续对 /chat/completions 的 POST 请求可以正常到达 Worker 并由其转发至 http://alb-r3li6yh4ktpwq7ugkg.ap-southeast-1.alb.aliyuncsslbintl.com:7000/v1，实现线上环境稳定使用自建 ALB + Worker 代理链路，无 Mixed Content 与 CORS 报错。
+
+**相关文档**：
+- .augment/rules/global-rules.md（R001、R002、R007）
+- CLOUDFLARE_DEPLOYMENT_GUIDE.md（Worker 代理与 CORS 说明）
+- docs/AI_Chat_Completion_API_Documentation.md（自建 Chat Completion API）
+
+---
+
 ## [2026-02-26 18:00] 🏗️ 接口迁移：从 OpenRouter 切换到自建 Gemini API + 移除模型选择 UI
 
 **修改内容**：将所有 AI 调用从 OpenRouter 迁移到自建 Gemini 2.5 Flash 专属接口。① 更新 `.env` 新增 `VITE_GEMINI_API_KEY`，注释旧的 OpenRouter Key；② 重写 `services/openrouter.ts` 客户端配置层，替换 baseURL 为自建接口地址，移除 OpenRouter 专有 defaultHeaders，`DEFAULT_MODEL` 从 `google/gemini-2.5-flash` 改为 `gemini-2.5-flash`；③ 移除 `ScriptInputPage`、`ShotGenerationPage` 中的 `ModelSelector` 组件，改为固定文字"Gemini 2.5 Flash"；④ 删除 `App.tsx` 中 `analysisModel`、`reviewModel`、`editModel` 三个 state，移除所有业务函数调用中的显式 model 参数，以及三个页面组件的相关 props 传递；⑤ 更新 `PromptExtractionPage.tsx` 接口类型，移除 `analysisModel` prop。
