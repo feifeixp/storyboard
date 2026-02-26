@@ -280,6 +280,16 @@ const getApiKey = () => {
   return process.env.VITE_OPENROUTER1_API_KEY;
 };
 
+// 获取 Cloudflare Worker AI 代理地址（复用 VITE_API_URL，与 d1Storage 保持一致）
+const getAIProxyBaseURL = () => {
+  const apiBase =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
+    process.env.VITE_API_URL ||
+    'https://storyboard-api.feifeixp.workers.dev';
+  // 移除末尾斜杠，拼接代理路径
+  return `${apiBase.replace(/\/$/, '')}/api/ai-proxy`;
+};
+
 // 延迟创建客户端，确保环境变量已加载
 let geminiClient: OpenAI | null = null;
 
@@ -296,7 +306,8 @@ const getGeminiClient = () => {
     }
 
     // 通过 Cloudflare Worker 代理访问 ALB（Worker 在服务端用 HTTP 转发，不受 Mixed Content 限制）
-    const baseURL = 'https://storyboard-api.feifeixp.workers.dev/api/ai-proxy';
+    // baseURL 由 VITE_API_URL 环境变量决定，生产/开发自动切换
+    const baseURL = getAIProxyBaseURL();
 
     geminiClient = new OpenAI({
       baseURL,
