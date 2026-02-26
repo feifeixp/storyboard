@@ -295,8 +295,8 @@ const getGeminiClient = () => {
       );
     }
 
-    // 自建 LLM 代理接口（必须使用 HTTPS，避免浏览器 Mixed Content 拦截）
-    const baseURL = 'https://alb-r3li6yh4ktpwq7ugkg.ap-southeast-1.alb.aliyuncsslbintl.com:7000/v1';
+    // 通过 Cloudflare Worker 代理访问 ALB（Worker 在服务端用 HTTP 转发，不受 Mixed Content 限制）
+    const baseURL = 'https://storyboard-api.feifeixp.workers.dev/api/ai-proxy';
 
     geminiClient = new OpenAI({
       baseURL,
