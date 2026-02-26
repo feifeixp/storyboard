@@ -314,6 +314,24 @@ const getClient = (_model?: string) => {
 };
 
 /**
+ * 统一 API 错误日志工具 - 提取 OpenAI SDK APIError 的详细信息
+ * 当服务器返回 500/4xx 时，会打印完整的响应体，方便排查问题
+ */
+function logApiError(context: string, error: unknown): void {
+  if (error instanceof OpenAI.APIError) {
+    console.error(`[API Error] ${context}`);
+    console.error(`  状态码: ${error.status}`);
+    console.error(`  错误消息: ${error.message}`);
+    console.error(`  响应体:`, error.error);
+    console.error(`  请求ID:`, error.headers?.['x-request-id'] || '无');
+  } else if (error instanceof Error) {
+    console.error(`[Error] ${context}: ${error.message}`);
+  } else {
+    console.error(`[Unknown Error] ${context}:`, error);
+  }
+}
+
+/**
  * 可用的模型配置
  *
  * ╔════════════════════════════════════════════════════════════════════════════════╗
@@ -477,7 +495,7 @@ export async function* generateStoryboard(
 
     return fullText;
   } catch (error) {
-    console.error('生成分镜脚本失败:', error);
+    logApiError('generateStoryboard', error);
     throw error;
   }
 }
@@ -529,10 +547,7 @@ export async function* generateStage1Analysis(
 
     return fullText;
   } catch (error) {
-    console.error('[ERROR] 阶段1生成失败:', error);
-    if (error instanceof Error) {
-      console.error('[ERROR] 错误信息:', error.message);
-    }
+    logApiError('generateStage1Analysis', error);
     throw error;
   }
 }
@@ -682,7 +697,7 @@ export async function* generateStage2Analysis(
 
     return fullText;
   } catch (error) {
-    console.error('[ERROR] 阶段2生成失败:', error);
+    logApiError('generateStage2Analysis', error);
     throw error;
   }
 }
@@ -757,7 +772,7 @@ export async function* generateStage3Analysis(
 
     return fullText;
   } catch (error) {
-    console.error('[ERROR] 阶段3生成失败:', error);
+    logApiError('generateStage3Analysis', error);
     throw error;
   }
 }
@@ -837,7 +852,7 @@ export async function* generateStage4Analysis(
 
     return fullText;
   } catch (error) {
-    console.error('[ERROR] 阶段4生成失败:', error);
+    logApiError('generateStage4Analysis', error);
     throw error;
   }
 }
@@ -1411,7 +1426,7 @@ export async function* generateStage5Review(
 
     return fullText;
   } catch (error) {
-    console.error('[ERROR] 阶段5生成失败:', error);
+    logApiError('generateStage5Review', error);
     throw error;
   }
 }
@@ -1532,7 +1547,7 @@ export async function extractCharactersFromScript(
 
     return [];
   } catch (error) {
-    console.error('提取角色失败:', error);
+    logApiError('extractCharactersFromScript', error);
     return [];
   }
 }
@@ -1562,7 +1577,7 @@ export async function* cleanScriptStream(
       yield fullText;
     }
   } catch (error) {
-    console.error('剧本清洗失败:', error);
+    logApiError('cleanScriptStream', error);
     throw error;
   }
 }
