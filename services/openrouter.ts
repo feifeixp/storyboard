@@ -2670,4 +2670,75 @@ QUALITY REQUIREMENTS
 - Keep the same character recognizable and consistent across panels.`;
 }
 
+/**
+ * ================================================================================
+ * 🆕 AI剧本集数拆分
+ * ================================================================================
+ * 当文件名无集数信息时，用AI检测并拆分多集内容。
+ * 返回各集的集号、标题（可选）、剧本内容。
+ */
 
+export interface EpisodeSplitResult {
+  episodes: Array<{
+    episodeNumber: number;
+    title?: string;
+    script: string;
+  }>;
+}
+
+/**
+ * 用AI将单个剧本文件拆分为多集
+ *
+ * @param scriptContent 剧本全文
+ * @param model 使用的模型ID
+ * @returns 拆分结果，episodes 数组；若未检测到多集则返回空数组或单集
+ */
+export async function splitEpisodesWithAI(
+  scriptContent: string,
+  model: string = DEFAULT_MODEL
+): Promise<EpisodeSplitResult> {
+  const prompt = `你是专业剧本编辑。请分析以下剧本内容，判断它是否包含多集内容（如"第一集"、"第二集"、"EP1"、"Episode 1"等分集标记）。
+
+如果包含多集，请将各集内容分开，以JSON格式输出：
+{
+  "episodes": [
+    { "episodeNumber": 1, "title": "集标题（如有）", "script": "本集完整剧本内容" },
+    { "episodeNumber": 2, "title": "集标题（如有）", "script": "本集完整剧本内容" }
+  ]
+}
+
+如果只有一集或无法识别分集，输出：
+{
+  "episodes": []
+}
+
+注意：
+- 每集的 script 字段必须包含该集的完整剧本文字，不要省略。
+- title 字段可选，没有标题时省略该字段。
+- 只输出JSON，不要任何解释文字。
+
+剧本内容：
+${scriptContent.slice(0, 20000)}`;
+
+  const client = getClient(model);
+  const response = await client.chat.completions.create({
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    stream: false,
+    max_tokens: 16000,
+  });
+
+  const text = response.choices[0]?.message?.content || '';
+
+  try {
+    // 提取JSON（模型可能在JSON前后附加解释）
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { episodes: [] };
+    const parsed = JSON.parse(jsonMatch[0]) as EpisodeSplitResult;
+    if (!Array.isArray(parsed.episodes)) return { episodes: [] };
+    return parsed;
+  } catch {
+    console.error('[splitEpisodesWithAI] JSON解析失败:', text.slice(0, 200));
+    return { episodes: [] };
+  }
+}

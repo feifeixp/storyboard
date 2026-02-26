@@ -17,7 +17,7 @@ import {
 } from '../types/project';
 import { CharacterRef } from '../types';
 import { ModelSelector } from './ModelSelector';
-import { MODELS } from '../services/openrouter';
+import { MODELS, splitEpisodesWithAI } from '../services/openrouter';
 import mammoth from 'mammoth';
 
 interface ProjectWizardProps {
@@ -102,23 +102,64 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
 
     const newScripts: ScriptFile[] = [];
     const fileArray = Array.from(files) as File[];
+
+    console.log(`[ProjectWizard] 开始处理 ${fileArray.length} 个文件`);
+
     for (const file of fileArray) {
       try {
+        console.log(`[ProjectWizard] 正在读取文件: ${file.name}`);
         const content = await readFileContent(file);
+        console.log(`[ProjectWizard] 文件读取成功，内容长度: ${content.length} 字符`);
+
+        const epNumber = parseEpisodeNumber(file.name);
+        console.log(`[ProjectWizard] 文件集数解析: ${file.name} -> ${epNumber || 'undefined'}`);
+
+        // 如果文件名没有集数信息，尝试用AI拆分
+        if (!epNumber) {
+          console.log(`[ProjectWizard] 文件名无集数信息: ${file.name}，尝试AI拆分...`);
+          try {
+            const result = await splitEpisodesWithAI(content, selectedModel);
+            console.log(`[ProjectWizard] AI拆分完成，结果集数: ${result.episodes.length}`);
+            if (result.episodes.length > 1) {
+              console.log(`[ProjectWizard] AI拆分成功，识别到 ${result.episodes.length} 集`);
+              // 拆分为多个脚本
+              result.episodes.forEach(ep => {
+                newScripts.push({
+                  fileName: `${file.name} - 第${ep.episodeNumber}集${ep.title ? ` ${ep.title}` : ''}`,
+                  content: ep.script,
+                  episodeNumber: ep.episodeNumber,
+                });
+              });
+              alert(`文件 "${file.name}" 已自动拆分为 ${result.episodes.length} 集`);
+              console.log(`[ProjectWizard] 已拆分为 ${result.episodes.length} 个脚本，跳过普通添加`);
+              continue; // 跳过普通添加
+            } else {
+              console.log(`[ProjectWizard] AI未检测到多集，将作为单集处理`);
+            }
+          } catch (aiError) {
+            console.error('[ProjectWizard] AI拆分失败，将作为单集处理:', aiError);
+          }
+        }
+
+        // 添加为单集
+        console.log(`[ProjectWizard] 添加单集文件: ${file.name}`);
         newScripts.push({
           fileName: file.name,
           content,
-          episodeNumber: parseEpisodeNumber(file.name),
+          episodeNumber: epNumber,
         });
       } catch (error) {
-        console.error(`读取文件失败: ${file.name}`, error);
+        console.error(`[ProjectWizard] 读取文件失败: ${file.name}`, error);
         alert(`读取文件失败: ${file.name}\n请确保文件格式正确`);
       }
     }
 
+    console.log(`[ProjectWizard] 处理完成，新增 ${newScripts.length} 个脚本`);
+
     // 合并现有脚本和新脚本，然后对整个列表按集数排序
     setScripts(prev => {
       const combined = [...prev, ...newScripts];
+      console.log(`[ProjectWizard] 合并后共 ${combined.length} 个脚本`);
       // 去重（如果文件名相同则覆盖）
       const fileMap = new Map<string, ScriptFile>();
       for (const script of combined) {
@@ -126,7 +167,9 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
       }
       const deduped = Array.from(fileMap.values());
       // 按集数排序
-      return deduped.sort((a, b) => (a.episodeNumber || 999) - (b.episodeNumber || 999));
+      const sorted = deduped.sort((a, b) => (a.episodeNumber || 999) - (b.episodeNumber || 999));
+      console.log(`[ProjectWizard] 最终脚本列表:`, sorted.map(s => ({ name: s.fileName.slice(0, 30), ep: s.episodeNumber })));
+      return sorted;
     });
   };
 

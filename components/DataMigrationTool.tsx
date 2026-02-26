@@ -3,7 +3,7 @@
  * 用于将 localStorage 数据迁移到 Cloudflare D1
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { migrateFromLocalStorage, exportProjectToFile, importProjectFromFile } from '../services/d1Storage';
 
 export function DataMigrationTool() {

@@ -101,18 +101,12 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
 	      if (!Array.isArray(extracted) || extracted.length === 0) {
 	        throw new Error('提示词提取结果解析失败，请稍后重试或尝试更换模型');
 	      }
-      const { removeChinese } = await import('../../services/openrouter');
-
       const updatedShots = shots.map(shot => {
         const match = extracted.find((e: any) => e.shotNumber === shot.shotNumber);
         if (match) {
           return {
             ...shot,
             imagePromptCn: match.imagePromptCn || '',
-            imagePromptEn: removeChinese(match.imagePromptEn || ''),
-            endImagePromptCn: match.endImagePromptCn || '',
-            endImagePromptEn: removeChinese(match.endImagePromptEn || ''),
-            videoGenPrompt: match.videoGenPrompt || ''
           };
         }
         return shot;
@@ -171,7 +165,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
             </button>
             <button
               onClick={() => setCurrentStep(6)} // AppStep.GENERATE_IMAGES
-              disabled={!shots.some(s => s.imagePromptEn)}
+              disabled={!shots.some(s => s.imagePromptCn)}
               className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium text-sm hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
               下一步: 绘制草图 →
@@ -200,7 +194,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
 
           <button
             onClick={validatePrompts}
-            disabled={isValidatingPrompts || !shots.some(s => s.imagePromptCn || s.imagePromptEn)}
+            disabled={isValidatingPrompts || !shots.some(s => s.imagePromptCn)}
             className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium text-sm hover:bg-amber-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isValidatingPrompts ? (
@@ -234,7 +228,6 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
                 <th className="px-3 py-2 border border-[var(--color-border)] w-16">#</th>
                 <th className="px-3 py-2 border border-[var(--color-border)] w-20">类型</th>
                 <th className="px-3 py-2 border border-[var(--color-border)]">中文提示词</th>
-                <th className="px-3 py-2 border border-[var(--color-border)]">英文提示词</th>
               </tr>
             </thead>
             <tbody>
@@ -254,9 +247,6 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
                   </td>
                   <td className="px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-secondary)]">
                     {shot.imagePromptCn || '—'}
-                  </td>
-                  <td className="px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-tertiary)]">
-                    {shot.imagePromptEn || '—'}
                   </td>
                 </tr>
               ))}

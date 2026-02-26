@@ -1351,6 +1351,47 @@ const App: React.FC = () => {
             jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
           }
 
+          // 3. 尝试修复被截断的JSON（常见问题）
+          // 统计括号平衡
+          const openBraces = (jsonStr.match(/{/g) || []).length;
+          const closeBraces = (jsonStr.match(/}/g) || []).length;
+          const openBrackets = (jsonStr.match(/\[/g) || []).length;
+          const closeBrackets = (jsonStr.match(/\]/g) || []).length;
+
+          // 如果括号不平衡，尝试补全
+          if (openBraces > closeBraces || openBrackets > closeBrackets) {
+            console.log('[剧本清洗] JSON可能被截断，尝试修复...');
+            console.log(`[剧本清洗] 括号平衡: {${openBraces} vs ${closeBraces}} [${openBrackets} vs ${closeBrackets}]`);
+
+            // 补全缺少的右括号
+            const missingBraces = openBraces - closeBraces;
+            const missingBrackets = openBrackets - closeBrackets;
+
+            for (let i = 0; i < missingBraces; i++) {
+              jsonStr += '}';
+            }
+            for (let i = 0; i < missingBrackets; i++) {
+              jsonStr += ']';
+            }
+          }
+
+          // 4. 尝试在截断的字段后补全空数组
+          // 查找可能的截断点，如 "uiElements": 或 "moodTags":
+          const truncatedPatterns = [
+            /"uiElements":\s*$/,
+            /"moodTags":\s*$/,
+            /"dialogues":\s*$/,
+            /"audioEffects":\s*$/,
+            /"musicCues":\s*$/,
+          ];
+
+          for (const pattern of truncatedPatterns) {
+            if (pattern.test(jsonStr)) {
+              console.log('[剧本清洗] 检测到截断的字段，补全空数组');
+              jsonStr = jsonStr.replace(pattern, '$&[]');
+            }
+          }
+
           const parsed = JSON.parse(jsonStr);
           // 规范化所有 string[] 字段，防止不同模型返回对象/数组嵌套导致渲染崩溃
           setCleaningResult(normalizeCleaningResult({

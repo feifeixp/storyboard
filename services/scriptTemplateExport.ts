@@ -309,7 +309,10 @@ ${episodeSummary.storySummary}`;
 
   // 降级：从所有镜头的storyBeat中提取关键剧情点
   const storyBeats = shots
-    .map(shot => shot.storyBeat)
+    .map(shot => {
+      const beat = shot.storyBeat;
+      return typeof beat === 'string' ? beat : (beat?.event || '');
+    })
     .filter(beat => beat && beat.trim().length > 0);
 
   if (storyBeats.length === 0) {

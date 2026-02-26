@@ -150,10 +150,11 @@ ${JSON.stringify(shots.map(s => ({
 返回JSON数组，每个对象包含：
 {
   "shotNumber": "01",
-  "imagePromptCn": "中文生图提示词（首帧/静态）",
-  "endImagePromptCn": "中文生图提示词（尾帧，运动镜头需要）",
-  "videoGenPrompt": "视频生成提示词（🚨必须使用中文！格式见下方七要素规范）"
+  "imagePromptCn": "中文生图提示词"
 }
+
+🚨 重要：只输出imagePromptCn字段，不要输出endImagePromptCn和videoGenPrompt！
+🚨 只返回纯JSON数组，不要markdown代码块！
 
 ## 🚨 透视与人物变形规则（必须遵守！）
 

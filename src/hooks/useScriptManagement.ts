@@ -11,7 +11,9 @@ import { cleanScriptStream } from '../../services/openrouter';
  * 用于检测剧本中的剧集标记
  */
 const EPISODE_PATTERNS = [
-  // 中文格式
+  // 中文格式 - 章（章节）
+  /(?:^|\n)[\s\t]*(?:☆|•|●)?[、.]?\s*第([一二三四五六七八九十百千万\d]+)章[\s\t]*(：|:|\s|】|$)/gi,
+  // 中文格式 - 集/话/季
   /(?:^|\n)[\s\t]*第([一二三四五六七八九十百千万\d]+)[集话季][\s\t]*(：|:|】)?/gi,
   /(?:^|\n)[\s\t]*第([一二三四五六七八九十百千万\d]+)[集话季]\s*(?:第([一二三四五六七八九十百千万\d]+)[集话季])?/gi,
   /(?:^|\n)[\s\t]*\x301?第([一二三四五六七八九十百千万\d]+)[集话季]\x301?/gi,
@@ -61,6 +63,8 @@ export function detectAndSplitEpisodes(script: string): EpisodeSplit[] {
   const episodes: EpisodeSplit[] = [];
   const lines = script.split('\n');
 
+  console.log(`[detectAndSplitEpisodes] 开始检测，剧本总行数: ${lines.length}`);
+
   // 查找所有剧集标记的位置
   const markers: Array<{
     index: number;
@@ -69,15 +73,24 @@ export function detectAndSplitEpisodes(script: string): EpisodeSplit[] {
     text: string;
   }> = [];
 
-  for (let i = 0; i < lines.length; i++) {
+  // 只检查前100行，避免性能问题
+  const checkLimit = Math.min(lines.length, 100);
+
+  for (let i = 0; i < checkLimit; i++) {
     const line = lines[i];
     const trimmedLine = line.trim();
+
+    // 打印前20行内容（非空行）用于调试
+    if (markers.length === 0 && i < 20 && trimmedLine.length > 0 && trimmedLine.length < 100) {
+      console.log(`[detectAndSplitEpisodes] 第${i + 1}行: "${trimmedLine.slice(0, 50)}${trimmedLine.length > 50 ? '...' : ''}"`);
+    }
 
     for (const pattern of EPISODE_PATTERNS) {
       pattern.lastIndex = 0; // 重置正则表达式
       const match = pattern.exec(trimmedLine);
       if (match) {
         const episodeNumber = parseEpisodeNumber(match[1]);
+        console.log(`[detectAndSplitEpisodes] ✓ 第${i + 1}行匹配: "${trimmedLine}" -> 集数 ${episodeNumber}`);
         if (episodeNumber > 0) {
           markers.push({
             index: i,
@@ -91,8 +104,11 @@ export function detectAndSplitEpisodes(script: string): EpisodeSplit[] {
     }
   }
 
+  console.log(`[detectAndSplitEpisodes] 检测完成，找到 ${markers.length} 个章节标记`);
+
   // 如果没有找到任何标记，返回空数组
   if (markers.length === 0) {
+    console.log('[detectAndSplitEpisodes] 未找到章节标记，返回空数组');
     return [];
   }
 
@@ -111,11 +127,18 @@ export function detectAndSplitEpisodes(script: string): EpisodeSplit[] {
     // 尝试从标记行提取标题
     const markerLine = episodeLines[0].trim();
     let title: string | undefined;
-    const titleMatch = markerLine.match(/(?:【|第[集话季]\s*)[^\d]*(.+?)(?:】|$)/);
+    // 支持：第N章 标题、第N集 标题、【标题】等多种格式
+    const titleMatch = markerLine.match(/(?:【|第[集话季章]\s*)([^\d:：】\s][^】]*?)(?:】|$)/);
     if (titleMatch && titleMatch[1]) {
       title = titleMatch[1].trim();
-      // 移除冒号等符号
-      title = title.replace(/^[：:\s]+/, '');
+      // 移除冒号、星号等符号
+      title = title.replace(/^[：:\s★☆•●]+/, '');
+    } else {
+      // 备用：提取第N章/集后的所有内容作为标题
+      const backupMatch = markerLine.match(/第[一二三四五六七八九十百千万\d]+[集话季章][\s:：]*(.+)/);
+      if (backupMatch && backupMatch[1]) {
+        title = backupMatch[1].trim();
+      }
     }
 
     // 组合剧本
