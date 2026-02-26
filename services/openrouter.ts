@@ -379,7 +379,7 @@ export function getArtStyleConstraints(artStyle: ArtStyleType): string {
   }
 }
 
-// 支持两种环境：Vite (浏览器) 和 Node.js (测试)
+// 获取 AI API Key（固定使用 gemini-2.5-flash）
 const getApiKey = () => {
   // Vite 环境
   if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -389,72 +389,34 @@ const getApiKey = () => {
   return process.env.VITE_OPENROUTER1_API_KEY;
 };
 
-// 获取 DeepSeek API Key
-const getDeepSeekApiKey = () => {
-  // Vite 环境
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return import.meta.env.VITE_DEEPSEEK_API_KEY;
-  }
-  // Node.js 环境
-  return process.env.VITE_DEEPSEEK_API_KEY;
-};
-
 // 延迟创建客户端，确保环境变量已加载
-let openRouterClient: OpenAI | null = null;
-let deepSeekClient: OpenAI | null = null;
+let geminiClient: OpenAI | null = null;
 
-// 获取 OpenRouter 客户端
-const getOpenRouterClient = () => {
-  if (!openRouterClient) {
+// 获取自建 Gemini 客户端
+const getGeminiClient = () => {
+  if (!geminiClient) {
     const apiKey = getApiKey();
     if (!apiKey) {
       throw new Error(
         '未找到 VITE_OPENROUTER1_API_KEY 环境变量。\n' +
-        '请确保 .env.local 文件存在，并包含：\n' +
-        'VITE_OPENROUTER1_API_KEY=sk-or-v1-...'
+        '请确保 .env 文件存在，并包含：\n' +
+        'VITE_OPENROUTER1_API_KEY=sk-...'
       );
     }
 
-    openRouterClient = new OpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey,
-      defaultHeaders: {
-        'HTTP-Referer': 'https://visionary-storyboard-studio.app',
-        'X-Title': 'Visionary Storyboard Studio',
-      },
-      dangerouslyAllowBrowser: true,
-    });
-  }
-  return openRouterClient;
-};
-
-// 获取 DeepSeek 客户端
-const getDeepSeekClient = () => {
-  if (!deepSeekClient) {
-    const apiKey = getDeepSeekApiKey();
-    if (!apiKey) {
-      throw new Error(
-        '未找到 VITE_DEEPSEEK_API_KEY 环境变量。\n' +
-        '请确保 .env.local 文件存在，并包含：\n' +
-        'VITE_DEEPSEEK_API_KEY=sk-...'
-      );
-    }
-
-    deepSeekClient = new OpenAI({
-      baseURL: 'https://api.deepseek.com',
+    geminiClient = new OpenAI({
+      baseURL: 'http://alb-r3li6yh4ktpwq7ugkg.ap-southeast-1.alb.aliyuncsslbintl.com:7000/v1',
       apiKey,
       dangerouslyAllowBrowser: true,
     });
   }
-  return deepSeekClient;
+  return geminiClient;
 };
 
-// 根据模型选择合适的客户端
-const getClient = (model?: string) => {
-  if (model && model.startsWith('deepseek-')) {
-    return getDeepSeekClient();
-  }
-  return getOpenRouterClient();
+// 统一返回 Gemini 客户端（固定模型，不再区分 DeepSeek/OpenRouter）
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const getClient = (_model?: string) => {
+  return getGeminiClient();
 };
 
 /**
@@ -578,8 +540,9 @@ export const MODEL_NAMES: Record<string, string> = {
  * 默认模型配置
  * Gemini 2.5 Flash 是高性价比模型，速度快且价格低
  */
-export const DEFAULT_MODEL = MODELS.GEMINI_2_5_FLASH;
-export const DEFAULT_THINKING_MODEL = MODELS.GEMINI_2_5_FLASH;
+// 固定使用自建 API 的 gemini-2.5-flash
+export const DEFAULT_MODEL = 'google/gemini-2.5-flash';
+export const DEFAULT_THINKING_MODEL = 'google/gemini-2.5-flash';
 // 注意：DEFAULT_IMAGE_MODEL 是 OpenRouter 的 modelId（用于多模态/图像理解等），不是 Neodomain 生图的 modelName。
 export const DEFAULT_IMAGE_MODEL = 'google/gemini-3-pro-image-preview';
 

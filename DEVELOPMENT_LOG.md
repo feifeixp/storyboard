@@ -2,6 +2,19 @@
 
 本文件记录项目的重大功能开发、架构调整、问题修复等关键变更，用于项目回顾、避免重复工作和保持开发一致性。
 
+## [2026-02-26 18:00] 🏗️ 接口迁移：从 OpenRouter 切换到自建 Gemini API + 移除模型选择 UI
+
+**修改内容**：将所有 AI 调用从 OpenRouter 迁移到自建 Gemini 2.5 Flash 专属接口。① 更新 `.env` 新增 `VITE_GEMINI_API_KEY`，注释旧的 OpenRouter Key；② 重写 `services/openrouter.ts` 客户端配置层，替换 baseURL 为自建接口地址，移除 OpenRouter 专有 defaultHeaders，`DEFAULT_MODEL` 从 `google/gemini-2.5-flash` 改为 `gemini-2.5-flash`；③ 移除 `ScriptInputPage`、`ShotGenerationPage` 中的 `ModelSelector` 组件，改为固定文字"Gemini 2.5 Flash"；④ 删除 `App.tsx` 中 `analysisModel`、`reviewModel`、`editModel` 三个 state，移除所有业务函数调用中的显式 model 参数，以及三个页面组件的相关 props 传递；⑤ 更新 `PromptExtractionPage.tsx` 接口类型，移除 `analysisModel` prop。
+
+**影响范围**：
+- 文件/模块：`.env`、`services/openrouter.ts`、`App.tsx`、`src/pages/ScriptInputPage.tsx`、`src/pages/ShotGenerationPage.tsx`、`src/pages/PromptExtractionPage.tsx`
+
+**修改原因**：OpenRouter 服务不稳定，频繁出现 ERR_HTTP2_PROTOCOL_ERROR，严重影响生产可用性；切换到自建 API 提升稳定性，同时固定模型简化 UI 降低用户操作复杂度。
+
+**预期效果**：所有 AI 功能通过自建接口调用 gemini-2.5-flash，不再依赖 OpenRouter；UI 更简洁，用户无需选择模型；构建通过，无 TypeScript 错误。
+
+---
+
 ## [2026-02-26 17:00] 🐛 修复提示词提取 ERR_HTTP2_PROTOCOL_ERROR + 进度显示 500% 问题
 
 **修改内容**：① 在 `extractImagePromptsStream` 的 OpenRouter API 调用中添加 `max_tokens: 32000`，解决因未限制输出长度导致的 HTTP/2 流在传输过程中被服务端中断的问题；② 修正 `PromptExtractionPage.tsx` 进度计算公式，将 `fullText.length / 50` 改为 `Math.min(Math.round(fullText.length / 250), 99)`，使进度条在 32 个镜头全量输出时显示合理的 60-99% 区间，而不是错误的 300-500%。

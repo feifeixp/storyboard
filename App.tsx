@@ -367,10 +367,6 @@ const App: React.FC = () => {
   const [uploadUrl, setUploadUrl] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  // 🆕 模型选择状态 - 默认使用 Gemini 3 Flash Preview (最便宜的高质量模型)
-  const [analysisModel, setAnalysisModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 剧本分析模型
-  const [reviewModel, setReviewModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 审核优化模型
-  const [editModel, setEditModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 编辑对话模型
 	// ✅ 生图模型：强制锁定 nanobanana-pro（服务层在会员限制时自动降级）
 	// 说明：UI 不再允许切换；服务层也会忽略传入模型并锁定到 nanobanana-pro。
 	const imageModel = 'nanobanana-pro';
@@ -1018,7 +1014,7 @@ const App: React.FC = () => {
       };
 
       // 调用分批分析服务
-      const result = await analyzeProjectScriptsWithProgress(scriptFiles, analysisModel, handleProgress);
+      const result = await analyzeProjectScriptsWithProgress(scriptFiles, undefined, handleProgress);
       console.log('[重新分析] 分析结果:', result);
       setReanalyzeResult(result);
 
@@ -1101,7 +1097,7 @@ const App: React.FC = () => {
       }
 
       // 回退：调用AI提取新角色
-      const chars = await extractCharactersFromScript(script, analysisModel);
+      const chars = await extractCharactersFromScript(script);
       if (chars.length > 0) {
         const newRefs: CharacterRef[] = chars.map((c, i) => ({
           id: `auto-${Date.now()}-${i}`,
@@ -1274,14 +1270,8 @@ const App: React.FC = () => {
     setCurrentStep(AppStep.SCRIPT_CLEANING);
     setIsCleaning(true);
 
-    // 🆕 每次开始清洗时，将当前分析模型作为本轮生成模块（生成/自检/精修）的默认模型
-    // 说明：reviewModel/editModel 依然可以在对应 Tab 中单独修改；
-    //       这里仅在开启新一轮清洗时重置它们的默认值，避免用户重复手动选择。
-    setReviewModel(analysisModel);
-    setEditModel(analysisModel);
-
     try {
-      const stream = cleanScriptStream(script, analysisModel);
+      const stream = cleanScriptStream(script);
       let lastText = '';
       for await (const text of stream) {
         lastText = text;
@@ -1359,7 +1349,7 @@ const App: React.FC = () => {
         ? `## 剧本设定约束（必须遵守）\n${constraintsText}`
         : '';
 
-      const stream = generateShotListStream(script, defaultPrompt, analysisModel, characterRefs);
+      const stream = generateShotListStream(script, defaultPrompt, undefined, characterRefs);
       for await (const text of stream) {
         setStreamText(text);
       }
@@ -1400,7 +1390,7 @@ const App: React.FC = () => {
       while (retryCount < maxRetries) {
         try {
           stage1Text = '';
-          const stage1Gen = generateStage1Analysis(script, analysisModel);
+          const stage1Gen = generateStage1Analysis(script);
           for await (const chunk of stage1Gen) {
             stage1Text += chunk;
             setCotRawOutput(stage1Text);
@@ -1445,7 +1435,7 @@ const App: React.FC = () => {
       while (retryCount < maxRetries) {
         try {
           stage2Text = '';
-          const stage2Gen = generateStage2Analysis(stage1Result, analysisModel);
+          const stage2Gen = generateStage2Analysis(stage1Result);
           for await (const chunk of stage2Gen) {
             stage2Text += chunk;
             setCotRawOutput(stage2Text);
@@ -1480,7 +1470,7 @@ const App: React.FC = () => {
       while (retryCount < maxRetries) {
         try {
           stage3Text = '';
-          const stage3Gen = generateStage3Analysis(script, stage1Result, stage2Result, analysisModel);
+          const stage3Gen = generateStage3Analysis(script, stage1Result, stage2Result);
           for await (const chunk of stage3Gen) {
             stage3Text += chunk;
             setCotRawOutput(stage3Text);
@@ -1774,7 +1764,7 @@ const App: React.FC = () => {
 	        while (retryCount < maxRetries) {
 	          try {
 	            stage4Text = '';
-	            const stage4Gen = generateStage4Analysis(script, stage1Result, stage2Result, stage3Result, batch, analysisModel);
+	            const stage4Gen = generateStage4Analysis(script, stage1Result, stage2Result, stage3Result, batch);
             for await (const chunk of stage4Gen) {
               stage4Text += chunk;
               setCotRawOutput(stage4Text);
@@ -1847,7 +1837,7 @@ const App: React.FC = () => {
       }));
 
       let stage5Text = '';
-      for await (const chunk of generateStage5Review(stage1Result, stage2Result, shotDesignResults, analysisModel)) {
+      for await (const chunk of generateStage5Review(stage1Result, stage2Result, shotDesignResults)) {
         stage5Text += chunk;
         setCotRawOutput(stage5Text);
         setStreamText(`【阶段5】质量自检与优化\n\n${stage5Text}`);
@@ -2059,7 +2049,7 @@ const App: React.FC = () => {
 
       // 🆕 步骤2：调用 LLM 进行语义审核
       setProgressMsg(`规则校验完成（${ruleBasedSuggestions.length}条），专家自检中...`);
-      const llmRes = await reviewStoryboard(shots, '', reviewModel);
+      const llmRes = await reviewStoryboard(shots, '');
 
       // 🆕 合并规则校验和 LLM 审核结果
       const allSuggestions = [
@@ -2294,7 +2284,7 @@ const App: React.FC = () => {
 
     try {
       // 只传入选中的建议进行优化
-      const stream = optimizeShotListStream(currentShots, selectedSuggestionsList, reviewModel);
+      const stream = optimizeShotListStream(currentShots, selectedSuggestionsList);
       for await (const text of stream) {
         setStreamText(text);
       }
@@ -2319,7 +2309,7 @@ const App: React.FC = () => {
 
     try {
         // 使用选中的模型进行对话
-        const stream = chatWithDirectorStream(chatHistory, userMsg, editModel);
+        const stream = chatWithDirectorStream(chatHistory, userMsg);
         for await (const chunk of stream) {
             aiResponse += chunk;
             // Update last message in real-time or just let it build
@@ -2352,7 +2342,7 @@ const App: React.FC = () => {
     try {
       // 使用选中的模型修改分镜
       let fullText = '';
-      const stream = chatEditShotListStream(currentShots, lastUserMsg, editModel);
+      const stream = chatEditShotListStream(currentShots, lastUserMsg);
       for await (const text of stream) {
         fullText = text;
         setStreamText(text);
@@ -3541,7 +3531,7 @@ const App: React.FC = () => {
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">分析模型</label>
                       <div className="bg-gray-800 rounded px-3 py-2 text-sm text-white flex items-center gap-2">
-                        {MODEL_NAMES[analysisModel] || analysisModel}
+                        Gemini 2.5 Flash
                       </div>
                     </div>
                     <div>
@@ -3726,8 +3716,6 @@ const App: React.FC = () => {
                 setScript={setScript}
                 handleScriptUpload={handleScriptUpload}
                 startScriptCleaning={startScriptCleaning}
-                analysisModel={analysisModel}
-                setAnalysisModel={setAnalysisModel}
                 characterRefs={characterRefs}
                 setCharacterRefs={setCharacterRefs}
                 newCharName={newCharName}
@@ -3767,11 +3755,6 @@ const App: React.FC = () => {
             isLoading={isLoading}
             progressMsg={progressMsg}
             generationMode={generationMode}
-            analysisModel={analysisModel}
-            reviewModel={reviewModel}
-            setReviewModel={setReviewModel}
-            editModel={editModel}
-            setEditModel={setEditModel}
             cotCurrentStage={cotCurrentStage}
             cotStage1={cotStage1}
             cotStage2={cotStage2}
@@ -3817,7 +3800,6 @@ const App: React.FC = () => {
             setPromptValidationResults={setPromptValidationResults}
             extractImagePromptsStream={extractImagePromptsStream}
             validatePrompts={validatePrompts}
-            analysisModel={analysisModel}
             setCurrentStep={setCurrentStep}
             currentProject={currentProject}
             currentEpisodeNumber={currentEpisodeNumber}

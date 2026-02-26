@@ -1,6 +1,5 @@
 import React from 'react';
 import { CharacterRef } from '../../types';
-import { ModelSelector } from '../../components/ModelSelector';
 
 interface ScriptInputPageProps {
   // 剧本相关
@@ -8,10 +7,6 @@ interface ScriptInputPageProps {
   setScript: (script: string) => void;
   handleScriptUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   startScriptCleaning: () => void;
-
-  // 模型选择
-  analysisModel: string;
-  setAnalysisModel: (model: string) => void;
 
   // 角色相关
   characterRefs: CharacterRef[];
@@ -39,8 +34,6 @@ export const ScriptInputPage: React.FC<ScriptInputPageProps> = ({
   setScript,
   handleScriptUpload,
   startScriptCleaning,
-  analysisModel,
-  setAnalysisModel,
   characterRefs,
   setCharacterRefs,
   newCharName,
@@ -78,14 +71,7 @@ export const ScriptInputPage: React.FC<ScriptInputPageProps> = ({
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-400 whitespace-nowrap">🤖 分析模型:</span>
-              <div className="flex-1">
-                <ModelSelector
-                  value={analysisModel}
-                  onChange={setAnalysisModel}
-                  type="all"
-                  showLabel={false}
-                />
-              </div>
+              <span className="text-xs text-blue-400 font-medium">Gemini 2.5 Flash</span>
             </div>
             <button
               onClick={startScriptCleaning}

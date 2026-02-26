@@ -48,9 +48,8 @@ interface PromptExtractionPageProps {
   setPromptValidationResults: (results: any[]) => void;
 
   // 操作函数
-  extractImagePromptsStream: (shots: Shot[], model: string) => AsyncGenerator<string>;
+  extractImagePromptsStream: (shots: Shot[], model?: string) => AsyncGenerator<string>;
   validatePrompts: () => void;
-  analysisModel: string;
 
   // 导航
   setCurrentStep: (step: number) => void;
@@ -78,7 +77,6 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
   setPromptValidationResults,
   extractImagePromptsStream,
   validatePrompts,
-  analysisModel,
   setCurrentStep,
   currentProject,
   currentEpisodeNumber,
@@ -90,7 +88,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
     setExtractProgress('正在分析分镜脚本，提取AI生图提示词...');
 
     try {
-      const stream = extractImagePromptsStream(shots, analysisModel);
+      const stream = extractImagePromptsStream(shots);
       let fullText = '';
       for await (const text of stream) {
         fullText = text;
