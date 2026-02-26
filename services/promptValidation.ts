@@ -423,7 +423,7 @@ export function validateShotPrompts(shot: {
   const result: ShotPromptValidation = {
     startFrame: validateStateDescription(shot.startFrame || ''),
     endFrame: isMovingShot && shot.endFrame ? validateStateDescription(shot.endFrame) : null,
-    promptCn: validateImagePrompt(shot.promptCn),
+    promptCn: validateImagePrompt(shot.promptCn || ''),
     endFramePromptCn: isMovingShot && shot.endFramePromptCn ? validateImagePrompt(shot.endFramePromptCn) : null,
     videoPromptCn: shot.videoPromptCn ? validateVideoPrompt(shot.videoPromptCn) : null,
     forbiddenTerms: [],
