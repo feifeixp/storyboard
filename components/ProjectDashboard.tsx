@@ -230,7 +230,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // =============================
   // skipConfirm: 批量生成时跳过确认对话框
   // 🔧 支持 formId 参数：为指定形态生成设定图
-  const handleGenerateCharacterImageSheet = async (characterId: string, skipConfirm = false, formId?: string) => {
+  // 🔧 支持 referenceImageUrl 参数：使用参考图生成（用于子形象生成，保持发型/面部/身材一致）
+  const handleGenerateCharacterImageSheet = async (
+    characterId: string,
+    skipConfirm = false,
+    formId?: string,
+    referenceImageUrl?: string
+  ) => {
     const character = (project.characters || []).find(c => c.id === characterId);
     if (!character) return;
     if (!characterImageModel) { alert('请先选择生图模型'); return; }
@@ -297,7 +303,16 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       const shotNumber = targetForm ? `character_sheet_${characterId}_form_${formId}` : `character_sheet_${characterId}`;
 
       const imageUrls = await generateAndUploadImage(
-        { prompt, negativePrompt: NEGATIVE_PROMPT, modelName: characterImageModel, aspectRatio: '16:9', numImages: '1', outputFormat: 'jpg' },
+        {
+          prompt,
+          negativePrompt: NEGATIVE_PROMPT,
+          modelName: characterImageModel,
+          aspectRatio: '16:9',
+          numImages: '1',
+          outputFormat: 'jpg',
+          // 🔧 如果有参考图，传入参考图以保持发型/面部/身材一致
+          imageUrls: referenceImageUrl ? [referenceImageUrl] : undefined,
+        },
         project.id,
         shotNumber,
         (stage, percent) => setGenProgressMap(prev => { const m = new Map(prev); m.set(genKey, { stage, percent }); return m; }),
@@ -474,25 +489,56 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 🆕 批量生成所有角色设定图
   // =============================
   const handleBatchGenerateCharacters = async () => {
-    // 🔧 收集所有需要生成的任务（角色+形态）
-    const tasks: { characterId: string; formId?: string; label: string }[] = [];
+    // 🔧 收集所有需要生成的任务，按角色分组，支持主形象到子形象的依赖生成
+    type GenerationTask = {
+      characterId: string;
+      formId?: string;
+      label: string;
+      characterName: string;
+      hasForms: boolean;
+    };
+
+    const characterTasks: Record<string, GenerationTask[]> = {};
+
     for (const char of (project.characters || [])) {
+      const tasks: GenerationTask[] = [];
+
       if (char.forms && char.forms.length > 0) {
         // 有形态的角色：为每个未生成设定图的形态创建任务
-        for (const form of char.forms) {
+        // 首先生成第一个形态（主形象），其他的作为子形象依赖主形象
+        const sortedForms = [...char.forms];
+        for (const form of sortedForms) {
           if (!form.imageSheetUrl) {
-            tasks.push({ characterId: char.id, formId: form.id, label: `${char.name} - ${form.name}` });
+            tasks.push({
+              characterId: char.id,
+              formId: form.id,
+              label: `${char.name} - ${form.name}`,
+              characterName: char.name,
+              hasForms: true,
+            });
           }
         }
       } else {
         // 无形态的角色：为角色主体创建任务
         if (!char.imageSheetUrl) {
-          tasks.push({ characterId: char.id, label: char.name });
+          tasks.push({
+            characterId: char.id,
+            label: char.name,
+            characterName: char.name,
+            hasForms: false,
+          });
         }
+      }
+
+      if (tasks.length > 0) {
+        characterTasks[char.id] = tasks;
       }
     }
 
-    if (tasks.length === 0) {
+    // 展平所有任务以便统计
+    const allTasks = Object.values(characterTasks).flat();
+
+    if (allTasks.length === 0) {
       alert('所有角色/形态都已有设定图！');
       return;
     }
@@ -503,52 +549,126 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
 
     const confirmGenerate = confirm(
-      `将并发生成 ${tasks.length} 个角色/形态的设定图（会消耗积分）。\n\n` +
-      `任务列表：\n${tasks.map(t => `• ${t.label}`).join('\n')}\n\n` +
+      `将并发生成 ${allTasks.length} 个角色/形态的设定图（会消耗积分）。\n\n` +
+      `说明：\n` +
+      `• 最多同时生成 5 个\n` +
+      `• 有多个形态的角色：先生成主形象，再用主形象生成子形象（保持一致）\n\n` +
       `是否继续？`
     );
     if (!confirmGenerate) return;
 
     setIsBatchGeneratingCharacters(true);
-    setBatchCharacterProgress({ current: 0, total: tasks.length });
+    setBatchCharacterProgress({ current: 0, total: allTasks.length });
 
-    // 🆕 顺序执行所有生成任务（避免并发冲突），每个任务间隔 2s
-    // （底层 generateImage 已添加并发冲突自动重试，此处改串行进一步减少冲突概率）
     let successCount = 0;
     let failCount = 0;
-    const failedLabels: string[] = [];
 
-    for (let i = 0; i < tasks.length; i++) {
-      const task = tasks[i];
-      setBatchCharacterProgress({ current: i + 1, total: tasks.length });
+    // 🔧 并发控制：最多同时生成 5 个任务
+    const CONCURRENCY_LIMIT = 5;
+    let completedTasks = 0;
+    const pendingTasks = [...allTasks];
+    const runningTasks = new Set<string>();
 
-      // 错开提交：每个任务提交前等待 2s（第一个立即执行）
-      if (i > 0) {
-        console.log(`[ProjectDashboard] 批量角色生成 #${i + 1} 等待 2s 后提交...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
+    // 辅助函数：获取任务唯一标识
+    const getTaskKey = (task: GenerationTask): string => {
+      return task.formId ? `${task.characterId}_${task.formId}` : task.characterId;
+    };
+
+    // 辅助函数：检查任务是否依赖主形象
+    const dependsOnMainForm = (task: GenerationTask): boolean => {
+      if (!task.hasForms || !task.formId) return false;
+      const tasks = characterTasks[task.characterId];
+      if (!tasks || tasks.length < 2) return false;
+      // 第一个任务是主形象，其他是子形象
+      return tasks[0].formId !== task.formId;
+    };
+
+    // 辅助函数：获取主形象的图片URL
+    const getMainFormImageUrl = (task: GenerationTask): string | undefined => {
+      const tasks = characterTasks[task.characterId];
+      if (!tasks || tasks.length < 2) return undefined;
+      const mainFormId = tasks[0].formId;
+      if (!mainFormId) return undefined;
+
+      // 从最新项目状态中获取主形象的图片URL
+      const latestProject = projectRef.current;
+      const character = latestProject.characters?.find(c => c.id === task.characterId);
+      if (!character) return undefined;
+      const mainForm = character.forms?.find(f => f.id === mainFormId);
+      return mainForm?.imageSheetUrl;
+    };
+
+    // 处理单个任务
+    const processTask = async (task: GenerationTask): Promise<void> => {
+      const taskKey = getTaskKey(task);
+      runningTasks.add(taskKey);
 
       try {
-        await handleGenerateCharacterImageSheet(task.characterId, true, task.formId);
+        // 如果是子形象，检查主形象是否已生成
+        let referenceImageUrl: string | undefined;
+        if (dependsOnMainForm(task)) {
+          // 等待主形象完成（最多等待30秒）
+          const maxWaitTime = 30000;
+          const startTime = Date.now();
+          while (Date.now() - startTime < maxWaitTime) {
+            const url = getMainFormImageUrl(task);
+            if (url) {
+              referenceImageUrl = url;
+              console.log(`[ProjectDashboard] 子形象「${task.label}」使用主形象作为参考图`);
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+
+        await handleGenerateCharacterImageSheet(task.characterId, true, task.formId, referenceImageUrl);
         successCount++;
       } catch (error) {
         console.error(`[ProjectDashboard] 生成角色「${task.label}」失败:`, error);
         failCount++;
-        failedLabels.push(task.label);
+      } finally {
+        runningTasks.delete(taskKey);
+        completedTasks++;
+        setBatchCharacterProgress({ current: completedTasks, total: allTasks.length });
       }
+    };
+
+    // 并发处理任务
+    while (pendingTasks.length > 0 || runningTasks.size > 0) {
+      // 启动新任务直到达到并发限制
+      while (pendingTasks.length > 0 && runningTasks.size < CONCURRENCY_LIMIT) {
+        const task = pendingTasks.shift()!;
+        // 如果是子形象且主形象还未开始，暂时跳过
+        if (dependsOnMainForm(task)) {
+          const mainTask = characterTasks[task.characterId]?.[0];
+          if (mainTask && !runningTasks.has(getTaskKey(mainTask))) {
+            // 主形象还没开始，先把子形象放回队列末尾
+            pendingTasks.push(task);
+            break;
+          }
+        }
+        processTask(task).catch(err => {
+          console.error(`[ProjectDashboard] 任务执行异常:`, err);
+        });
+      }
+
+      // 等待至少一个任务完成
+      if (runningTasks.size > 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    // 🔧 并发生成完成后，触发数据刷新以确保显示正确
+    // 延迟一点时间，让数据库写入完成
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      window.dispatchEvent(new CustomEvent('neodomain:batch-generation-complete', { detail: { type: 'character' } }));
+    } catch (err) {
+      console.warn('[ProjectDashboard] 触发数据刷新失败:', err);
     }
 
     setIsBatchGeneratingCharacters(false);
     setBatchCharacterProgress(null);
-
-    // 显示结果
-    let message = `批量生成完成！\n\n`;
-    message += `✅ 成功: ${successCount} 个\n`;
-    if (failCount > 0) {
-      message += `❌ 失败: ${failCount} 个\n\n`;
-      message += `失败的角色：\n${failedLabels.map(name => `• ${name}`).join('\n')}`;
-    }
-    alert(message);
   };
 
   // =============================
@@ -751,15 +871,6 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
     setIsBatchGeneratingScenes(false);
     setBatchSceneProgress(null);
-
-    // 显示结果
-    let message = `批量生成完成！\n\n`;
-    message += `✅ 成功: ${successCount} 个\n`;
-    if (failCount > 0) {
-      message += `❌ 失败: ${failCount} 个\n\n`;
-      message += `失败的场景：\n${failedScenes.map(name => `• ${name}`).join('\n')}`;
-    }
-    alert(message);
   };
 
 	// =============================

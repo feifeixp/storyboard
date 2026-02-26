@@ -234,23 +234,6 @@ const App: React.FC = () => {
     fetchPoints();
   }, [loggedIn]);
 
-  // 🆕 监听图片生成完成事件，自动刷新左上角积分余额
-  useEffect(() => {
-    if (!loggedIn) return;
-
-    const handleImageGenerated = async () => {
-      try {
-        const points = await getUserPoints();
-        setUserPoints(points);
-      } catch (error) {
-        console.error('[App] 刷新积分信息失败:', error);
-      }
-    };
-
-    window.addEventListener('neodomain:image-generated', handleImageGenerated);
-    return () => window.removeEventListener('neodomain:image-generated', handleImageGenerated);
-  }, [loggedIn]);
-
   // ═══════════════════════════════════════════════════════════════
   // 🆕 项目管理状态
   // ═══════════════════════════════════════════════════════════════
@@ -289,6 +272,50 @@ const App: React.FC = () => {
 
     loadProjects();
   }, [loggedIn]);  // 🆕 依赖 loggedIn 状态
+
+  // 🆕 监听图片生成完成事件，自动刷新左上角积分余额
+  // 🆕 监听批量生成完成事件，刷新项目数据以确保图片显示正确
+  useEffect(() => {
+    if (!loggedIn) return;
+
+    const handleImageGenerated = async () => {
+      try {
+        const points = await getUserPoints();
+        setUserPoints(points);
+      } catch (error) {
+        console.error('[App] 刷新积分信息失败:', error);
+      }
+    };
+
+    const handleBatchGenerationComplete = async (event: CustomEvent) => {
+      const { type } = event.detail || {};
+      if (type !== 'character') return;
+
+      try {
+        // 重新获取当前项目的数据
+        if (currentProject) {
+          const updatedProject = await getProject(currentProject.id);
+          if (updatedProject) {
+            setCurrentProject(updatedProject);
+            // 同步角色库
+            if (updatedProject.characters) {
+              setCharacterRefs(updatedProject.characters);
+            }
+            console.log('[App] 批量生成完成，已刷新项目数据');
+          }
+        }
+      } catch (error) {
+        console.error('[App] 刷新项目数据失败:', error);
+      }
+    };
+
+    window.addEventListener('neodomain:image-generated', handleImageGenerated);
+    window.addEventListener('neodomain:batch-generation-complete', handleBatchGenerationComplete);
+    return () => {
+      window.removeEventListener('neodomain:image-generated', handleImageGenerated);
+      window.removeEventListener('neodomain:batch-generation-complete', handleBatchGenerationComplete);
+    };
+  }, [loggedIn, currentProject]);
 
   // ═══════════════════════════════════════════════════════════════
   // 原有状态
