@@ -348,6 +348,40 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
                 </div>
               </div>
             )}
+
+            {/* 阶段3结果：镜头分配 */}
+            {cotStage3 && (
+              <div className="bg-gray-800 p-3 rounded-lg border border-green-700">
+                <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
+                  <span className="w-5 h-5 bg-green-600 text-white rounded-full flex items-center justify-center text-xs">
+                    3
+                  </span>
+                  镜头分配
+                </h4>
+                <div className="text-xs space-y-1 text-gray-200">
+                  <div>
+                    <span className="text-gray-500">总镜头数：</span>
+                    {cotStage3.shotList?.length || cotStage3.shotCount?.targetTotal || '—'}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">节奏曲线：</span>
+                    {cotStage3.shotCount?.rhythmCurve || '—'}
+                  </div>
+                  {cotStage3.shotCount?.emotionBasedAllocation && cotStage3.shotCount.emotionBasedAllocation.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-700">
+                      <span className="text-gray-500">场景分配：</span>
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {cotStage3.shotCount.emotionBasedAllocation.map((s, i) => (
+                          <span key={i} className="px-1.5 py-0.5 rounded text-xs bg-blue-900/50 text-blue-300">
+                            {s.sceneId}: {s.shotCount}镜
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 当前阶段原始输出（可折叠） */}
@@ -369,6 +403,8 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
 
 /**
  * 自检Tab组件
+ * 依赖上层传入的 reviewModel / setReviewModel 来控制当前使用的自检 LLM 模型。
+ * 注意：不要在组件内直接创建本地模型 state，以免与 App.tsx 中的统一模型选择状态不一致。
  */
 const ReviewTab: React.FC<ShotGenerationPageProps> = ({
   suggestions,
@@ -383,6 +419,8 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
   toggleSuggestionSelection,
   setCurrentStep,
   renderShotTable,
+  reviewModel,
+  setReviewModel,
 }) => {
   return (
     <div className="space-y-4 animate-fadeIn">
@@ -551,6 +589,8 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
 
 /**
  * 精修Tab组件
+ * 依赖上层传入的 editModel / setEditModel 来控制当前使用的精修 LLM 模型。
+ * 注意：不要在组件内直接创建本地模型 state，以免与 App.tsx 中的统一模型选择状态不一致。
  */
 const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
   chatHistory,
@@ -566,6 +606,8 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
   downloadScript,
   setCurrentStep,
   renderShotTable,
+  editModel,
+  setEditModel,
 }) => {
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">

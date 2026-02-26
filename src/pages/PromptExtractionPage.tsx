@@ -1,6 +1,36 @@
 import React from 'react';
 import { Shot } from '../../types';
 
+/**
+ * 安全解析提示词提取结果 JSON，自动处理 ```json 代码块包裹等常见格式问题。
+ *
+ * 入参：LLM 流式拼接后的完整文本，期望为 JSON 数组或被 ```json/``` 包裹的 JSON 数组。
+ * 出参：解析成功时返回数组；解析失败时返回空数组，并在控制台输出错误日志。
+ */
+const safeParsePromptExtractionResult = (raw: string): any[] => {
+  if (!raw) return [];
+
+  let text = raw.trim();
+
+  // 去掉 markdown 代码块包裹（```json / ```）
+  text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+  // 截取第一个 [ 到最后一个 ] 之间的内容，尽量锁定数组主体
+  const start = text.indexOf('[');
+  const end = text.lastIndexOf(']');
+  if (start !== -1 && end !== -1 && end > start) {
+    text = text.slice(start, end + 1);
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error('[PromptExtraction] JSON解析失败，原始内容片段:', text.slice(0, 200), error);
+    return [];
+  }
+};
+
 interface PromptExtractionPageProps {
   // 分镜数据
   shots: Shot[];
@@ -64,11 +94,15 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
       let fullText = '';
       for await (const text of stream) {
         fullText = text;
-        setExtractProgress(`提取中... (${Math.round(fullText.length / 50)}%)`);
+        // 32镜头×约500字≈16000字总输出，除以250使进度在完成时约60-80%，最高封顶99%
+        setExtractProgress(`提取中... (${Math.min(Math.round(fullText.length / 250), 99)}%)`);
       }
 
-      // 解析JSON并更新shots
-      const extracted = JSON.parse(fullText);
+	      // 解析JSON并更新shots（兼容 ```json 代码块等格式）
+	      const extracted = safeParsePromptExtractionResult(fullText);
+	      if (!Array.isArray(extracted) || extracted.length === 0) {
+	        throw new Error('提示词提取结果解析失败，请稍后重试或尝试更换模型');
+	      }
       const { removeChinese } = await import('../../services/openrouter');
 
       const updatedShots = shots.map(shot => {

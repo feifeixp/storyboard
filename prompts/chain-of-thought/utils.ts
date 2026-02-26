@@ -165,48 +165,242 @@ function tryFixIncompleteJSON(jsonStr: string): string {
 }
 
 /**
+ * 通用 JSON 语法修复（第三层兜底：层1）
+ * 改编自 Stage4 fixCommonJSONErrors，去掉 shots 字段硬编码，适用于任意 JSON 结构。
+ * 处理范围：缺逗号、多余逗号、注释、未闭合字符串行。
+ */
+function fixCommonJSONSyntax(jsonStr: string): string {
+  let fixed = jsonStr;
+
+  // 1. 移除注释
+  fixed = fixed.replace(/\/\/[^\n]*\n/g, '\n');
+  fixed = fixed.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // 2. 修复缺少逗号（属性值后直接换行接新属性）
+  fixed = fixed.replace(/"\s*\n\s*"/g, '",\n"');
+  fixed = fixed.replace(/(\d+)\s*\n\s*"/g, '$1,\n"');
+  fixed = fixed.replace(/true\s*\n\s*"/g, 'true,\n"');
+  fixed = fixed.replace(/false\s*\n\s*"/g, 'false,\n"');
+  // 修复对象属性之间缺少逗号：属性值结束后直接跟新属性名
+  fixed = fixed.replace(/("\s*)\n(\s*"[^"]+"\s*:)/g, '$1,\n$2');
+  // 修复相邻对象之间缺少逗号
+  fixed = fixed.replace(/}\s*\n\s*{/g, '},\n{');
+
+  // 3. 移除多余的逗号
+  fixed = fixed.replace(/,(\s*[}\]])/g, '$1');
+
+  // 4. 修复未闭合的字符串（逐行检查奇数未转义引号）
+  const lines = fixed.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const quoteCount = (line.match(/(?<!\\)"/g) || []).length;
+    if (quoteCount % 2 !== 0 && line.includes(':')) {
+      if (!line.trim().endsWith('"') && !line.trim().endsWith(',')) {
+        lines[i] = line + '"';
+      }
+    }
+  }
+  fixed = lines.join('\n');
+
+  return fixed;
+}
+
+/**
+ * 通用字符级深度扫描截断（第三层兜底：层2）
+ * 改编自 Stage4 truncateToLastCompleteObject，泛化为任意顶层 JSON 对象/数组。
+ * 通过维护 depth 计数器（字符串内部不计数），精确找到最后一个完整的顶层结构位置。
+ * @returns 截断后合法的 JSON 字符串，无法截断时返回 null
+ */
+function truncateToLastCompleteJSON(jsonStr: string): string | null {
+  const trimmed = jsonStr.trim();
+  if (!trimmed) return null;
+
+  const firstChar = trimmed[0];
+  if (firstChar !== '{' && firstChar !== '[') return null;
+
+  let depth = 0;
+  let lastCompletePos = -1;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === '{' || char === '[') {
+        depth++;
+      } else if (char === '}' || char === ']') {
+        depth--;
+        // depth 从1回到0：找到一个完整的顶层结构
+        if (depth === 0) {
+          lastCompletePos = i;
+          // 继续扫描，记录最后一个完整结构
+        }
+      }
+    }
+  }
+
+  if (lastCompletePos > 0) {
+    const result = trimmed.slice(0, lastCompletePos + 1).trim();
+    console.log(`[JSON通用修复] 字符级扫描截断，保留到位置: ${lastCompletePos}`);
+    return result;
+  }
+
+  return null;
+}
+
+/**
+ * 根据错误位置定位并修复 JSON（第三层兜底：层3）
+ * 改编自 Stage4 forceFixJSONAtErrorPosition，泛化去掉 shots 字段依赖。
+ * 从 SyntaxError.message 中提取 "position N"，定位到错误行并针对性修复，
+ * 修复后再调用字符级截断确保结构合法。
+ * @param errorMsg - JSON.parse 抛出的 SyntaxError.message
+ * @returns 修复后的 JSON 字符串，无法修复时返回 null
+ */
+function fixJSONAtErrorPosition(jsonStr: string, errorMsg: string): string | null {
+  const positionMatch = errorMsg.match(/position (\d+)/);
+  if (!positionMatch) return null;
+
+  const errorPosition = parseInt(positionMatch[1], 10);
+  console.log(`[JSON通用修复] 错误位置: ${errorPosition}`);
+
+  const lines = jsonStr.split('\n');
+  let currentPos = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineStart = currentPos;
+    const lineEnd = currentPos + lines[i].length;
+
+    if (errorPosition >= lineStart && errorPosition <= lineEnd) {
+      console.log(`[JSON通用修复] 错误在第 ${i + 1} 行: ${lines[i]}`);
+      const line = lines[i];
+
+      // 修复奇数引号（未闭合字符串）
+      const quoteCount = (line.match(/(?<!\\)"/g) || []).length;
+      if (quoteCount % 2 !== 0) {
+        console.log('[JSON通用修复] 检测到未闭合引号，尝试修复');
+        lines[i] = line + '"';
+      }
+
+      // 修复缺少逗号
+      if (i < lines.length - 1) {
+        const trimmedLine = lines[i].trim();
+        const nextLine = lines[i + 1].trim();
+        if (
+          (trimmedLine.endsWith('"') || trimmedLine.endsWith('}') || trimmedLine.endsWith(']')) &&
+          !trimmedLine.endsWith(',') &&
+          !trimmedLine.endsWith('{') &&
+          !trimmedLine.endsWith('[') &&
+          (nextLine.startsWith('"') || nextLine.startsWith('{'))
+        ) {
+          console.log('[JSON通用修复] 检测到缺少逗号，尝试修复');
+          lines[i] = lines[i] + ',';
+        }
+      }
+
+      break;
+    }
+
+    currentPos = lineEnd + 1; // +1 for newline character
+  }
+
+  // 修复后再做字符级截断，确保顶层结构完整
+  const fixedText = lines.join('\n');
+  return truncateToLastCompleteJSON(fixedText) ?? fixedText;
+}
+
+/**
  * 验证JSON是否符合预期的schema
  * 支持宽松解析（处理尾随逗号等）
  */
 export function validateJSON<T>(jsonStr: string, requiredFields: string[]): T {
+  /**
+   * 辅助：检查解析结果是否包含所有必需字段
+   */
+  function hasRequiredFields(obj: Record<string, unknown>): boolean {
+    return requiredFields.every(field => field in obj);
+  }
+
+  // ─── 第一层：基础清理（去尾逗号、注释、括号不平衡修复）───
   try {
-    // 先尝试清理JSON
     const cleanedJson = cleanJSON(jsonStr);
     const obj = JSON.parse(cleanedJson);
-
-    // 检查必需字段
-    for (const field of requiredFields) {
-      if (!(field in obj)) {
-        throw new Error(`缺少必需字段: ${field}`);
-      }
-    }
-
+    if (!hasRequiredFields(obj)) throw new Error(`缺少必需字段`);
     return obj as T;
   } catch (error) {
-    if (error instanceof SyntaxError) {
-      // 如果清理后仍然失败，尝试更激进的清理
-      try {
-        // 尝试更激进的修复：移除可能导致问题的控制字符
-        const aggressiveCleaned = cleanJSON(jsonStr)
-          .replace(/[\x00-\x1f]/g, (c) => {
-            if (c === '\n' || c === '\r' || c === '\t') return c;
-            return '';
-          });
-        const obj = JSON.parse(aggressiveCleaned);
-
-        // 检查必需字段
-        for (const field of requiredFields) {
-          if (!(field in obj)) {
-            throw new Error(`缺少必需字段: ${field}`);
-          }
-        }
-
-        return obj as T;
-      } catch {
-        throw new Error(`JSON解析失败: ${error.message}`);
-      }
+    if (!(error instanceof SyntaxError) && !(error instanceof Error && error.message.startsWith('缺少必需字段'))) {
+      throw error;
     }
-    throw error;
+
+    const syntaxError = error instanceof SyntaxError ? error : null;
+
+    // ─── 第二层：激进控制字符清理 ───
+    try {
+      const aggressiveCleaned = cleanJSON(jsonStr).replace(/[\x00-\x1f]/g, (c) => {
+        if (c === '\n' || c === '\r' || c === '\t') return c;
+        return '';
+      });
+      const obj = JSON.parse(aggressiveCleaned);
+      if (!hasRequiredFields(obj)) throw new Error(`缺少必需字段`);
+      return obj as T;
+    } catch {
+      // 继续到第三层
+    }
+
+    if (!syntaxError) {
+      throw new Error(`JSON解析失败: ${error.message}`);
+    }
+
+    // ─── 第三层：通用多策略修复（层1→层2→层3）───
+    console.warn('[JSON通用修复] 前两轮清理失败，启动第三层修复策略...');
+    const baseStr = cleanJSON(jsonStr);
+
+    // 层1：通用语法修复（缺逗号、多余逗号、未闭合字符串）
+    try {
+      const syntaxFixed = fixCommonJSONSyntax(baseStr);
+      const obj = JSON.parse(syntaxFixed);
+      if (!hasRequiredFields(obj)) throw new Error(`缺少必需字段`);
+      console.log('[JSON通用修复] 层1（通用语法修复）成功');
+      return obj as T;
+    } catch { /* 继续尝试层2 */ }
+
+    // 层2：字符级深度扫描截断（找最后完整顶层结构）
+    try {
+      const syntaxFixed = fixCommonJSONSyntax(baseStr);
+      const truncated = truncateToLastCompleteJSON(syntaxFixed);
+      if (truncated) {
+        const obj = JSON.parse(truncated);
+        if (!hasRequiredFields(obj)) throw new Error(`缺少必需字段`);
+        console.log('[JSON通用修复] 层2（字符级扫描截断）成功');
+        return obj as T;
+      }
+    } catch { /* 继续尝试层3 */ }
+
+    // 层3：错误位置定位修复（根据 position N 定位错误行并针对性修复）
+    try {
+      const posFixed = fixJSONAtErrorPosition(baseStr, syntaxError.message);
+      if (posFixed) {
+        const obj = JSON.parse(posFixed);
+        if (!hasRequiredFields(obj)) throw new Error(`缺少必需字段`);
+        console.log('[JSON通用修复] 层3（错误位置定位）成功');
+        return obj as T;
+      }
+    } catch { /* 所有策略均失败 */ }
+
+    throw new Error(`JSON解析失败: ${syntaxError.message}`);
   }
 }
 

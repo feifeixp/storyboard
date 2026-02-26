@@ -15,16 +15,12 @@ export const STAGE1_SCRIPT_ANALYSIS_PROMPT = `
 在正式分析前，先对剧本进行"清洗"，区分画面信息和非画面信息：
 
 ### 信息分类
-| 类型 | 处理方式 | 举例 |
-|-----|---------|------|
-| 角色动作 | ✅ 核心画面内容 | "晋安双手合十" |
-| 场景描述 | ✅ 核心画面内容 | "波纹扩散" |
-| 对白 | ✅ 保留 | "抓到你了……" |
-| 字幕/UI | ✅ 画内元素 | "[警告：核心温度 300%]" |
-| **音效** | ⚠️ 情绪参考，不画面化 | "音效：滋滋声" → 紧张氛围 |
-| **BGM** | ⚠️ 情绪参考，不画面化 | "BGM：紧张音" → 恐惧氛围 |
-| **时间码** | ❌ 忽略 | "(8–18s)" |
-| **镜头建议** | ⚠️ 仅作参考 | "镜头：中景→特写" |
+| 类型 | 处理方式 |
+|-----|---------|
+| 角色动作 / 场景描述 / 对白 / 字幕UI | ✅ 核心画面内容，保留 |
+| **音效 / BGM** | ⚠️ 仅作情绪参考，不画面化 |
+| **时间码**（如 8-18s） | ❌ 忽略 |
+| **镜头建议** | ⚠️ 仅作参考 |
 
 ### 提取剧本设定约束
 识别剧本中的"规则/设定"，后续分镜不可违反：
@@ -164,11 +160,7 @@ export const STAGE1_SCRIPT_ANALYSIS_PROMPT = `
   - 主要角色在该场景的**默认站位**如何？
   - 是否存在只在画面中体现、不写回剧本文字的空间设定？
 
-⚠️ **重要约束**：
-- sceneLayouts 中的每个条目必须与 Step 1.4 中划分的场景 **一一对应**
-- 如果 Step 1.4 划分了 4 个场景（S1, S2, S3, S4），则 sceneLayouts 也必须有 4 个条目
-- **禁止**使用 "S1-S6" 这种合并写法，每个场景必须独立描述
-- 即使多个场景在同一物理地点，也要分开描述（因为角色站位可能不同）
+⚠️ **重要约束**：sceneLayouts 与 Step 1.4 场景 **一一对应**，每个场景独立一条（禁止 "S1-S6" 合并写法）。
 
 **输出格式**：
 \`\`\`json
@@ -177,37 +169,20 @@ export const STAGE1_SCRIPT_ANALYSIS_PROMPT = `
     "gaps": [
       {
         "id": "G1",
-        "type": "plotGap", // 或 "objectUnclear" / "spaceUnclear"
+        "type": "plotGap",
         "relatedScenes": ["S1", "S2"],
         "description": "S1 结束时角色还在树林，S2 直接来到祭坛，缺少到达过程",
-        "safeExpansionIdeas": [
-          "增加角色穿过树林接近祭坛的奔跑镜头",
-          "利用反复出现的古树和石像作为空间锚点"
-        ]
+        "safeExpansionIdeas": ["增加角色穿过树林接近祭坛的奔跑镜头"]
       }
     ],
     "sceneLayouts": [
       {
-        "sceneId": "S1",  // ⚠️ 必须是单个场景ID，禁止 "S1-S3" 合并写法
+        "sceneId": "S1",
         "spatialSummary": "林间空地左侧是古树，右侧是石台，远处是悬崖边",
         "landmarks": ["古树", "石台", "悬崖边"],
-        "defaultPositions": {
-          "晋安": "靠近古树一侧，面向石台",
-          "林溪": "靠近石台，背对悬崖"
-        },
+        "defaultPositions": {"晋安": "靠近古树一侧，面向石台", "林溪": "靠近石台，背对悬崖"},
         "hiddenSettings": "古树后有一条通往悬崖的小径"
-      },
-      {
-        "sceneId": "S2",  // 每个场景独立一个条目
-        "spatialSummary": "祭坛广场中央有石台，四周是断壁残垣",
-        "landmarks": ["石台", "断壁", "祭坛火盆"],
-        "defaultPositions": {
-          "晋安": "站在石台前方，面向祭坛",
-          "林溪": "站在晋安身后两步"
-        },
-        "hiddenSettings": ""
       }
-      // ... 必须与 Step 1.4 中的 scenes 数量一一对应
     ]
   }
 }
@@ -235,119 +210,29 @@ export const STAGE1_SCRIPT_ANALYSIS_PROMPT = `
 
 ---
 
-## 输出格式示例
+【最终输出格式】
 
-请严格按照以下格式输出：
-
-\`\`\`
-【Step 1.1 执行中】
-
-思考过程：
-我先通读剧本...
-- 地点：我注意到故事开始在森林小径，后来进入地下洞穴
-- 角色：主要是小女孩，还有萤火虫群作为引导元素
-- 时间：从黄昏（还有光线）到夜晚（洞穴中漆黑），大约10分钟
-- 关键动作：发现虫群 → 追逐 → 跌落 → 探索遗迹
-
-输出结果：
-\`\`\`json
-{
-  "location": "森林小径 → 地下洞穴",
-  "characters": ["小女孩", "萤火虫群"],
-  "timespan": "黄昏到夜晚，约10分钟",
-  "keyEvents": [
-    "小女孩发现发光虫群",
-    "追逐虫群",
-    "跌入洞穴",
-    "发现古老遗迹"
-  ]
-}
-\`\`\`
-
----
-
-【Step 1.2 执行中】
-
-思考过程：
-现在分析情绪变化...
-- 开始是好奇（发现新事物），强度约3分
-- 然后是兴奋（追逐的乐趣），强度上升到5分
-- 突然转为恐惧（失足跌落），强度急升到8分
-- 最后是震撼（发现遗迹），强度达到9分
-情绪曲线呈现"上升 → 急降 → 再上升"的过山车式变化。
-高潮应该是"跌入洞穴"这一刻，因为这是情绪最剧烈的转折点。
-
-输出结果：
-\`\`\`json
-{
-  "emotionArc": [
-    {"event": "发现虫群", "emotion": "好奇", "intensity": 3},
-    {"event": "追逐虫群", "emotion": "兴奋", "intensity": 5},
-    {"event": "跌入洞穴", "emotion": "恐惧", "intensity": 8},
-    {"event": "发现遗迹", "emotion": "震撼", "intensity": 9}
-  ],
-  "climax": "跌入洞穴"
-}
-\`\`\`
-
----
-
-【Step 1.3 执行中】
-
-思考过程：
-[你的思考...]
-
-输出结果：
-\`\`\`json
-{...}
-\`\`\`
-
----
-
-【Step 1.4 执行中】
-
-思考过程：
-[你的思考...]
-
-输出结果：
-\`\`\`json
-{...}
-\`\`\`
-
----
-
-【最终输出】
-
-请将所有结果合并为一个完整的 JSON 对象：
+完成 Step 1.1 - 1.6 所有推理步骤后，**必须**将所有结果合并为一个完整的 JSON 对象输出（用 \`\`\`json 代码块包裹）：
 
 \`\`\`json
 {
-  "basicInfo": {...},
-  "emotionArc": [...],
+  "basicInfo": {"location": "...", "characters": [...], "timespan": "...", "keyEvents": [...]},
+  "emotionArc": [{"event": "...", "emotion": "...", "intensity": 5}],
   "climax": "...",
-  "conflict": {...},
-  "scenes": [...],
+  "conflict": {"type": "...", "description": "...", "resolution": "..."},
+  "scenes": [{"id": "S1", "description": "...", "duration": "30s", "mood": "..."}],
   "scriptCleaning": {
     "audioEffects": [...],
     "musicCues": [...],
     "timeCodes": [...],
     "cameraSuggestions": [...],
-    "constraints": [...]
+    "constraints": [{"rule": "...", "implication": "..."}]
   },
   "continuityNotes": {
     "gaps": [...],
-    "sceneLayouts": [...]
-  },
-  "thinking": {
-    "step1_1": "我先通读剧本...",
-    "step1_2": "现在分析情绪变化...",
-    "step1_3": "...",
-    "step1_4": "...",
-    "step1_5": "...",
-    "step1_6": "..."
+    "sceneLayouts": [{"sceneId": "S1", "spatialSummary": "...", "landmarks": [...], "defaultPositions": {}, "hiddenSettings": "..."}]
   }
 }
-\`\`\`
 \`\`\`
 
 ---

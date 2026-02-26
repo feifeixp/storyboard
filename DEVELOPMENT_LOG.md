@@ -2,6 +2,81 @@
 
 本文件记录项目的重大功能开发、架构调整、问题修复等关键变更，用于项目回顾、避免重复工作和保持开发一致性。
 
+## [2026-02-26 17:00] 🐛 修复提示词提取 ERR_HTTP2_PROTOCOL_ERROR + 进度显示 500% 问题
+
+**修改内容**：① 在 `extractImagePromptsStream` 的 OpenRouter API 调用中添加 `max_tokens: 32000`，解决因未限制输出长度导致的 HTTP/2 流在传输过程中被服务端中断的问题；② 修正 `PromptExtractionPage.tsx` 进度计算公式，将 `fullText.length / 50` 改为 `Math.min(Math.round(fullText.length / 250), 99)`，使进度条在 32 个镜头全量输出时显示合理的 60-99% 区间，而不是错误的 300-500%。
+
+**影响范围**：
+- 文件/模块：`services/openrouter.ts`（extractImagePromptsStream 添加 max_tokens: 32000）、`src/pages/PromptExtractionPage.tsx`（第 97 行进度计算公式修正）
+
+**修改原因**：提示词提取函数提示词模板超过 290 行（含 5 个完整示例），加上 32 个镜头的 JSON 输入，无 max_tokens 限制导致模型持续输出、HTTP/2 连接超时中断，浏览器报 ERR_HTTP2_PROTOCOL_ERROR 200(OK)；进度公式 `length/50` 对 16000-25000 字符的输出直接算出 300-500%，完全错误。
+
+**预期效果**：提示词提取不再报 ERR_HTTP2_PROTOCOL_ERROR 网络错误；进度条从 0% 线性增长至 99%，完成后显示"✅ 提取完成！"。
+
+**相关文档**：无
+
+---
+
+## [2026-02-26 16:00] 🐛 修复自检 JSON 截断 + 补全 Stage3 卡片 + Stage1 提示词二轮精简
+
+**修改内容**：① 将 `reviewStoryboardOpenRouter` 的 `max_tokens` 从 4000 提升到 12000，根本解决 32 个镜头自检输出被截断在 JSON 对象内部、`safeParseReviewSuggestions` 四层容错均无法恢复的问题；② 在 `ShotGenerationPage.tsx` 的 CoT 阶段卡片区补全缺失的第三张卡片，展示 Stage3 镜头分配结果（总镜头数、节奏曲线、各场景分配），与①②③④⑤进度指示器保持一致；③ 对 `stage1-script-analysis.ts` 进行二轮精简：将预处理信息分类表从 8 行精简为 4 行（合并同类项，去掉举例列），Step 1.6 的 sceneLayouts 示例由两个 scene 减为一个，三处重复"禁止合并写法"约束合并为一句，模板字符共节省约 550 字符（约 11%）。
+
+**影响范围**：
+- 文件/模块：`services/openrouter.ts`（reviewStoryboardOpenRouter max_tokens 4000 → 12000）、`src/pages/ShotGenerationPage.tsx`（新增 Stage3 卡片）、`prompts/chain-of-thought/stage1-script-analysis.ts`（提示词二轮精简）
+
+**修改原因**：自检每条建议约 200-400 字，32 个镜头约 10-20 条建议，4000 token 输出空间严重不足，实测截断发生在第 21 个镜头建议内部（字符串中间），lastIndexOf(']') 找不到合法终止位置；Stage3 卡片在代码重构时遗漏，导致界面上只有①②显示为完成，③始终不出现进度卡片；Stage1 提示词在上轮优化后仍有冗余示例，二轮精简进一步降低输入成本。
+
+**预期效果**：自检不再出现"自检 JSON 解析失败"控制台错误，建议列表完整返回；CoT 三阶段结果卡片全部正常展示；Stage1 每次调用输入 token 减少约 100-150 个。
+
+**相关文档**：`services/openrouter.ts`（reviewStoryboardOpenRouter）、`src/pages/ShotGenerationPage.tsx`（GenerateTab）
+
+---
+
+## [2026-02-26 14:00] ⚡ Stage1 提示词 Token 优化——减少输入冗余、去掉 thinking 字段、提升输出上限
+
+**修改内容**：对 CoT 阶段1（剧本分析）的提示词与 API 调用配置做三项联动优化：① 移除 `stage1-script-analysis.ts` 末尾约100行的完整示例区块（Step 1.1/1.2 完整示例 + 1.3/1.4 占位符），改为一个简洁的最终输出格式说明，减少输入约 1000 字符；② 去掉最终 JSON 要求中的 `"thinking"` 字段，该字段与流式推理过程重复，是导致输出膨胀 30-50% 的主因；③ 将 `generateStage1Analysis` 的 `max_tokens` 从 8192 提升至 16000（与 Stage4 对齐），直接缓解因输出截断导致 JSON 括号不平衡的问题。
+
+**影响范围**：
+- 文件/模块：`prompts/chain-of-thought/stage1-script-analysis.ts`（提示词精简 + 去掉 thinking 字段要求）、`services/openrouter.ts`（max_tokens 8192 → 16000）
+
+**修改原因**：Stage1 提示词长约 7500 字符（含脚本），加上要求模型输出 6 个步骤 JSON + 最终合并 JSON + thinking 重复摘要，8192 token 输出上限极易被截断，导致 JSON 括号不平衡 → 三层修复链路全部失败 → Stage1 重试三次均报错。
+
+**预期效果**：Stage1 JSON 输出体积减少约 30-50%，截断概率大幅降低；同时输入 token 减少约 200-300 tokens，模型无需处理冗余示例，可将注意力集中在实际剧本分析上。
+
+**相关文档**：`prompts/chain-of-thought/stage1-script-analysis.ts`、`services/openrouter.ts`（`generateStage1Analysis`）
+
+---
+
+## [2026-02-26 12:00] 🐛 剧本清洗结果通用规范化——防止不同模型返回非字符串字段导致渲染崩溃
+
+**修改内容**：在清洗结果解析层（`App.tsx` 和 `src/hooks/useScriptManagement.ts`）新增通用规范化函数 `normalizeCleaningResult`，在模型输出进入 React 状态前，将所有 `string[]` 字段（`moodTags`、`dialogues`、`uiElements`、`audioEffects`、`musicCues`、`timeCodes`、`cameraSuggestions`）中的每个元素强制转为字符串——对象展开为 `Object.values().join(' / ')`，嵌套数组递归展平，其他类型调用 `String()` 转换。与模型无关，适用于任意模型切换场景。
+
+**影响范围**：
+- 文件/模块：`src/hooks/useScriptManagement.ts`、`App.tsx`
+
+**修改原因**：gemini 2.5 等模型在清洗输出中将 `moodTags` 等字段的元素返回为对象（如 `{角色: "正道修士甲", ...}`），前端 JSX 直接渲染 `{tag}` 时 React 报错黑屏（Objects are not valid as a React child）。根本原因是解析处仅做 `JSON.parse(...) as ScriptCleaningResult`，TypeScript 类型断言无运行时保护，无任何字段规范化。
+
+**预期效果**：无论使用何种模型，清洗结果进入 state 前已确保所有 `string[]` 字段中的元素均为合法字符串，彻底消除因模型输出格式差异导致的渲染崩溃；前端 JSX 无需任何防御性改动。
+
+**相关文档**：`src/hooks/useScriptManagement.ts`（`normalizeCleaningResult`）、`App.tsx`（`normalizeCleaningResult`）
+
+---
+
+## [2026-02-26 10:00] 🐛 CoT 阶段1 JSON 解析失败容错增强
+
+**修改内容**：在思维链工具函数 `validateJSON` 中新增第三层通用 JSON 修复策略，解决 CoT 阶段1剧本分析在使用特定模型（如 openai/gpt-5-mini）时因 JSON 括号不平衡或缺少逗号导致三次重试均失败的问题。新增三个通用辅助函数：通用语法修复（缺逗号/多余逗号/未闭合字符串）、字符级深度扫描截断（精确找到最后一个完整顶层结构）、错误位置定位修复（根据 SyntaxError position 信息针对性修复），三层策略依次兜底。
+
+**影响范围**：
+- 文件/模块：`prompts/chain-of-thought/utils.ts`
+
+**修改原因**：Stage1 `parseStage1Output` 经 `mergeThinkingAndResult → validateJSON` 解析，而原有的 `tryFixIncompleteJSON` 仅对含 `"shots"` 字段的 Stage4 结构生效，对 Stage1 的 `ScriptAnalysis` 结构无能为力；两轮基础清理不足以应对"括号数量略不平衡 + 属性间缺逗号"的复合问题。
+
+**预期效果**：Stage1（及同路径的 Stage2/3/5）在 LLM 输出轻度格式异常时能自动修复并正常解析，减少因 JSON 解析失败导致的三次重试全部失败情况；Stage4 已有独立修复链路，不受影响。
+
+**相关文档**：`prompts/chain-of-thought/utils.ts`（`validateJSON`、`fixCommonJSONSyntax`、`truncateToLastCompleteJSON`、`fixJSONAtErrorPosition`）
+
+---
+
 **日志规范**：
 - 时间格式：YYYY-MM-DD HH:MM
 - 摘要长度：50-200字
@@ -17,6 +92,108 @@
 - 📝 文档更新 (docs)
 
 ---
+
+## [2026-02-26 22:00] 🐛 提示词提取 JSON 解析失败容错增强 (fix)
+
+**修改内容**：在 PromptExtractionPage.tsx 中新增 safeParsePromptExtractionResult 辅助函数，对提示词提取结果进行安全解析：自动剥离 ```json/``` 代码块包裹、截取首个 `[` 到最后一个 `]` 之间的数组主体并执行 JSON.parse，解析失败时记录错误日志并返回空数组；同时在提取失败且未解析出任何元素时抛出友好错误提示，避免直接暴露底层 SyntaxError。并在 services/openrouter.ts 的 extractImagePromptsStream 提示词中增加输出格式约束，明确要求模型仅返回纯 JSON 数组，禁止使用 markdown 代码块或额外解释性文字，以减少不规范输出导致的解析问题。
+
+**影响范围**：
+- 文件/模块：
+  - src/pages/PromptExtractionPage.tsx（提示词提取结果解析与错误处理逻辑）
+  - services/openrouter.ts（extractImagePromptsStream 提示词中的输出格式要求）
+
+**修改原因**：
+- 在提示词提取流程中，部分模型仍会返回被 ```json/``` 包裹的 JSON 数组或携带轻微格式问题的文本，原实现对 fullText 直接调用 JSON.parse，遇到以 ```json 开头的内容时会抛出 `Unexpected token '\`'` 等底层语法错误，导致前端显示“提取失败: SyntaxError: ... is not valid JSON”，既影响用户体验，也不利于后续问题排查。
+
+**预期效果**：
+- ✅ 当模型返回的结果被 ```json 代码块包裹时，可被安全剥离并解析为数组，正常填充各镜头的 imagePromptCn/imagePromptEn 等字段
+- ✅ 对常见的小格式问题具备基础容错能力，失败时以业务友好的错误信息提示用户，而非裸露底层 SyntaxError
+- ✅ 通过在提示词层面明确“仅返回纯 JSON 数组、不使用 markdown 代码块和解释性文字”，降低后续解析错误的发生概率
+
+**相关文档**：
+- .augment/rules/global-rules.md（R001、R002、R007）
+- docs/rules/提示词规范标准.ini
+
+## [2026-02-26 21:30] 🐛 自检 JSON 解析失败容错增强 (fix)
+
+**修改内容**：在 services/openrouter.ts 中为 reviewStoryboardOpenRouter 增加 safeParseReviewSuggestions 安全解析函数，并调整自检结果解析流程：先移除 ```json/``` 代码块标记，再截取第一个 `[` 到最后一个 `]` 之间的数组内容，最后通过多轮容错解析（移除尾逗号、修复因换行导致的简单字符串错误、截断到最后一个闭合括号）尽可能还原 ReviewSuggestion[]，解析失败时仅返回空数组且不影响页面渲染。
+
+**影响范围**：
+- 文件/模块：
+  - services/openrouter.ts（reviewStoryboardOpenRouter 的 JSON 提取与解析逻辑）
+
+**修改原因**：
+- 现有实现仅对 LLM 返回文本做简单的 `indexOf('[')` / `lastIndexOf(']')` 截取，然后直接 `JSON.parse`，对尾逗号、跨行字符串等轻微格式问题缺乏容错；在用户自检流程中，实际返回了一段结构正确但存在细微语法瑕疵的 JSON 数组，导致解析抛错并触发“自检 JSON 解析失败，原始文本: ```json [...]”日志，自检 UI 虽未崩溃，但所有 LLM 审核建议被整体丢弃，仅剩规则自检结果。
+
+**预期效果**：
+- ✅ 当 LLM 返回带 ```json 代码块包裹的 JSON 数组时，可以正确剥离包裹并解析为 ReviewSuggestion[]
+- ✅ 对常见的小错误（尾逗号、简单的换行字符串不规范、尾部多余文本等）具备自动修复能力，大部分“肉眼合法”的返回都能成功解析出 LLM 自检建议
+- ✅ 在返回内容严重畸形或完全非 JSON 时，依旧安全降级为空建议数组，只输出错误日志，不影响页面正常渲染
+
+**相关文档**：
+- .augment/rules/global-rules.md（R001、R002、R007）
+- services/openrouter.ts 中 CoT 各阶段解析与 JSON 容错策略注释
+
+## [2026-02-26 20:30] ✨ 新功能 + 🐛 体验优化 (feature+fix)
+
+**修改内容**：在 App.tsx 的 startScriptCleaning 流程中增加模型联动逻辑：每次在清洗页面选择分析模型并点击「清洗剧本」时，将当前 analysisModel 同步重置为本轮分镜生成模块的默认文本模型，其中自检 Tab 使用 reviewModel、精修 Tab 使用 editModel，两者在每轮清洗开始时自动被设置为 analysisModel，用户仍可在各自 Tab 中单独更改以覆盖默认值。
+
+**影响范围**：
+- 文件/模块：
+  - App.tsx（startScriptCleaning 中增加模型默认值同步逻辑）
+
+**修改原因**：
+- 目前生成模块中的三个页面（生成、自检、精修）模型选择互相独立，用户在清洗界面选择了分析模型后，自检和精修仍需手动选择才能与清洗模型对齐，增加了操作负担。
+- 用户期望“清洗界面选择的模型”能作为后续分镜生成、自检、精修以及提示词提取等环节的默认模型，同时保留在具体页面上单独调整模型的灵活性。
+
+**预期效果**：
+- ✅ 用户在清洗页选择模型后，本轮分镜生成、自检、精修默认都使用该模型
+- ✅ 用户在自检 / 精修 Tab 中仍可单独选择不同模型，仅影响当前轮次的实际调用
+- ✅ 再次清洗、更换模型后，新选择会自动成为下一轮生成模块的默认模型
+
+**相关文档**：
+- .augment/rules/global-rules.md（R001、R002、R007）
+- PROJECT.md 中 AI 服务与模型选择章节
+
+## [2026-02-25 23:10] 🐛 问题修复 (fix)
+
+**修改内容**：修复分镜编辑页面精修 Tab（ManualEditTab）中未从 ShotGenerationPageProps 解构 editModel/setEditModel，导致在进入精修页时组件内部直接使用 editModel/setEditModel 这两个未声明的自由变量并抛出 `editModel is not defined` 的问题；现在组件显式解构这两个字段，并在注释中明确其与 App.tsx 中统一模型状态的依赖关系。
+
+**影响范围**：
+- 文件/模块：
+  - src/pages/ShotGenerationPage.tsx（ManualEditTab 组件 props 解构与注释）
+
+**修改原因**：
+- 在开发模式（npm run dev）下，完成分镜生成与自检后进入精修 Tab，会在控制台报错 `Uncaught ReferenceError: editModel is not defined`，指向 ShotGenerationPage.tsx 中的 ManualEditTab 组件；该错误与生产构建中出现的「Minified React error #310（Rendered more hooks than during the previous render.）」高度相关，根因同样是组件内部访问未解构的 props 导致渲染流程被中断。
+
+**预期效果**：
+- ✅ 重新构建并在 dev/preview/线上环境访问精修 Tab 时，不再出现 `editModel is not defined` 报错
+- ✅ “精修模型”下拉选择器正常工作，并与 App.tsx 中维护的 editModel 状态保持一致
+- ✅ 生产环境中不再因为该错误触发 Minified React error #310，避免因 hooks 调用被中断导致的渲染异常
+
+**相关文档**：
+- .augment/rules/global-rules.md（R001、R002、R007）
+- .augment/rules/project-rules.md（R008）
+
+## [2026-02-25 23:00] 🐛 问题修复 (fix)
+
+**修改内容**：修复分镜编辑页面自检 Tab（ReviewTab）中未从 ShotGenerationPageProps 解构 reviewModel/setReviewModel，导致旧构建 index-7CdWpIRV.js 在运行时将二者视为自由变量并抛出 `reviewModel is not defined` 的问题；现在组件显式解构这两个字段，并在注释中明确其与 App.tsx 中统一模型状态的依赖关系。
+
+**影响范围**：
+- 文件/模块：
+  - src/pages/ShotGenerationPage.tsx（ReviewTab 组件 props 解构与注释）
+
+**修改原因**：
+- 线上 Cloudflare Pages 部署仍在使用早期构建 index-7CdWpIRV.js，其中 ReviewTab JSX 内直接使用 reviewModel/setReviewModel，自身函数签名却未声明对应参数，导致浏览器在模块作用域查找不到定义而抛出 ReferenceError，页面在进入自检页时黑屏。
+
+**预期效果**：
+- ✅ 重新构建并部署后，分镜自检 Tab 不再出现 `reviewModel is not defined` 报错
+- ✅ “自检模型”下拉选择器正常工作，并与 App.tsx 中维护的 reviewModel 状态保持一致
+- ✅ 角度规则校验日志继续按既有规则输出，仅作为业务级告警，不再被误认为导致崩溃的根因
+
+**相关文档**：
+- .augment/rules/global-rules.md（R001、R002、R007）
+- .augment/rules/project-rules.md（R008）
 
 ## [2026-02-25 22:30] ✨ 新功能 (feature)
 

@@ -99,6 +99,57 @@ interface ChatMessage {
   content: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 清洗结果规范化工具（与模型无关，统一在数据层处理不稳定输出）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 将任意值规范化为字符串
+ * 适用于 LLM 返回格式不稳定（对象、数组混入）的 string[] 字段
+ */
+function _normalizeToString(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value.map(_normalizeToString).filter(Boolean).join(' / ');
+  }
+  if (typeof value === 'object') {
+    try {
+      const vals = Object.values(value as object).filter(v => v != null && v !== '');
+      return vals.length > 0 ? (vals as string[]).join(' / ') : JSON.stringify(value);
+    } catch {
+      return JSON.stringify(value);
+    }
+  }
+  return String(value);
+}
+
+/** 将任意值规范化为 string[]，过滤空值 */
+function _normalizeStringArray(arr: unknown): string[] {
+  if (!Array.isArray(arr)) return typeof arr === 'string' ? [arr] : [];
+  return arr.map(_normalizeToString).filter(Boolean);
+}
+
+/**
+ * 规范化清洗结果：确保所有 string[] 字段中的每个元素都是字符串
+ * 防止不同模型返回对象/嵌套结构导致 React 渲染崩溃
+ */
+function normalizeCleaningResult(result: ScriptCleaningResult): ScriptCleaningResult {
+  return {
+    ...result,
+    cleanedScenes: (result.cleanedScenes || []).map(scene => ({
+      ...scene,
+      dialogues: _normalizeStringArray(scene.dialogues),
+      uiElements: _normalizeStringArray(scene.uiElements),
+      moodTags: _normalizeStringArray(scene.moodTags),
+    })),
+    audioEffects: _normalizeStringArray(result.audioEffects),
+    musicCues: _normalizeStringArray(result.musicCues),
+    timeCodes: _normalizeStringArray(result.timeCodes),
+    cameraSuggestions: _normalizeStringArray(result.cameraSuggestions),
+  };
+}
+
 // 🆕 localStorage 持久化 Key
 const STORAGE_KEYS = {
   CURRENT_STEP: 'storyboard_current_step',
@@ -198,11 +249,6 @@ const App: React.FC = () => {
     window.addEventListener('neodomain:image-generated', handleImageGenerated);
     return () => window.removeEventListener('neodomain:image-generated', handleImageGenerated);
   }, [loggedIn]);
-
-  // 如果未登录，显示登录页面
-  if (!loggedIn) {
-    return <Login onLoginSuccess={() => setLoggedIn(true)} />;
-  }
 
   // ═══════════════════════════════════════════════════════════════
   // 🆕 项目管理状态
@@ -1228,6 +1274,12 @@ const App: React.FC = () => {
     setCurrentStep(AppStep.SCRIPT_CLEANING);
     setIsCleaning(true);
 
+    // 🆕 每次开始清洗时，将当前分析模型作为本轮生成模块（生成/自检/精修）的默认模型
+    // 说明：reviewModel/editModel 依然可以在对应 Tab 中单独修改；
+    //       这里仅在开启新一轮清洗时重置它们的默认值，避免用户重复手动选择。
+    setReviewModel(analysisModel);
+    setEditModel(analysisModel);
+
     try {
       const stream = cleanScriptStream(script, analysisModel);
       let lastText = '';
@@ -1254,10 +1306,11 @@ const App: React.FC = () => {
           }
 
           const parsed = JSON.parse(jsonStr);
-          setCleaningResult({
+          // 规范化所有 string[] 字段，防止不同模型返回对象/数组嵌套导致渲染崩溃
+          setCleaningResult(normalizeCleaningResult({
             ...parsed,
             originalScript: script
-          });
+          }));
         } catch (parseError) {
           console.error('解析清洗结果失败:', parseError, '\n原始文本:', lastText.substring(0, 500));
           // 即使解析失败，也显示原始结果供用户查看
@@ -3367,6 +3420,11 @@ const App: React.FC = () => {
       setExtractProgress('');
     }
   };
+
+  // 如果未登录，显示登录页面（必须在所有 Hook 之后做条件渲染，符合 React Hooks 规则）
+  if (!loggedIn) {
+    return <Login onLoginSuccess={() => setLoggedIn(true)} />;
+  }
 
   return (
     <div className="min-h-screen p-3 bg-gray-900 text-gray-100 font-inter">

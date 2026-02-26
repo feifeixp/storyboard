@@ -650,7 +650,7 @@ export async function* generateStage1Analysis(
         },
       ],
       temperature: 0.7,
-      max_tokens: 8192,
+      max_tokens: 16000,
       stream: true,
       // 启用思维链推理（仅 Gemini 3 Pro Preview 支持）
       // 注意：extra_body 可能不被 openai 客户端支持，暂时禁用
@@ -1586,6 +1586,55 @@ const BASE_ROLE_DEFINITION = `Role: AI 漫剧导演 & 提示词专家. You are a
 
 const cleanJsonOutput = (text: string): string => {
   return text.replace(/```json/g, '').replace(/```/g, '').trim();
+};
+
+/**
+ * 安全解析自检返回的 JSON 数组，自动修复常见的小错误。
+ *
+ * 入参：期望为 ReviewSuggestion[] 的 JSON 字符串，可以包含换行与轻微格式问题。
+ * 出参：解析成功时返回 ReviewSuggestion[]；否则返回空数组，不抛出异常，
+ *       具体错误由调用方按需记录日志。
+ */
+const safeParseReviewSuggestions = (text: string): ReviewSuggestion[] => {
+  const tryParse = (input: string): ReviewSuggestion[] | null => {
+    try {
+      const parsed = JSON.parse(input);
+      return Array.isArray(parsed) ? (parsed as ReviewSuggestion[]) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  let jsonStr = text.trim();
+  if (!jsonStr) {
+    return [];
+  }
+
+  // 1️⃣ 直接尝试解析
+  let result = tryParse(jsonStr);
+  if (result) return result;
+
+  // 2️⃣ 修复常见的尾逗号错误: `,]` / `,}`
+  let fixed = jsonStr.replace(/,\s*([}\]])/g, '$1');
+  result = tryParse(fixed);
+  if (result) return result;
+
+  // 3️⃣ 修复因换行导致的未闭合字符串（简单场景）
+  fixed = fixed.replace(/:\s*"([^"\n]*)\n/g, ': "$1",\n');
+  result = tryParse(fixed);
+  if (result) return result;
+
+  // 4️⃣ 截断到最后一个闭合的 ] 或 }
+  const lastBracket = fixed.lastIndexOf(']');
+  const lastBrace = fixed.lastIndexOf('}');
+  const cutPos = Math.max(lastBracket, lastBrace);
+  if (cutPos > 0) {
+    const truncated = fixed.substring(0, cutPos + 1);
+    result = tryParse(truncated);
+    if (result) return result;
+  }
+
+  return [];
 };
 
 // ============================================
@@ -2933,27 +2982,27 @@ export async function reviewStoryboardOpenRouter(
   const response = await client.chat.completions.create({
     model,
     messages: [{ role: 'user', content: contentInput }],
-    max_tokens: 4000,
+    max_tokens: 12000, // 🔧 从4000提升到12000，防止32个镜头自检JSON被截断
   });
 
-  const rawText = response.choices[0]?.message?.content || '[]';
+	  const rawText = response.choices[0]?.message?.content || '[]';
 
-  // 增强 JSON 提取 - 找到数组边界
-  let jsonText = rawText;
-  const jsonStart = rawText.indexOf('[');
-  const jsonEnd = rawText.lastIndexOf(']');
+	  // 先移除 markdown 代码块标记，再增强 JSON 提取 - 找到数组边界
+	  let jsonText = cleanJsonOutput(rawText);
+	  const jsonStart = jsonText.indexOf('[');
+	  const jsonEnd = jsonText.lastIndexOf(']');
 
-  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-    jsonText = rawText.substring(jsonStart, jsonEnd + 1);
-  }
+	  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+	    jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+	  }
 
-  try {
-    return JSON.parse(cleanJsonOutput(jsonText));
-  } catch (e) {
-    console.error('自检 JSON 解析失败，原始文本:', rawText);
-    // 返回空数组而不是崩溃
-    return [];
-  }
+	  const suggestions = safeParseReviewSuggestions(jsonText);
+	  if (suggestions.length === 0 && jsonText.trim()) {
+	    // 仅在有内容但完全解析失败时输出错误日志，方便后续排查
+	    console.error('自检 JSON 解析失败，原始文本:', rawText);
+	  }
+
+	  return suggestions;
 }
 
 /**
@@ -3034,13 +3083,13 @@ export async function* chatWithDirectorStream(
  * 不含美术风格！风格在生图时由用户选择后附加。
  */
 export async function* extractImagePromptsStream(
-  shots: Shot[],
-  model: string = DEFAULT_MODEL
-) {
-  const prompt = `你是专业的AI绘图提示词工程师，精通 Nano Banana Pro (Gemini 3 Pro) 的提示词规范。
+	  shots: Shot[],
+	  model: string = DEFAULT_MODEL
+	) {
+	  const prompt = `你是专业的AI绘图提示词工程师，精通 Nano Banana Pro (Gemini 3 Pro) 的提示词规范。
 
-## 任务
-从分镜脚本中提取 **纯画面描述的AI生图提示词**，供 Nano Banana Pro 模型生成分镜草图。
+	## 任务
+	从分镜脚本中提取 **纯画面描述的AI生图提示词**，供 Nano Banana Pro 模型生成分镜草图。
 
 ## Nano Banana Pro 提示词公式（官方手册）
 **[主体描述] + [环境/背景] + [动作/状态] + [技术参数(景别/角度/光影)]**
@@ -3050,7 +3099,7 @@ export async function* extractImagePromptsStream(
 - **动作/状态**：正在做什么，表情、姿态
 - **技术参数**：景别(如medium shot)、角度(如low angle, 3/4 front view)、光影(如dramatic side lighting)
 
-## 🚨 关键规则
+	## 🚨 关键规则
 
 ### 1. 禁止包含美术风格！
 ❌ 禁止词：ink sketch, pencil drawing, watercolor, anime style, 线稿, 水墨, 素描, 漫画风格
@@ -3060,7 +3109,7 @@ export async function* extractImagePromptsStream(
 - 静态镜头：只生成 imagePromptCn/En
 - 运动镜头：必须生成 imagePromptCn/En（首帧）+ endImagePromptCn/En（尾帧）
 
-### 3. 提示词格式（🚨 必须严格遵守！）
+	### 3. 提示词格式（🚨 必须严格遵守！）
 
 #### 中文版格式
 - 使用自然语言描述，清晰具体
@@ -3088,11 +3137,16 @@ export async function* extractImagePromptsStream(
 | 3/4背面 | 转身背对，回头看肩 |
 | 背面 | 背对镜头 / 面向远方 |
 
-**正确示例**：
-✅ "远景拍摄，镜头略微从上方拍摄，右侧面轮廓。晋安与林溪位于画面左侧边缘..."
-❌ "远景(LS)，轻微俯拍(5-15°)，正侧面(90°)。晋安与林溪位于画面左侧边缘..."
+	**正确示例**：
+	✅ "远景拍摄，镜头略微从上方拍摄，右侧面轮廓。晋安与林溪位于画面左侧边缘..."
+	❌ "远景(LS)，轻微俯拍(5-15°)，正侧面(90°)。晋安与林溪位于画面左侧边缘..."
 
-#### 英文版格式（🆕 使用自然语言描述，不使用权重参数格式）
+		## 输出格式要求（🚨 一定要遵守！）
+		- 只返回 **JSON 数组** 作为最终输出结果
+		- 不要使用任何 markdown 代码块标记（不要输出以三个反引号开头的 json 代码块）
+		- 不要输出解释性文字、注释或额外说明，只保留 JSON 数组本身
+		
+	#### 英文版格式（🆕 使用自然语言描述，不使用权重参数格式）
 - **使用自然语言描述**，而非权重参数格式
 - 格式：A [shot type] of [subject], captured [camera height]. The subject is [action/expression]. The scene is set in [environment], illuminated by [lighting].
 - ❌ **禁止使用权重参数格式**：如 (medium shot:1.2), (low angle:1.3)
@@ -3328,6 +3382,7 @@ third VP at nadir, verticals converging downward, diminished top-down view
     model,
     messages: [{ role: 'user', content: prompt }],
     stream: true,
+    max_tokens: 32000, // 🔧 32个镜头×5个字段，输出体积大，必须设上限防止HTTP/2流超时中断
   });
 
   let fullText = '';
