@@ -3097,54 +3097,50 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-	  // 导出为CSV（Excel兼容）- 与页面表格一致的5列布局（不含提示词）
+	  // 导出为CSV（Excel兼容）- 紧凑5列布局（不含提示词）
 	  const exportToExcel = () => {
-	    // CSV头部 - 与页面表格一致
-	    const headers = [
-	      '#（编号/时长/类型）',
-	      '故事（节拍/对白）',
-	      '视觉设计（景别/角度/构图/光影/运镜）',
-	      '首帧',
-	      '尾帧'
-	    ];
+	    // CSV头部
+	    const headers = ['#', '故事', '视觉设计', '首帧', '尾帧'];
 
     // 转义CSV字段
     const escapeCSV = (str: string | undefined) => {
       if (!str) return '';
-      // 如果包含逗号、换行或引号，需要用引号包裹并转义内部引号
       if (str.includes(',') || str.includes('\n') || str.includes('"')) {
         return `"${str.replace(/"/g, '""')}"`;
       }
       return str;
     };
 
-	    // 数据行 - 合并显示与页面一致（不导出提示词）
+	    // 数据行
 	    const rows = shots.map(shot => {
 	      const isMotion = shot.shotType === '运动';
 
-      // 列1: # (编号/时长/类型)
-      const col1 = `#${shot.shotNumber} | ${shot.duration || '—'} | ${shot.shotType || '静态'}`;
+      // 列1: # 编号·时长·类型（紧凑）
+      const col1 = `#${shot.shotNumber}·${shot.duration || '—'}·${shot.shotType || '静态'}`;
 
-      // 列2: 故事 (节拍 + 对白 + 导演意图 + 技术备注)
-      const col2 = [
-        shot.storyBeat || '',
-        shot.dialogue ? `【对白】${shot.dialogue}` : '',
-        shot.directorNote ? `【导演意图】${shot.directorNote}` : '',
-        shot.technicalNote ? `【技术备注】${shot.technicalNote}` : ''
-      ].filter(Boolean).join('\n');
+      // 列2: 故事（节拍 + 对白/导演/备注，有内容才追加）
+      const col2Parts = [shot.storyBeat || ''];
+      if (shot.dialogue) col2Parts.push(`对白: ${shot.dialogue}`);
+      if (shot.directorNote) col2Parts.push(`导演: ${shot.directorNote}`);
+      if (shot.technicalNote) col2Parts.push(`备注: ${shot.technicalNote}`);
+      const col2 = col2Parts.filter(Boolean).join('\n');
 
-      // 列3: 视觉设计 (景别/角度/构图/光影/运镜)
-      const col3 = [
-        `【景别】${shot.shotSize || '—'}`,
-        `【角度】${shot.angleDirection || '—'} + ${shot.angleHeight || '—'}${shot.dutchAngle ? ` (${shot.dutchAngle})` : ''}`,
-        `【构图】`,
-        `  FG: ${shot.foreground || '—'}`,
-        `  MG: ${shot.midground || '—'}`,
-        `  BG: ${shot.background || '—'}`,
-        `【光影】${shot.lighting || '—'}`,
-        `【运镜】${shot.cameraMove || '—'}${shot.cameraMoveDetail ? ` | ${shot.cameraMoveDetail}` : ''}`,
-        isMotion && shot.motionPath ? `【动线】${shot.motionPath}` : ''
-      ].filter(Boolean).join('\n');
+      // 列3: 视觉设计（紧凑，构图合并为一行）
+      const angleStr = [shot.angleDirection, shot.angleHeight, shot.dutchAngle].filter(Boolean).join('/');
+      const compositionStr = [
+        shot.foreground ? `FG:${shot.foreground}` : '',
+        shot.midground ? `MG:${shot.midground}` : '',
+        shot.background ? `BG:${shot.background}` : '',
+      ].filter(Boolean).join(' · ');
+      const col3Parts = [
+        `景:${shot.shotSize || '—'}`,
+        `角:${angleStr || '—'}`,
+        compositionStr || '',
+        `光:${shot.lighting || '—'}`,
+        `运:${shot.cameraMove || '—'}${shot.cameraMoveDetail ? `·${shot.cameraMoveDetail}` : ''}`,
+        isMotion && shot.motionPath ? `动线:${shot.motionPath}` : '',
+      ];
+      const col3 = col3Parts.filter(Boolean).join(' | ');
 
 	      // 列4: 首帧
 	      const col4 = shot.startFrame || (isMotion ? '—' : '');
