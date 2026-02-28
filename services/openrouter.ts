@@ -325,6 +325,31 @@ const getClient = (_model?: string) => {
 };
 
 /**
+ * 直连 OpenRouter 的客户端（不走 Cloudflare Worker 代理）
+ * 适用于长时请求（如 extractImagePromptsStream），避免 Worker 30s 超时。
+ * OpenRouter 是 HTTPS，前端直连没有 Mixed Content 问题。
+ */
+let openRouterDirectClient: OpenAI | null = null;
+const getOpenRouterDirectClient = () => {
+  if (!openRouterDirectClient) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error('未找到 VITE_OPENROUTER1_API_KEY 环境变量');
+    }
+    openRouterDirectClient = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey,
+      dangerouslyAllowBrowser: true,
+      defaultHeaders: {
+        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://storyboard.neodomain.ai',
+        'X-Title': 'Visionary Storyboard Studio',
+      },
+    });
+  }
+  return openRouterDirectClient;
+};
+
+/**
  * 统一 API 错误日志工具 - 提取 OpenAI SDK APIError 的详细信息
  * 当服务器返回 500/4xx 时，会打印完整的响应体，方便排查问题
  */
@@ -1770,17 +1795,22 @@ export async function* chatWithDirectorStream(
  * 不含美术风格！风格在生图时由用户选择后附加。
  */
 export async function* extractImagePromptsStream(
-	  shots: Shot[],
-	  model: string = DEFAULT_MODEL
-	) {
+    shots: Shot[],
+    model: string = DEFAULT_MODEL
+) {
   const prompt = buildExtractImagePromptsPrompt(shots);
 
-  const client = getClient(model);
+  // 🔧 直连 OpenRouter（HTTPS），跳过 Cloudflare Worker 代理
+  //    原因：Worker 代理到 ALB 有 30s 超时限制，大批量镜头生成时会触发 504
+  //    OpenRouter 是 HTTPS，前端直连无 Mixed Content 问题
+  const client = getOpenRouterDirectClient();
   const stream = await client.chat.completions.create({
     model,
     messages: [{ role: 'user', content: prompt }],
     stream: true,
-    max_tokens: 32000, // 🔧 32个镜头×5个字段，输出体积大，必须设上限防止HTTP/2流超时中断
+    // 每个镜头最多 3 个字段 × ~150 tokens = ~4500 tokens/10镜头
+    // 30 镜头上限约 13500 tokens，设 14000 留有余量
+    max_tokens: 14000,
   });
 
   let fullText = '';
