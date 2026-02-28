@@ -57,6 +57,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             value={formData.name || ''}
             onChange={(e) => handleChange('name', e.target.value)}
             className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            title="角色名"
           />
         </div>
         <div>
@@ -65,6 +66,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             value={formData.gender || '未知'}
             onChange={(e) => handleChange('gender', e.target.value)}
             className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            aria-label="性别"
           >
             <option value="男">男</option>
             <option value="女">女</option>
@@ -155,7 +157,24 @@ export const EditModal: React.FC<EditModalProps> = ({
           value={formData.note || ''}
           onChange={(e) => handleChange('note', e.target.value)}
           className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          title="备注"
         />
+      </div>
+      {/* 🆕 变身策略开关 */}
+      <div className="flex items-center gap-2 p-2 bg-gray-800 rounded">
+        <input
+          type="checkbox"
+          id="allowTransformation"
+          checked={formData.consistencyMode === 'allowTransformation'}
+          onChange={(e) => handleChange('consistencyMode', e.target.checked ? 'allowTransformation' : 'lockSamePerson')}
+          className="w-4 h-4"
+        />
+        <label htmlFor="allowTransformation" className="text-xs text-gray-300 cursor-pointer">
+          <span className="font-semibold">允许变身（不锁同一人）</span>
+          <span className="block text-gray-500 mt-0.5">
+            勾选后，生成设定图时不使用常态参考图，允许彻底变身（如：换脸、变物种、年龄大变等）
+          </span>
+        </label>
       </div>
     </div>
   );
@@ -170,6 +189,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           value={formData.name || ''}
           onChange={(e) => handleChange('name', e.target.value)}
           className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          title="场景名称"
         />
       </div>
       <div>
@@ -207,6 +227,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           value={formData.visualPromptCn || ''}
           onChange={(e) => handleChange('visualPromptCn', e.target.value)}
           className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm h-16"
+          aria-label="中文视觉提示词"
         />
       </div>
       <div>
@@ -215,6 +236,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           value={formData.visualPromptEn || ''}
           onChange={(e) => handleChange('visualPromptEn', e.target.value)}
           className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm h-16"
+          aria-label="英文视觉提示词"
         />
       </div>
     </div>
@@ -231,6 +253,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             value={formData.episodeNumber || 1}
             onChange={(e) => handleChange('episodeNumber', parseInt(e.target.value))}
             className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            title="集数"
           />
         </div>
         <div>
@@ -240,6 +263,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             value={formData.title || ''}
             onChange={(e) => handleChange('title', e.target.value)}
             className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            title="标题"
           />
         </div>
       </div>

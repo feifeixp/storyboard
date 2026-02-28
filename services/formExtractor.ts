@@ -117,10 +117,13 @@ export function calculateFormCompleteness(
   const extractedForms = extractCharacterForms(characterName, scripts);
   const extractedFormsCount = extractedForms.length;
 
-  // 如果剧本中没有提取到形态，说明可能是配角，给予基础分数
+  // 如果剧本中没有提取到形态，说明可能是配角
   if (extractedFormsCount === 0) {
+    // 🔧 修复：配角不应该因为有形态就得满分
+    // 如果剧本中没有形态，但用户手动添加了形态，这可能是不必要的
+    // 给予基础分数，不影响总体完整度
     return {
-      completeness: currentFormsCount > 0 ? 100 : 80, // 有形态就100%，没有就80%
+      completeness: 100, // 没有形态需求，就是100%完整
       extractedFormsCount: 0,
       missingFormsCount: 0,
       extractedForms: [],

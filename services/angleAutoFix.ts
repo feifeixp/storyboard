@@ -24,8 +24,7 @@ export function autoFixAngleDistribution(shots: Shot[]): {
 
   // 第一步：修复正面镜头超标
   const frontViewShots = fixedShots.filter(s =>
-    s.angleDirection?.includes('正面(Front)') ||
-    s.angleDirection === '正面'
+    s.angleDirection?.includes('正面(Front)')
   );
 
   if (frontViewShots.length > 2) {
@@ -47,8 +46,7 @@ export function autoFixAngleDistribution(shots: Shot[]): {
 
   // 第二步：修复平视镜头占比
   const eyeLevelShots = fixedShots.filter(s =>
-    s.angleHeight?.includes('平视(Eye Level)') ||
-    s.angleHeight === '平视'
+    s.angleHeight?.includes('平视(Eye Level)')
   );
   const eyeLevelRatio = eyeLevelShots.length / fixedShots.length;
 

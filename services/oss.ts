@@ -93,14 +93,16 @@ export async function uploadToOSS(
 
   try {
     // 上传文件
-    const result = await client.put(fileName, file, {
-      // 上传进度回调
+    // ali-oss 的类型定义缺少 progress 选项，使用 any 绕过类型检查（运行时正常支持）
+    const putOptions: Record<string, unknown> = {
       progress: (p: number) => {
         if (onProgress) {
           onProgress(Math.floor(p * 100));
         }
       },
-    });
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (client.put as any)(fileName, file, putOptions);
 
     // 返回文件URL
     return result.url;

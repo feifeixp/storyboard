@@ -1,9 +1,11 @@
-
+﻿
 import React, { useState, useRef, useEffect } from 'react';
-import { AppStep, Shot, ReviewSuggestion, CharacterRef, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight } from './types';
+import { AppStep, Shot, ReviewSuggestion, CharacterRef, CharacterForm, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight } from './types';
+import type { FormSummary } from './services/characterSupplement/types';
 import { StepTracker } from './components/StepTracker';
 import Login from './components/Login';
 import { isLoggedIn, logout, getUserInfo, getUserPoints, type PointsInfo } from './services/auth';
+import { isBaselineStateName, normalizeStateName } from './services/utils/stateNameUtils';  // 🆕 导入 baseline 判断工具
 // 使用 OpenRouter 统一 API（支持多模型切换）
 import {
   generateShotListStream,
@@ -51,7 +53,7 @@ import type { ScriptAnalysis, VisualStrategy, ShotPlanning, ShotDesign, QualityC
 import type { ShotListItem } from './prompts/chain-of-thought/stage4-shot-design';
 
 // 🆕 项目管理
-import { Project, Episode, ScriptFile, ProjectAnalysisResult } from './types/project';
+import { Project, Episode, ScriptFile, ProjectAnalysisResult, PROJECT_MEDIA_TYPES } from './types/project';
 import { ProjectList } from './components/ProjectList';
 import { ProjectWizard } from './components/ProjectWizard';
 import { ProjectDashboard } from './components/ProjectDashboard';
@@ -63,18 +65,26 @@ import {
   saveProject,
   saveEpisode,
   patchEpisode,
+  patchProject,  // 🆕 用于后台任务状态更新
   deleteProject,
   getCurrentProjectId,
   setCurrentProjectId,
   getProject,
   getEpisode,  // 🔧 获取单个剧集完整数据
 } from './services/d1Storage';
+// 🆕 角色补充服务
+import { autoSupplementMainCharacters } from './services/characterSupplement/autoSupplement';
+import { identifyMainCharacters } from './services/characterSupplement/identifyMainCharacters';
+import type { BeautyLevel } from './services/characterSupplement/types';
+import { getBeautyLevelByGenre } from './services/characterSupplement/getBeautyLevelByGenre';
 import { getGenerationResult, pollGenerationResult, TaskStatus } from './services/aiImageGeneration';
 import { analyzeProjectScriptsWithProgress, analyzeProjectScripts } from './services/projectAnalysis';
 import { BatchAnalysisProgress } from './types/project';
 // 🆕 本集概述生成
 import { generateEpisodeSummary } from './services/episodeSummaryGenerator';
 import { EpisodeSummaryPanel } from './components/EpisodeSummaryPanel';
+// 🆕 风格设置工具
+import { hasProjectStyle, getEffectiveStoryboardStyle } from './services/styleSettings';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -148,69 +158,15 @@ const App: React.FC = () => {
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
   const [userPoints, setUserPoints] = useState<PointsInfo | null>(null);
 
-  // 🆕 获取用户积分信息
-  useEffect(() => {
-    if (!loggedIn) return;
-
-    const fetchPoints = async () => {
-      try {
-        const points = await getUserPoints();
-        setUserPoints(points);
-      } catch (error) {
-        console.error('[App] 获取积分信息失败:', error);
-      }
-    };
-
-    fetchPoints();
-  }, [loggedIn]);
-
-  // 如果未登录，显示登录页面
-  if (!loggedIn) {
-    return <Login onLoginSuccess={() => setLoggedIn(true)} />;
-  }
-
   // ═══════════════════════════════════════════════════════════════
-  // 🆕 项目管理状态
+  // 🆕 项目管理状态（必须在条件返回之前声明所有Hooks）
   // ═══════════════════════════════════════════════════════════════
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const projectRef = useRef<Project | null>(null); // 🔧 用于在闭包中访问最新项目状态
   const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState<number | null>(() =>
     loadFromStorage(STORAGE_KEYS.CURRENT_EPISODE_NUMBER, null)  // 🔧 从 localStorage 恢复
   );
-
-  // 🆕 加载项目列表和当前项目（仅在登录后执行）
-  useEffect(() => {
-    if (!loggedIn) return;  // 🆕 只在登录后加载
-
-    const loadProjects = async () => {
-      const allProjects = await getAllProjects();
-      setProjects(allProjects);
-
-      // 加载当前项目
-      const id = getCurrentProjectId();
-      if (id) {
-        const project = await getProject(id);
-
-        // 🔧 如果项目不存在（404），清除当前项目ID并返回项目列表
-        if (!project) {
-          console.warn(`[App] 项目 ${id} 不存在，清除当前项目ID`);
-          setCurrentProjectId(null);
-          setCurrentProject(null);
-          setCurrentStep(AppStep.PROJECT_LIST);
-          alert('项目不存在或已被删除，请重新选择项目');
-          return;
-        }
-
-        setCurrentProject(project);
-      }
-    };
-
-    loadProjects();
-  }, [loggedIn]);  // 🆕 依赖 loggedIn 状态
-
-  // ═══════════════════════════════════════════════════════════════
-  // 原有状态
-  // ═══════════════════════════════════════════════════════════════
 
   // 🆕 从 localStorage 恢复状态（项目模式下从项目加载）
   const [currentStep, setCurrentStep] = useState<AppStep>(() => {
@@ -253,16 +209,16 @@ const App: React.FC = () => {
     loadFromStorage(STORAGE_KEYS.SHOTS, [])
   );
   const [suggestions, setSuggestions] = useState<ReviewSuggestion[]>([]);
-  const [selectedSuggestion, setSelectedSuggestion] = useState<ReviewSuggestion | null>(null); // 当前查看的建议详情
+  const [selectedSuggestion, setSelectedSuggestion] = useState<ReviewSuggestion | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [newCharName, setNewCharName] = useState('');
-  const [newCharAppearance, setNewCharAppearance] = useState(''); // 角色外观描述
+  const [newCharAppearance, setNewCharAppearance] = useState('');
   const [newCharGender, setNewCharGender] = useState<'男' | '女' | '未知'>('未知');
-  const [editingCharId, setEditingCharId] = useState<string | null>(null); // 正在编辑的角色ID
+  const [editingCharId, setEditingCharId] = useState<string | null>(null);
   const [streamText, setStreamText] = useState('');
 
-  // 🆕 Tab切换状态（用于统一的分镜编辑页面）
+  // 🆕 Tab切换状态
   const [currentTab, setCurrentTab] = useState<EditTab>('generate');
 
   // Chat / Edit State
@@ -270,52 +226,44 @@ const App: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() =>
     loadFromStorage(STORAGE_KEYS.CHAT_HISTORY, [])
   );
-  const chatScrollRef = useRef<HTMLDivElement>(null);
-	  // 🆕 记录当前选中的 episodeId + 恢复任务 token，避免快速切换剧集时“旧恢复任务”污染新剧集状态
-	  const selectedEpisodeIdRef = useRef<string | null>(null);
-	  const nineGridResumeTokenRef = useRef(0);
 
   // State for Step 4 Images
-  // 🆕 不再从 localStorage 加载 hqUrls（图片数据太大）
-  // hqUrls 是临时数据，每次生成时重新获取
   const [hqUrls, setHqUrls] = useState<string[]>([]);
 
-  // 🆕 九宫格上传对话框状态
+  // Upload Dialog State
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadGridIndex, setUploadGridIndex] = useState<number | null>(null);
   const [uploadUrl, setUploadUrl] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  // 🆕 模型选择状态 - 默认使用 Gemini 3 Flash Preview (最便宜的高质量模型)
-  const [analysisModel, setAnalysisModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 剧本分析模型
-  const [reviewModel, setReviewModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 审核优化模型
-  const [editModel, setEditModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW); // 编辑对话模型
-	// ✅ 生图模型：强制锁定 nanobanana-pro（服务层在会员限制时自动降级）
-	// 说明：UI 不再允许切换；服务层也会忽略传入模型并锁定到 nanobanana-pro。
-	const imageModel = 'nanobanana-pro';
+  // Model Selection State
+  const [analysisModel, setAnalysisModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW);
+  const [reviewModel, setReviewModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW);
+  const [editModel, setEditModel] = useState(MODELS.GEMINI_3_FLASH_PREVIEW);
+  const imageModel = 'nanobanana-pro'; // Locked image generation model
 
-  // 🆕 分镜草图风格选择
+  // Style Selection State
   const [selectedStyle, setSelectedStyle] = useState<StoryboardStyle>(STORYBOARD_STYLES[0]);
   const [customStylePrompt, setCustomStylePrompt] = useState('');
   const [showStyleCards, setShowStyleCards] = useState(false);
 
-  // 🆕 提示词提取状态
+  // Extract Progress State
   const [extractProgress, setExtractProgress] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
 
-  // 🆕 提示词自检状态
+  // Prompt Validation State
   const [promptValidationResults, setPromptValidationResults] = useState<ReviewSuggestion[]>([]);
   const [isValidatingPrompts, setIsValidatingPrompts] = useState(false);
 
-  // 🆕 角色提取状态
+  // Character Extraction State
   const [isExtractingChars, setIsExtractingChars] = useState(false);
 
-  // 🆕 项目重新分析状态
+  // Reanalyze State
   const [isReanalyzing, setIsReanalyzing] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState<BatchAnalysisProgress | null>(null);
   const [reanalyzeResult, setReanalyzeResult] = useState<ProjectAnalysisResult | null>(null);
 
-  // 🆕 剧本清洗状态（从localStorage恢复）
+  // Script Cleaning State
   const [cleaningResult, setCleaningResult] = useState<ScriptCleaningResult | null>(() =>
     loadFromStorage(STORAGE_KEYS.CLEANING_RESULT, null)
   );
@@ -324,8 +272,7 @@ const App: React.FC = () => {
   );
   const [isCleaning, setIsCleaning] = useState(false);
 
-  // 🆕 思维链模式状态
-  const [generationMode, setGenerationMode] = useState<'traditional' | 'chain-of-thought'>('chain-of-thought');
+  // Chain of Thought State
   const [cotCurrentStage, setCotCurrentStage] = useState<1 | 2 | 3 | 4 | 5 | null>(null);
   const [cotStage1, setCotStage1] = useState<ScriptAnalysis | null>(null);
   const [cotStage2, setCotStage2] = useState<VisualStrategy | null>(null);
@@ -334,8 +281,77 @@ const App: React.FC = () => {
   const [cotStage5, setCotStage5] = useState<QualityCheck | null>(null);
   const [cotRawOutput, setCotRawOutput] = useState<string>('');
 
-  // 🆕 本集概述状态（从思维链结果生成）
+  // Episode Summary State
   const [episodeSummary, setEpisodeSummary] = useState<import('./types/project').GeneratedEpisodeSummary | null>(null);
+
+  // CoT Progress Modal State
+  const [showCotProgressModal, setShowCotProgressModal] = useState(false);
+  const [cotProgressMinimized, setCotProgressMinimized] = useState(false);
+  const [cotError, setCotError] = useState<string | null>(null);
+  const [cotStartTime, setCotStartTime] = useState<number | null>(null);
+
+  // Refs
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const selectedEpisodeIdRef = useRef<string | null>(null);
+  const nineGridResumeTokenRef = useRef(0);
+
+  // 🆕 九宫格生成控制器（用于停止生成）
+  const [abortController, setAbortController] = React.useState<AbortController | null>(null);
+
+  // 🆕 九宫格生成时间跟踪
+  const [gridGenerationStartTime, setGridGenerationStartTime] = React.useState<number | null>(null);
+  const [currentGeneratingGrid, setCurrentGeneratingGrid] = React.useState<number | null>(null);
+
+  // 🆕 获取用户积分信息
+  useEffect(() => {
+    if (!loggedIn) return;
+
+    const fetchPoints = async () => {
+      try {
+        const points = await getUserPoints();
+        setUserPoints(points);
+      } catch (error) {
+        console.error('[App] 获取积分信息失败:', error);
+      }
+    };
+
+    fetchPoints();
+  }, [loggedIn]);
+
+  // 🆕 加载项目列表和当前项目（仅在登录后执行）
+  useEffect(() => {
+    if (!loggedIn) return;  // 🆕 只在登录后加载
+
+    const loadProjects = async () => {
+      const allProjects = await getAllProjects();
+      setProjects(allProjects);
+
+      // 加载当前项目
+      const id = getCurrentProjectId();
+      if (id) {
+        const project = await getProject(id);
+
+        // 🔧 如果项目不存在（404），清除当前项目ID并返回项目列表
+        if (!project) {
+          console.warn(`[App] 项目 ${id} 不存在，清除当前项目ID`);
+          setCurrentProjectId(null);
+          setCurrentProject(null);
+          setCurrentStep(AppStep.PROJECT_LIST);
+          alert('项目不存在或已被删除，请重新选择项目');
+          return;
+        }
+
+        setCurrentProject(project);
+      }
+    };
+
+    loadProjects();
+  }, [loggedIn]);  // 🆕 依赖 loggedIn 状态
+
+  // 🔧 同步 projectRef（用于在闭包中访问最新项目状态）
+  useEffect(() => {
+    projectRef.current = currentProject;
+  }, [currentProject]);
 
   // 🆕 Tab切换逻辑：当currentStep改变时，自动更新currentTab
   useEffect(() => {
@@ -430,6 +446,32 @@ const App: React.FC = () => {
     }
   }, [chatHistory, streamText]);
 
+  // 🆕 计算当前九宫格生成耗时
+  const [generationElapsedTime, setGenerationElapsedTime] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    if (!gridGenerationStartTime || currentGeneratingGrid === null) {
+      setGenerationElapsedTime(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - gridGenerationStartTime) / 1000);
+      setGenerationElapsedTime(elapsed);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [gridGenerationStartTime, currentGeneratingGrid]);
+
+  // 如果未登录，显示登录页面（在所有Hooks声明之后）
+  if (!loggedIn) {
+    return <Login onLoginSuccess={() => setLoggedIn(true)} />;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 原有状态（已移至条件返回之前）
+  // ═══════════════════════════════════════════════════════════════
+
   const handleScriptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -500,6 +542,40 @@ const App: React.FC = () => {
       }
 
       console.log(`[handleSelectProject] 加载项目: ${fullProject.name}`);
+
+      // 🆕 旧项目自动迁移：检测并补齐 projectStyleId
+      let needsMigration = false;
+      if (!fullProject.settings.projectStyleId && fullProject.settings.visualStyle) {
+        console.log('[旧项目迁移] 检测到旧项目，开始自动迁移...');
+        needsMigration = true;
+
+        // 获取媒体类型对应的英文渲染后缀
+        const mediaType = fullProject.settings.mediaType || 'ai-2d';
+        const aiPromptHint = PROJECT_MEDIA_TYPES[mediaType].aiPromptHint;
+
+        // 自动迁移：projectStyleId='custom'，使用旧 visualStyle 作为中文描述，aiPromptHint 作为英文后缀
+        fullProject.settings.projectStyleId = 'custom';
+        fullProject.settings.projectStyleCustomPromptCn = fullProject.settings.visualStyle;
+        fullProject.settings.projectStyleCustomPromptEn = aiPromptHint;
+        fullProject.settings.storyboardStyleOverride = null;
+
+        console.log('[旧项目迁移] 迁移完成：');
+        console.log('  - projectStyleId: custom');
+        console.log('  - projectStyleCustomPromptCn:', fullProject.settings.visualStyle);
+        console.log('  - projectStyleCustomPromptEn:', aiPromptHint);
+
+        // 持久化迁移结果
+        try {
+          await patchProject(fullProject.id, {
+            settings: fullProject.settings
+          });
+          console.log('[旧项目迁移] 迁移结果已持久化');
+        } catch (error) {
+          console.error('[旧项目迁移] 持久化失败:', error);
+          // 不阻断加载流程，仅记录错误
+        }
+      }
+
       setCurrentProject(fullProject);
       setCurrentProjectId(fullProject.id);
 
@@ -507,6 +583,13 @@ const App: React.FC = () => {
       if (fullProject.characters && fullProject.characters.length > 0) {
         setCharacterRefs(fullProject.characters);
         console.log(`[handleSelectProject] 加载了 ${fullProject.characters.length} 个角色`);
+      }
+
+      // 如果进行了迁移，提示用户
+      if (needsMigration) {
+        setTimeout(() => {
+          alert('✅ 旧项目已自动升级\n\n已为您的项目设置默认渲染风格。\n您可以在"角色设定"页面重新选择项目风格。');
+        }, 500);
       }
 
       // 进入项目主界面
@@ -533,6 +616,13 @@ const App: React.FC = () => {
 
   const handleProjectComplete = async (project: Project) => {
     try {
+      // 🆕 前置校验：确保已登录（强制登录策略）
+      if (!isLoggedIn()) {
+        alert('❌ 登录已失效\n\n请重新登录后再保存项目');
+        setLoggedIn(false);
+        return;
+      }
+
       // ⚠️ 创建项目完成时需要把 episodes 一并落库（episodes 表）
       await saveProject(project, { includeEpisodes: true });
       const allProjects = await getAllProjects();
@@ -545,8 +635,32 @@ const App: React.FC = () => {
       }
       // 🆕 进入项目主界面
       setCurrentStep(AppStep.PROJECT_DASHBOARD);
+
+      // 🆕 启动后台角色补全（不阻塞 UI）
+      // 🔧 修复：同时检查顶层 status（ProjectWizard 初始化时设置）和 perCharacter（恢复场景）
+      // - ProjectWizard 完成后：supplement.status === 'queued'，perCharacter 为空
+      // - 页面刷新恢复场景：supplement.status 可能已更新，但 perCharacter 中仍有 queued 角色
+      const supplement = project.settings?.backgroundJobs?.supplement;
+      const hasQueuedSupplements =
+        supplement?.status === 'queued' ||
+        Object.values(supplement?.perCharacter || {}).some(c => c.status === 'queued');
+      if (hasQueuedSupplements) {
+        runBackgroundSupplement(project).catch(err => {
+          console.error('[后台补全启动失败]', err);
+        });
+      }
     } catch (error) {
       console.error('[项目保存失败]', error);
+
+      // 🆕 检查是否为认证错误
+      const isAuthError = error instanceof Error &&
+        ((error as any).code === 'AUTH_REQUIRED' || error.message.includes('Unauthorized'));
+
+      if (isAuthError) {
+        alert('❌ 登录已失效\n\n请重新登录后再保存项目');
+        setLoggedIn(false);
+        return;
+      }
 
       // 显示友好的错误提示
       const errorMessage = error instanceof Error ? error.message : '未知错误';
@@ -563,6 +677,596 @@ const App: React.FC = () => {
 
   const handleProjectCancel = () => {
     setCurrentStep(AppStep.PROJECT_LIST);
+  };
+
+  /**
+   * 🆕 后台角色补全流水线
+   * 在项目创建后自动运行，不阻塞 UI
+   */
+  const runBackgroundSupplement = async (project: Project) => {
+    console.log('[后台补全] 🚀 开始后台角色补充...');
+
+    // 🆕 前置校验：确保已登录（强制登录策略）
+    if (!isLoggedIn()) {
+      console.error('[后台补全] 未登录，中止后台补全');
+      alert('❌ 登录已失效\n\n后台补全需要登录，请重新登录');
+      setLoggedIn(false);
+      return;
+    }
+
+    // 🆕 生成本次补全任务的 runId（用于隔离不同任务的进度更新）
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    console.log(`[后台补全] 本次任务 runId: ${runId}`);
+
+    const startedAt = new Date().toISOString();
+    let lastProgressUpdate = 0; // 节流：避免频繁更新 UI
+
+    // 🆕 写库串行队列（解决 AbortError）
+    const writeQueue: Array<() => Promise<void>> = [];
+    let isWriting = false;
+
+    const processWriteQueue = async () => {
+      if (isWriting || writeQueue.length === 0) return;
+      isWriting = true;
+
+      while (writeQueue.length > 0) {
+        const task = writeQueue.shift();
+        if (task) {
+          try {
+            await task();
+          } catch (err) {
+            console.error('[写库队列] 任务执行失败:', err);
+          }
+        }
+      }
+
+      isWriting = false;
+    };
+
+    const queuedPatchProject = (projectId: string, patch: any): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        writeQueue.push(async () => {
+          try {
+            await patchProject(projectId, patch);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        });
+        processWriteQueue();
+      });
+    };
+
+    // 🆕 5秒节流写库（非终态合并写，终态立即 flush）
+    let pendingPatch: any = null;
+    let throttleTimer: NodeJS.Timeout | null = null;
+
+    const throttledPatchProject = async (projectId: string, patch: any, isTerminal: boolean = false) => {
+      if (isTerminal) {
+        // 终态立即 flush
+        if (throttleTimer) {
+          clearTimeout(throttleTimer);
+          throttleTimer = null;
+        }
+        if (pendingPatch) {
+          await queuedPatchProject(projectId, pendingPatch);
+          pendingPatch = null;
+        }
+        await queuedPatchProject(projectId, patch);
+        console.log('[写库队列] 🚀 终态立即写入');
+      } else {
+        // 非终态合并
+        pendingPatch = pendingPatch ? { ...pendingPatch, ...patch } : patch;
+
+        if (!throttleTimer) {
+          throttleTimer = setTimeout(async () => {
+            if (pendingPatch) {
+              await queuedPatchProject(projectId, pendingPatch);
+              console.log('[写库队列] ⏱️ 5秒节流写入');
+              pendingPatch = null;
+            }
+            throttleTimer = null;
+          }, 5000);
+        }
+      }
+    };
+
+    // 🔧 辅助函数：更新单个角色的补全进度
+    // 🆕 进度更新互斥队列（防止并发覆盖）
+    let progressUpdateQueue = Promise.resolve();
+
+    // 🆕 修改A：添加单调递增/终态优先保护
+    // 🆕 修改B：添加 runId 隔离
+    // 🔧 修复：添加互斥锁，防止并发更新导致状态覆盖
+    const updateCharacterProgress = async (
+      characterId: string,
+      update: {
+        status: 'queued' | 'running' | 'complete' | 'error';
+        message?: string;
+        stage?: string;
+        progress?: number;
+        errorMessage?: string;
+      }
+    ) => {
+      // 🔧 修复：将更新操作加入队列，确保串行执行（避免并发覆盖）
+      progressUpdateQueue = progressUpdateQueue.then(async () => {
+        try {
+          const now = Date.now();
+
+          // 🔧 使用 projectRef.current 获取最新项目状态，避免并发覆盖
+          const latestProject = projectRef.current || project;
+
+          // 🆕 修改A：获取当前角色的进度状态
+          const currentProgress = latestProject.settings?.backgroundJobs?.supplement?.perCharacter?.[characterId];
+
+          // 🆕 修改B：runId 隔离 - 只接受当前 runId 的更新
+          if (currentProgress?.runId && currentProgress.runId !== runId) {
+            console.log(`[后台补全] ⚠️ 拒绝更新：角色 ${characterId} 当前 runId=${currentProgress.runId}，忽略 runId=${runId} 更新（可能是旧任务）`);
+            return;
+          }
+
+      // 🆕 修改A：定义 status rank（数值越大优先级越高）
+      const statusRank = {
+        'queued': 0,
+        'running': 1,
+        'complete': 2,
+        'error': 2
+      };
+
+      // 🆕 修改A：定义 stage rank（数值越大优先级越高）
+      const stageRank: Record<string, number> = {
+        'start': 0,
+        'stage1': 1,
+        'stage2': 2,
+        'stage3': 3,
+        'stage4': 4,
+        'stage5': 5,     // 🔧 方案B：补全 stage5
+        'stage5.5': 5.5, // 🔧 修复：添加 stage5.5（智能形态补全）
+        'merge': 6,      // 🔧 方案B：调整 merge rank
+        'complete': 7,   // 🔧 方案B：调整 complete rank
+        'error': 7       // 🔧 方案B：调整 error rank
+      };
+
+      // 🆕 修改A：单调递增保护 - 如果当前状态优先级更高，拒绝更新
+      if (currentProgress) {
+        const currentStatusRank = statusRank[currentProgress.status] || 0;
+        const newStatusRank = statusRank[update.status] || 0;
+
+        // 🔧 方案B：stage 缺失/未知时的兜底策略
+        const currentStage = currentProgress.stage || '';
+        const newStage = update.stage || currentStage; // 若 update.stage 为空，兜底到当前 stage
+
+        const currentStageRank = stageRank[currentStage] || 0;
+        let newStageRank = stageRank[newStage];
+
+        // 若 newStage 不在映射表中（未知 stage），打印警告并视为不推进 stage
+        if (newStageRank === undefined) {
+          console.warn(`[后台补全] ⚠️ 未知 stage 值: "${newStage}"，视为不推进 stage（使用当前 rank）`);
+          newStageRank = currentStageRank; // 使用当前 rank，避免误判为回退
+        }
+
+        // 🔧 添加详细日志，追踪状态更新
+        console.log(`[后台补全] 🔍 状态更新检查: ${characterId} | 当前: ${currentStage}(rank=${currentStageRank}, status=${currentProgress.status}) → 新: ${newStage}(rank=${newStageRank}, status=${update.status})`);
+
+        // 终态优先：complete/error 不能被 running/queued 覆盖
+        if (currentStatusRank >= 2 && newStatusRank < 2) {
+          console.log(`[后台补全] ⚠️ 拒绝更新：角色 ${characterId} 已处于终态 ${currentProgress.status}，忽略 ${update.status} 更新`);
+          return;
+        }
+
+        // Stage 级别保护：高级别 stage 不能被低级别覆盖
+        if (currentStageRank > newStageRank) {
+          console.log(`[后台补全] ⚠️ 拒绝更新：角色 ${characterId} 当前 stage=${currentStage}(rank=${currentStageRank})，忽略 stage=${newStage}(rank=${newStageRank}) 更新`);
+          return;
+        }
+
+        // 🔧 添加成功更新日志
+        console.log(`[后台补全] ✅ 允许更新：角色 ${characterId} 从 ${currentStage} → ${newStage}`);
+      } else {
+        // 🔧 添加首次更新日志
+        console.log(`[后台补全] 🆕 首次更新：角色 ${characterId} stage=${update.stage}, status=${update.status}`);
+      }
+
+      const newSettings = {
+        ...latestProject.settings,
+        backgroundJobs: {
+          ...(latestProject.settings?.backgroundJobs || {}),
+          supplement: {
+            perCharacter: {
+              ...(latestProject.settings?.backgroundJobs?.supplement?.perCharacter || {}),
+              [characterId]: {
+                ...update,
+                runId, // 🆕 记录 runId
+                startTime: latestProject.settings?.backgroundJobs?.supplement?.perCharacter?.[characterId]?.startTime || now,
+                endTime: update.status === 'complete' || update.status === 'error' ? now : undefined
+              }
+            }
+          }
+        }
+      };
+
+      // 1. 持久化到 D1（使用节流写库）
+      const isTerminal = update.status === 'complete' || update.status === 'error';
+      try {
+        await throttledPatchProject(project.id, { settings: newSettings }, isTerminal);
+      } catch (err) {
+        console.warn('[后台补全] DB 更新失败:', err);
+        // 🆕 检查是否为认证错误
+        const isAuthError = err instanceof Error &&
+          ((err as any).code === 'AUTH_REQUIRED' || err.message.includes('Unauthorized'));
+        if (isAuthError) {
+          console.error('[后台补全] 认证失败，中止后台补全');
+          setLoggedIn(false);
+          throw err; // 抛出错误，中止后台补全
+        }
+      }
+
+      // 2. 同步到 React 状态（🔧 使用函数式更新避免闭包旧值）
+      setCurrentProject(prev =>
+        prev?.id === project.id
+          ? { ...prev, settings: newSettings }
+          : prev
+      );
+
+      // 🔧 修复：立即同步更新 projectRef.current，确保下一次更新读取到最新状态
+      if (projectRef.current?.id === project.id) {
+        projectRef.current = { ...projectRef.current, settings: newSettings };
+      }
+        } catch (err) {
+          console.error('[后台补全] 进度更新失败:', err);
+        }
+      }).catch(err => {
+        console.error('[后台补全] 进度更新队列异常:', err);
+      });
+
+      // 等待队列完成（确保更新已执行）
+      await progressUpdateQueue;
+    };
+
+    try {
+      // 🔧 修复：C1 策略 - 检查 genre 是否为空，为空则阻止后台补全
+      const genre = project.settings?.genre || '';
+      if (!genre) {
+        console.error('[后台补全] ❌ 剧本类型为空，无法确定美型等级，请先在项目设置中选择题材类型或运行项目分析');
+        alert('⚠️ 剧本类型未设置\n\n请先在项目设置中选择题材类型（如：女频言情、古装仙侠等），或运行项目分析自动识别题材。\n\n这将影响角色外貌的美学标准选择。');
+
+        // 标记后台任务为 error
+        await patchProject(project.id, {
+          settings: {
+            ...project.settings,
+            backgroundJobs: {
+              ...(project.settings?.backgroundJobs || {}),
+              supplement: {
+                status: 'error',
+                startedAt: project.settings?.backgroundJobs?.supplement?.startedAt,
+                completedAt: new Date().toISOString(),
+                error: '剧本类型未设置，无法确定美型等级'
+              }
+            }
+          }
+        });
+        return;
+      }
+
+      // 1. 准备剧本数据
+      const scripts: ScriptFile[] = project.episodes.map(ep => ({
+        episodeNumber: ep.episodeNumber,
+        content: ep.script || '',
+        fileName: `第${ep.episodeNumber}集`
+      }));
+
+      // 2. 智能选择美型等级（基于剧本类型）
+      const beautyLevel = getBeautyLevelByGenre(genre);
+
+      console.log(`[后台补全] 剧本类型: ${genre} → 美型等级: ${beautyLevel}`);
+
+      // 3. 执行补全（🔧 方案A：清空主要角色 appearance 草稿，强制走 CoT）
+      // 🆕 使用用户在向导中勾选的主角（通过 description 中的【主角】标记识别）
+      // 而不是用 identifyMainCharacters 重新识别
+      const mainChars = (project.characters || []).filter(c =>
+        c.description?.includes('【主角】') || c.role === '主角'
+      );
+      const mainIds = new Set(mainChars.map(c => c.id));
+
+      console.log(`[后台补全] 使用用户勾选的主角（${mainChars.length} 个）:`, mainChars.map(c => c.name));
+
+      // 🔧 初始化所有主要角色的进度为 queued
+      for (const char of mainChars) {
+        await updateCharacterProgress(char.id, {
+          status: 'queued',
+          stage: 'start', // 🆕 修复：明确指定 stage，避免 undefined
+          message: '等待补全...'
+        });
+      }
+
+      // 🆕 清空主要角色 appearance（内存 + DB），确保 UI 不闪现旧描述
+      const charactersForSupplement = (project.characters || []).map(c =>
+        mainIds.has(c.id) ? { ...c, appearance: '' } : c
+      );
+
+      // 🆕 立即写回 DB（清空主要角色 appearance）
+      try {
+        await patchProject(project.id, {
+          characters: charactersForSupplement
+        });
+        console.log(`[后台补全] 🔧 已清空 ${mainIds.size} 个主要角色的 appearance（DB + 内存），强制触发 CoT 生成`);
+      } catch (err) {
+        console.warn('[后台补全] 清空 appearance 写 DB 失败:', err);
+      }
+
+      // 🆕 同步到 React 状态（让 UI 立即看到置空效果）
+      setCurrentProject(prev =>
+        prev?.id === project.id
+          ? { ...prev, characters: charactersForSupplement }
+          : prev
+      );
+      if (currentProject?.id === project.id) {
+        setCharacterRefs(charactersForSupplement);
+      }
+
+      const updatedCharacters = await autoSupplementMainCharacters(
+        charactersForSupplement,
+        scripts,
+        {
+          projectId: project.id, // 🆕 传入 projectId 实现缓存强隔离
+          maxCharacters: 5,
+          minAppearances: 0,
+          mode: 'detailed', // 🔧 统一使用 optimized 版思维链（Stage3 深度设计，质量更高）
+          beautyLevel,
+          fixedMainCharacterIds: Array.from(mainIds),  // 🆕 使用用户勾选的主角
+          onProgress: async (progress) => {
+            console.log(`[后台补全] 进度: ${progress.current}/${progress.total} - ${progress.characterName} - ${progress.stage}`);
+
+            // 🔧 变更B：终态绕过节流，确保 UI 一定能看到 complete
+            const isTerminalStatus = ['merge', 'complete', 'error'].includes(progress.stage);
+
+            // 节流：每 500ms 最多更新一次 UI（终态除外）
+            const now = Date.now();
+            if (!isTerminalStatus && now - lastProgressUpdate < 500) return;
+            lastProgressUpdate = now;
+
+            // 🔧 更新当前角色的进度
+            const currentChar = mainChars.find(c => c.name === progress.characterName);
+            if (currentChar) {
+              // 🔧 如果是 complete 阶段，强制设置 status='complete' 和 progress=100
+              const status = progress.stage === 'complete' ? 'complete' : 'running';
+              const progressPercent = progress.stage === 'complete'
+                ? 100
+                : Math.round((progress.current / progress.total) * 100);
+
+              await updateCharacterProgress(currentChar.id, {
+                status,
+                message: progress.message || progress.stage,
+                stage: progress.stage,
+                progress: progressPercent
+              });
+            }
+          },
+          // 🆕 onStageComplete：分段写回（解决"要等全部角色才显示"）
+          onStageComplete: async (charId, charName, stage, result) => {
+            console.log(`[后台补全] 🎯 角色"${charName}"完成 ${stage}`);
+
+            // 找到对应角色
+            const currentChar = charactersForSupplement.find(c => c.id === charId);
+            if (!currentChar) return;
+
+            // 更新内存中的角色数据
+            const updatedChar = { ...currentChar };
+
+            if (stage === 'stage3' && result.appearance) {
+              updatedChar.appearance = result.appearance;
+              console.log(`[后台补全] ✅ 角色"${charName}" Stage3 完成，立即更新 appearance（含【主体人物】【外貌特征】）`);
+            } else if (stage === 'stage4' && result.appearance) {
+              // 🔧 修复：Stage4 回调传的是 { appearance: mergedAppearance }，不是 { costume }
+              // 旧代码判断 result.costume（永远 false），导致 Stage4 分段写回从未生效
+              updatedChar.appearance = result.appearance;
+              console.log(`[后台补全] ✅ 角色"${charName}" Stage4 完成，立即更新 appearance（含【服饰造型】）`);
+            } else if (stage === 'stage5.5' && result.formSummaries && result.formSummaries.length > 0) {
+              // 🔄 Phase 1 轻量扫描结果：立即写库（解决"要等全部角色才能看到 formSummaries"的问题）
+              // 从 projectRef.current 获取最新 formSummaries，再合并新扫描的（去重基于 name）
+              const latestChar = (projectRef.current?.characters || []).find(c => c.id === charId);
+              const existingSummaries = (latestChar?.formSummaries || []) as FormSummary[];
+              const existingNames = new Set(existingSummaries.map(f => f.name));
+              const newUnique = (result.formSummaries as FormSummary[]).filter(f => !existingNames.has(f.name));
+              updatedChar.formSummaries = [...existingSummaries, ...newUnique];
+              console.log(`[后台补全] ✅ 角色"${charName}" Stage5.5 完成，立即更新 formSummaries（已有${existingSummaries.length}个，新增${newUnique.length}个，共${updatedChar.formSummaries.length}个）`);
+            }
+
+            // 立即写库（终态）
+            const latestProject = projectRef.current || project;
+            const updatedCharacters = (latestProject.characters || []).map(c =>
+              c.id === charId ? updatedChar : c
+            );
+
+            try {
+              await throttledPatchProject(project.id, { characters: updatedCharacters }, true);
+              console.log(`[后台补全] 💾 角色"${charName}" ${stage} 结果已写库`);
+
+              // 同步到 React 状态
+              setCurrentProject(prev =>
+                prev?.id === project.id
+                  ? { ...prev, characters: updatedCharacters }
+                  : prev
+              );
+              setCharacterRefs(updatedCharacters);
+
+              // 🔧 修复Bug C：同步 projectRef.current.characters
+              // 原因：onStageComplete 只更新 React State，但 projectRef.current 是闭包引用
+              // 若不同步，后续 upsert 的 latestProject = projectRef.current 读到的是旧数据
+              // 导致最后的"强制 upsert 基底"逻辑用空 appearance 覆盖已生成的结果
+              if (projectRef.current?.id === project.id) {
+                projectRef.current = { ...projectRef.current, characters: updatedCharacters };
+              }
+            } catch (err) {
+              console.error(`[后台补全] ❌ 角色"${charName}" ${stage} 写库失败:`, err);
+            }
+          }
+        }
+      );
+
+      // 5. 🔄 Phase 1 轻量形态摘要扫描（只提取元数据，不生成设定图）
+      // 三阶段设计：Phase1=自动轻量扫描（本步骤）→ Phase2=用户审查 → Phase3=按需详细生成
+      console.log('[后台补全] 🔍 开始 Phase 1 轻量形态摘要扫描...');
+
+      const { extractFormSummaries: extractFormSummariesFn } = await import('./services/characterSupplement/extractCharacterStates');
+
+      const charactersWithStates = await Promise.all(
+        updatedCharacters.map(async (character) => {
+          // 只为主要角色扫描形态摘要
+          if (!mainIds.has(character.id)) {
+            return character;
+          }
+
+          try {
+            console.log(`[后台补全] 🔍 Phase 1 扫描角色"${character.name}"的形态摘要...`);
+
+            const summaries = await extractFormSummariesFn(
+              character,
+              scripts,
+              'google/gemini-2.5-flash'
+            );
+
+            if (summaries.length === 0) {
+              console.log(`[后台补全] 角色"${character.name}"未检测到外观变化形态`);
+              return character;
+            }
+
+            console.log(`[后台补全] ✅ 角色"${character.name}"识别到 ${summaries.length} 个形态摘要`);
+
+            // 合并已有 formSummaries（去重基于 name）
+            const existingSummaries = (character.formSummaries || []) as FormSummary[];
+            const existingNames = new Set(existingSummaries.map(f => f.name));
+            const newUnique = summaries.filter(f => !existingNames.has(f.name));
+
+            return {
+              ...character,
+              formSummaries: [...existingSummaries, ...newUnique]
+            };
+          } catch (error) {
+            console.error(`[后台补全] ❌ 角色"${character.name}"形态摘要扫描失败:`, error);
+            // 失败不影响其他角色，返回原角色
+            return character;
+          }
+        })
+      );
+
+      console.log('[后台补全] 🔍 Phase 1 形态摘要扫描完成（Phase 3 详细生成需用户触发）');
+
+      // 🆕 修改D：为每个主要角色强制 upsert「常规状态（完好）」基底（从 character.appearance）
+      console.log('[后台补全] 🛡️ 开始强制 upsert 常规完好基底...');
+      const charactersWithBaseline = charactersWithStates.map(character => {
+        // 只为主要角色生成基底
+        if (!mainIds.has(character.id)) {
+          return character;
+        }
+
+        // 🔧 修复：autoSupplement 失败时（如 Stage5.5 崩溃），character.appearance 可能为空。
+        // 此时尝试从 projectRef.current 恢复——onStageComplete 已将 Stage3/Stage4 结果写入 React state，
+        // projectRef.current 是最新快照，包含实际已生成的 appearance。
+        let recoveredAppearance = character.appearance;
+        if (!recoveredAppearance || recoveredAppearance.trim().length === 0) {
+          const latestChar = (projectRef.current?.characters || []).find(c => c.id === character.id);
+          if (latestChar?.appearance && latestChar.appearance.trim().length > 0) {
+            recoveredAppearance = latestChar.appearance;
+            console.log(`[后台补全] 🔄 角色"${character.name}"从 projectRef.current 恢复 appearance（长度: ${recoveredAppearance.length}）`);
+          }
+        }
+
+        // 如果仍然为空，无法生成基底
+        if (!recoveredAppearance || recoveredAppearance.trim().length === 0) {
+          console.log(`[后台补全] ⚠️ 角色"${character.name}"没有 appearance，无法生成基底`);
+          return character;
+        }
+
+        console.log(`[后台补全] 🔧 为角色"${character.name}"强制 upsert 常规完好基底（从 appearance，长度: ${recoveredAppearance.length}）`);
+
+        // 🆕 强制 upsert：移除旧的 baseline（使用归一化判断）
+        const otherForms = (character.forms || []).filter(f => !isBaselineStateName(f.name));
+
+        const normalForm: CharacterForm = {
+          id: `${character.id}-normal-baseline`,
+          name: '常规状态（完好）',
+          episodeRange: '',
+          description: recoveredAppearance, // 🔧 使用 CoT 生成的外观描述（唯一真相来源）
+          note: '', // 🆕 去掉来源标记
+          visualPromptCn: '',
+          visualPromptEn: '',
+          imageSheetUrl: '',
+          imageGenerationMeta: {
+            modelName: '',
+            styleName: '',
+            generatedAt: new Date().toISOString()
+          },
+          // 🔧 添加元数据标记
+          changeType: 'costume' as any,
+          priority: 100 as any
+        };
+
+        return {
+          ...character,
+          appearance: recoveredAppearance, // 🔧 同步更新 character.appearance，确保最终写库时字段正确
+          forms: [normalForm, ...otherForms] // 🔧 基底放最前面
+        };
+      });
+
+      console.log('[后台补全] 🛡️ 常规完好基底强制 upsert 完成');
+
+      // 6. 🔧 标记所有主要角色为完成
+      for (const char of mainChars) {
+        await updateCharacterProgress(char.id, {
+          status: 'complete',
+          stage: 'complete', // 🔧 方案B：补充 stage 字段，避免 undefined
+          message: '补全完成',
+          progress: 100
+        });
+      }
+
+      // 7. 更新角色到数据库
+      await patchProject(project.id, {
+        characters: charactersWithBaseline // 🆕 修改D：使用包含基底的角色
+      });
+
+      console.log('[后台补全] ✅ 补充完成');
+
+      // 🔧 更新每个角色的进度为 complete（避免UI卡在merge）
+      for (const char of mainChars) {
+        await updateCharacterProgress(char.id, {
+          status: 'complete',
+          stage: 'complete',
+          progress: 100,
+          message: '✅ 补充完成'
+        });
+      }
+
+      // 8. 刷新当前项目（🔧 修正状态同步 bug：使用 charactersWithBaseline）
+      setCurrentProject(prev =>
+        prev?.id === project.id
+          ? { ...prev, characters: charactersWithBaseline }
+          : prev
+      );
+
+      // 同步角色库（如果是当前项目）
+      if (currentProject?.id === project.id) {
+        setCharacterRefs(charactersWithBaseline);
+      }
+
+    } catch (error) {
+      console.error('[后台补全] ❌ 补充失败:', error);
+
+      // 🔧 标记所有主要角色为错误
+      const mainChars = identifyMainCharacters(
+        project.characters || [],
+        { minAppearances: 0, maxCount: 5 }
+      );
+
+      for (const char of mainChars) {
+        await updateCharacterProgress(char.id, {
+          status: 'error',
+          stage: 'error', // 🔧 方案B：补充 stage 字段，避免 undefined
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        });
+      }
+    }
   };
 
   const handleAnalyzeProject = async (
@@ -1247,13 +1951,11 @@ const App: React.FC = () => {
   const startShotListGeneration = async () => {
     if (!script.trim()) return alert("请输入脚本内容");
 
-    // 根据模式选择生成方式
-    if (generationMode === 'chain-of-thought') {
-      await startChainOfThoughtGeneration();
-      return;
-    }
+    // 🔧 强制使用思维链模式
+    await startChainOfThoughtGeneration();
+    return;
 
-    // 传统模式
+    // 🗑️ 已移除传统模式（下方代码保留但不会执行）
     setShots([]);
     setStreamText('');
     setSuggestions([]);
@@ -1283,31 +1985,372 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * 🆕 检查是否有已保存的思维链状态（用于断点续传）
+   */
+  const checkSavedCotProgress = (): { hasProgress: boolean; lastStage: number; data: any } => {
+    try {
+      const stage1 = localStorage.getItem(STORAGE_KEYS.COT_STAGE1);
+      const stage2 = localStorage.getItem(STORAGE_KEYS.COT_STAGE2);
+      const stage3 = localStorage.getItem(STORAGE_KEYS.COT_STAGE3);
+      const stage4 = localStorage.getItem(STORAGE_KEYS.COT_STAGE4);
+      const stage5 = localStorage.getItem(STORAGE_KEYS.COT_STAGE5);
+
+      let lastStage = 0;
+      const data: any = {};
+
+      if (stage1) {
+        data.stage1 = JSON.parse(stage1);
+        lastStage = 1;
+      }
+      if (stage2) {
+        data.stage2 = JSON.parse(stage2);
+        lastStage = 2;
+      }
+      if (stage3) {
+        data.stage3 = JSON.parse(stage3);
+        lastStage = 3;
+      }
+      if (stage4) {
+        data.stage4 = JSON.parse(stage4);
+        lastStage = 4;
+      }
+      if (stage5) {
+        data.stage5 = JSON.parse(stage5);
+        lastStage = 5;
+      }
+
+      return { hasProgress: lastStage > 0, lastStage, data };
+    } catch (error) {
+      console.error('检查保存的进度失败:', error);
+      return { hasProgress: false, lastStage: 0, data: {} };
+    }
+  };
+
+  /**
+   * 🆕 清除已保存的思维链进度
+   */
+  const clearSavedCotProgress = () => {
+    localStorage.removeItem(STORAGE_KEYS.COT_STAGE1);
+    localStorage.removeItem(STORAGE_KEYS.COT_STAGE2);
+    localStorage.removeItem(STORAGE_KEYS.COT_STAGE3);
+    localStorage.removeItem(STORAGE_KEYS.COT_STAGE4);
+    localStorage.removeItem(STORAGE_KEYS.COT_STAGE5);
+    localStorage.removeItem('storyboard_cot_stage1_raw');
+    localStorage.removeItem('storyboard_cot_stage2_raw');
+    localStorage.removeItem('storyboard_cot_stage3_raw');
+    localStorage.removeItem('storyboard_cot_stage5_raw');
+    console.log('✅ 已清除保存的思维链进度');
+  };
+
   // 🆕 思维链5阶段生成
-  const startChainOfThoughtGeneration = async () => {
+  const startChainOfThoughtGeneration = async (resumeFromStage?: number) => {
     setShots([]);
     setStreamText('');
     setSuggestions([]);
     setCotRawOutput('');
     setCotCurrentStage(null);
-    setCotStage1(null);
-    setCotStage2(null);
-    setCotStage3(null);
-    setCotStage4(null);
-    setCotStage5(null);
     setCurrentStep(AppStep.GENERATE_LIST);
     setIsLoading(true);
 
+    // 🆕 显示进度对话框
+    setShowCotProgressModal(true);
+    setCotProgressMinimized(false);
+    setCotError(null);
+    setCotStartTime(Date.now());
+
+    // 🆕 检查是否从断点恢复
+    let stage1Result: any = null;
+    let stage2Result: any = null;
+    let stage3Result: any = null;
+    const allDesignedShots: ShotDesign[] = [];
+
+    const savedProgress = checkSavedCotProgress();
+    const startFromStage = resumeFromStage || (savedProgress.hasProgress ? savedProgress.lastStage + 1 : 1);
+
+    if (savedProgress.hasProgress && !resumeFromStage) {
+      const confirmResume = confirm(
+        `检测到上次生成在阶段${savedProgress.lastStage}中断。\n\n` +
+        `是否从阶段${savedProgress.lastStage + 1}继续？\n\n` +
+        `点击"确定"继续，点击"取消"重新开始`
+      );
+
+      if (!confirmResume) {
+        clearSavedCotProgress();
+        setCotStage1(null);
+        setCotStage2(null);
+        setCotStage3(null);
+        setCotStage4(null);
+        setCotStage5(null);
+      } else {
+        // 恢复已保存的状态
+        if (savedProgress.data.stage1) {
+          stage1Result = savedProgress.data.stage1;
+          setCotStage1(stage1Result);
+          setStreamText('【阶段1】剧本分析\n\n✅ 已从保存的进度恢复\n\n');
+        }
+        if (savedProgress.data.stage2) {
+          stage2Result = savedProgress.data.stage2;
+          setCotStage2(stage2Result);
+          setStreamText(prev => prev + '【阶段2】视觉策略\n\n✅ 已从保存的进度恢复\n\n');
+        }
+        if (savedProgress.data.stage3) {
+          stage3Result = savedProgress.data.stage3;
+          setCotStage3(stage3Result);
+          setStreamText(prev => prev + '【阶段3】镜头分配\n\n✅ 已从保存的进度恢复\n\n');
+        }
+        if (savedProgress.data.stage4) {
+          allDesignedShots.push(...savedProgress.data.stage4);
+          setCotStage4(savedProgress.data.stage4);
+          setStreamText(prev => prev + '【阶段4】逐镜设计\n\n✅ 已从保存的进度恢复\n\n');
+        }
+        if (savedProgress.data.stage5) {
+          setCotStage5(savedProgress.data.stage5);
+          setStreamText(prev => prev + '【阶段5】质量自检\n\n✅ 已从保存的进度恢复\n\n');
+        }
+      }
+    }
+
+    // 🔧 辅助函数：将设计结果转换为Shot格式（移到外部作用域，确保所有阶段都可访问）
+    const convertDesignToShot = (rawDesign: any, idx: number): Shot => {
+      const shotList = stage3Result?.shotList || [];
+      const design = rawDesign.design || rawDesign;
+      const comp = design.composition || {};
+      const lightingData = design.lighting || {};
+      const camera = design.camera || {};
+      const characters = design.characters || {};
+      const aiPrompt = rawDesign.aiPrompt || {};
+      const storyBeatData = rawDesign.storyBeat || {};
+
+      const shotSize = comp.shotSize || design.shotSize || rawDesign.shotSize || 'MS';
+      const cameraAngle = comp.cameraAngle || design.cameraAngle || rawDesign.cameraAngle || '轻微仰拍(Mild Low)';
+      const cameraDirection = comp.cameraDirection || design.cameraDirection || rawDesign.cameraDirection || '3/4正面(3/4 Front)';
+
+      if (idx === 0) {
+        console.log('[convertDesignToShot] 第一个镜头的数据结构:', {
+          shotNumber: rawDesign.shotNumber,
+          shotSize: { comp: comp.shotSize, design: design.shotSize, raw: rawDesign.shotSize, final: shotSize },
+          cameraAngle: { comp: comp.cameraAngle, design: design.cameraAngle, raw: rawDesign.cameraAngle, final: cameraAngle },
+          cameraDirection: { comp: comp.cameraDirection, design: design.cameraDirection, raw: rawDesign.cameraDirection, final: cameraDirection }
+        });
+      }
+
+      const depthLayers = comp.depthLayers || {};
+      const fg = depthLayers.foreground || comp.foreground || '';
+      const mg = depthLayers.midground || comp.midground || '';
+      const bg = depthLayers.background || comp.background || '';
+
+      const lightingDesc = lightingData.description || lightingData.mood ||
+                          (lightingData.keyLight ? `主光:${lightingData.keyLight}` : '');
+
+      const cameraMovement = camera.movement || '固定';
+      const cameraSpeed = camera.speed || '';
+
+      const visualDesignText = [
+        `【景别】${shotSize}`,
+        `【角度】${cameraAngle} + ${cameraDirection}`,
+        `【透视】${comp.perspective || '标准透视'}`,
+        `【构图】${comp.framing || ''}`,
+        `  FG: ${fg}`,
+        `  MG: ${mg}`,
+        `  BG: ${bg}`,
+        `【光影】${lightingDesc}`,
+        cameraMovement && cameraMovement !== '固定' ? `【运镜】${cameraMovement}${cameraSpeed ? ` (${cameraSpeed})` : ''}` : ''
+      ].filter(Boolean).join('\n');
+
+      const storyEvent = storyBeatData.event ||
+                        characters.actions ||
+                        shotList[idx]?.briefDescription ||
+                        `镜头${idx + 1}`;
+
+      const dialogue = storyBeatData.dialogue || '';
+
+      const isMoving = cameraMovement && cameraMovement !== '固定' && cameraMovement !== 'static' && cameraMovement !== 'Static';
+
+      let videoMode: 'I2V' | 'Keyframe' | undefined;
+      const llmVideoMode = rawDesign.videoMode?.toLowerCase();
+
+      if (llmVideoMode === 'keyframe') {
+        videoMode = 'Keyframe';
+      } else if (llmVideoMode === 'i2v' || llmVideoMode === 'static') {
+        videoMode = 'I2V';
+      } else if (isMoving) {
+        const durationNum = parseInt(rawDesign.duration || '5', 10) || 5;
+        const hasSignificantChange = camera.startFrame && camera.endFrame &&
+          camera.startFrame !== '—' && camera.endFrame !== '—' &&
+          camera.startFrame !== camera.endFrame;
+        const decision = determineVideoMode(
+          storyEvent,
+          durationNum,
+          !!hasSignificantChange,
+          isMoving ? '运动' : '静态',
+          cameraMovement
+        );
+        videoMode = decision.mode === 'Keyframe' ? 'Keyframe' : 'I2V';
+      } else {
+        videoMode = 'I2V';
+      }
+
+      const shotSizeMap: Record<string, string> = {
+        'ELS': '大远景(ELS)', 'LS': '远景(LS)', 'MLS': '中全景(MLS)',
+        'MS': '中景(MS)', 'MCU': '中近景(MCU)', 'CU': '近景(CU)',
+        'ECU': '特写(ECU)', 'Macro': '微距(Macro)'
+      };
+      const normalizedShotSize = shotSizeMap[shotSize] || shotSize;
+
+      const angleDirectionMap: Record<string, string> = {
+        'front': '正面(Front)', 'front view': '正面(Front)',
+        '3/4 front': '3/4正面(3/4 Front)', '3/4 front view': '3/4正面(3/4 Front)',
+        'side': '正侧面(Full Side)', 'side view': '正侧面(Full Side)', 'profile': '正侧面(Full Side)',
+        'back': '背面(Back)', 'back view': '背面(Back)',
+        '正面': '正面(Front)', '侧面': '正侧面(Full Side)', '背面': '背面(Back)'
+      };
+      const normalizedAngleDirection = angleDirectionMap[cameraDirection.toLowerCase()] || cameraDirection;
+
+      const angleHeightMap: Record<string, string> = {
+        'eye level': '平视(Eye Level)', 'eye-level': '平视(Eye Level)',
+        'low angle': '仰拍(Low Angle)', 'low': '仰拍(Low Angle)',
+        'mild low angle': '轻微仰拍(Mild Low)', 'slight low angle': '轻微仰拍(Mild Low)',
+        'high angle': '俯拍(High Angle)', 'high': '俯拍(High Angle)',
+        'mild high angle': '轻微俯拍(Mild High)', 'slight high angle': '轻微俯拍(Mild High)',
+        'extreme high angle': '鸟瞰(Extreme High)', 'top-down': '鸟瞰(Extreme High)',
+        'extreme low angle': '蚁视(Extreme Low)',
+        '平视': '平视(Eye Level)', '俯拍': '俯拍(High Angle)', '仰拍': '仰拍(Low Angle)'
+      };
+      const normalizedAngleHeight = angleHeightMap[cameraAngle.toLowerCase()] || cameraAngle;
+
+      const cameraMoveMap: Record<string, string> = {
+        'static': '固定(Static)', '固定': '固定(Static)',
+        'push in': '推进(Push In)', 'push': '推进(Push In)',
+        'pull out': '拉远(Pull Out)', 'pull': '拉远(Pull Out)',
+        'pan': '横摇(Pan)', 'pan left': '横摇(Pan)', 'pan right': '横摇(Pan)',
+        'tilt': '竖摇(Tilt)', 'tilt up': '竖摇(Tilt)', 'tilt down': '竖摇(Tilt)',
+        'track': '跟随(Track)', 'tracking': '跟随(Track)', 'follow': '跟随(Track)',
+        'crane': '升降(Crane)', 'crane up': '升降(Crane)', 'crane down': '升降(Crane)',
+        'dolly': '移动(Dolly)', 'dolly in': '移动(Dolly)', 'dolly out': '移动(Dolly)',
+        'handheld': '手持(Handheld)', 'shake': '手持(Handheld)',
+        'arc': '环绕(Arc)', 'orbit': '环绕(Arc)', '360': '环绕(Arc)',
+        'zoom': '变焦(Zoom)'
+      };
+      const normalizedCameraMove = cameraMoveMap[cameraMovement.toLowerCase()] || cameraMovement;
+
+      return {
+        id: `shot-cot-${idx}`,
+        shotNumber: rawDesign.shotNumber?.replace('#', '') || String(idx + 1).padStart(2, '0'),
+        duration: rawDesign.duration || `${shotList[idx]?.duration || 4}s`,
+        shotType: isMoving ? '运动' : '静态',
+        sceneId: rawDesign.sceneId || shotList[idx]?.sceneId || '',
+        videoMode: videoMode,
+        storyBeat: storyEvent,
+        dialogue: dialogue,
+        shotSize: normalizedShotSize as any,
+        angleDirection: normalizedAngleDirection as any,
+        angleHeight: normalizedAngleHeight as any,
+        dutchAngle: comp.dutchAngle || '',
+        foreground: fg,
+        midground: mg,
+        background: bg,
+        lighting: lightingDesc,
+        cameraMove: normalizedCameraMove as any,
+        cameraMoveDetail: cameraSpeed || camera.description || '',
+        motionPath: comp.blocking || characters.positions || '',
+        startFrame: camera.startFrame || rawDesign.startFrame || '',
+        endFrame: camera.endFrame || rawDesign.endFrame || '',
+        videoPromptCn: aiPrompt.videoPromptCn || '',
+        videoPrompt: aiPrompt.videoPrompt || '',
+        directorNote: rawDesign.directorNote || '',
+        technicalNote: rawDesign.technicalNote || '',
+        promptCn: '',
+        promptEn: '',
+        endFramePromptCn: '',
+        endFramePromptEn: '',
+        theory: rawDesign.theory || '',
+        status: 'pending'
+      };
+    };
+
+    // 🔧 辅助函数：限制正面视角使用上限
+    const applyFrontViewLimit = (inputShots: Shot[]): Shot[] => {
+      let frontCount = 0;
+      return inputShots.map((shot) => {
+        if (shot.angleDirection === '正面(Front)') {
+          frontCount += 1;
+          if (frontCount > 2) {
+            const downgradedDirection = '3/4正面(3/4 Front)' as Shot['angleDirection'];
+            return {
+              ...shot,
+              angleDirection: downgradedDirection,
+            };
+          }
+        }
+        return shot;
+      });
+    };
+
+    // 🔧 辅助函数：强制角度多样化
+    const applyAngleDiversityLimit = (inputShots: Shot[]): Shot[] => {
+      const totalShots = inputShots.length;
+      const maxThreeQuarterFront = Math.max(3, Math.floor(totalShots * 0.25));
+      const maxStaticShots = 2;
+      let threeQuarterCount = 0;
+      let staticCount = 0;
+
+      const alternativeDirections: Shot['angleDirection'][] = [
+        '正侧面(Full Side)',
+        '1/3侧面(1/3 Side)',
+        '3/4背面(3/4 Back)',
+        '1/3背面(1/3 Back)'
+      ];
+      const alternativeMoves: Shot['cameraMove'][] = [
+        '推镜(Dolly In)',
+        '拉镜(Dolly Out)',
+        '左摇(Pan Left)',
+        '右摇(Pan Right)'
+      ];
+      let altDirIdx = 0;
+      let altMoveIdx = 0;
+
+      return inputShots.map((shot, idx) => {
+        let modifiedShot = { ...shot };
+
+        if (modifiedShot.angleDirection === '3/4正面(3/4 Front)') {
+          threeQuarterCount += 1;
+          if (threeQuarterCount > maxThreeQuarterFront) {
+            const newDirection = alternativeDirections[altDirIdx % alternativeDirections.length];
+            altDirIdx += 1;
+            console.log(`[角度多样化] 镜头#${modifiedShot.shotNumber}: 3/4正面(${threeQuarterCount}个) → ${newDirection}`);
+            modifiedShot = { ...modifiedShot, angleDirection: newDirection };
+          }
+        }
+
+        if (modifiedShot.cameraMove === '固定(Static)') {
+          staticCount += 1;
+          if (staticCount > maxStaticShots) {
+            const newMove = alternativeMoves[altMoveIdx % alternativeMoves.length];
+            altMoveIdx += 1;
+            console.log(`[运镜多样化] 镜头#${modifiedShot.shotNumber}: 固定(${staticCount}个) → ${newMove}（轻微缓慢）`);
+            modifiedShot = {
+              ...modifiedShot,
+              cameraMove: newMove,
+              cameraMoveDetail: (modifiedShot.cameraMoveDetail || '') + '（轻微缓慢）'
+            };
+          }
+        }
+
+        return modifiedShot;
+      });
+    };
+
     try {
       // ========== 阶段1：剧本分析 ==========
-      setCotCurrentStage(1);
-      setProgressMsg("【阶段1/5】剧本分析中...");
-      let stage1Text = '';
-      let stage1Result: any = null;
+      if (startFromStage <= 1) {
+        setCotCurrentStage(1);
+        setProgressMsg("【阶段1/5】剧本分析中...");
+        let stage1Text = '';
 
-      // 🆕 添加重试机制
-      const maxRetries = 3;
-      let retryCount = 0;
+        // 🆕 添加重试机制
+        const maxRetries = 3;
+        let retryCount = 0;
 
       while (retryCount < maxRetries) {
         try {
@@ -1322,7 +2365,10 @@ const App: React.FC = () => {
           // 尝试解析结果
           stage1Result = parseStage1Output(stage1Text);
           setCotStage1(stage1Result);
-          setStreamText(prev => prev + '\n\n✅ 阶段1完成！');
+          // 🆕 保存阶段1结果到localStorage（断点续传）
+          localStorage.setItem(STORAGE_KEYS.COT_STAGE1, JSON.stringify(stage1Result));
+          localStorage.setItem('storyboard_cot_stage1_raw', stage1Text);
+          setStreamText(prev => prev + '\n\n✅ 阶段1完成！（已保存）');
           break; // 成功则跳出重试循环
 
         } catch (error: any) {
@@ -1347,13 +2393,16 @@ const App: React.FC = () => {
         }
       }
 
-      // ========== 阶段2：视觉策略 ==========
-      setCotCurrentStage(2);
-      setProgressMsg("【阶段2/5】视觉策略规划中...");
-      let stage2Text = '';
-      let stage2Result: any = null;
+      }
 
-      retryCount = 0;
+      // ========== 阶段2：视觉策略 ==========
+      if (startFromStage <= 2) {
+        setCotCurrentStage(2);
+        setProgressMsg("【阶段2/5】视觉策略规划中...");
+        let stage2Text = '';
+
+        const maxRetries = 3;
+        let retryCount = 0;
       while (retryCount < maxRetries) {
         try {
           stage2Text = '';
@@ -1366,7 +2415,10 @@ const App: React.FC = () => {
 
           stage2Result = parseStage2Output(stage2Text);
           setCotStage2(stage2Result);
-          setStreamText(prev => prev + '\n\n✅ 阶段2完成！');
+          // 🆕 保存阶段2结果到localStorage（断点续传）
+          localStorage.setItem(STORAGE_KEYS.COT_STAGE2, JSON.stringify(stage2Result));
+          localStorage.setItem('storyboard_cot_stage2_raw', stage2Text);
+          setStreamText(prev => prev + '\n\n✅ 阶段2完成！（已保存）');
           break;
 
         } catch (error: any) {
@@ -1381,14 +2433,16 @@ const App: React.FC = () => {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
+      }
 
       // ========== 阶段3：镜头分配 ==========
-      setCotCurrentStage(3);
-      setProgressMsg("【阶段3/5】镜头分配中...");
-      let stage3Text = '';
-      let stage3Result: any = null;
+      if (startFromStage <= 3) {
+        setCotCurrentStage(3);
+        setProgressMsg("【阶段3/5】镜头分配中...");
+        let stage3Text = '';
 
-      retryCount = 0;
+        const maxRetries = 3;
+        let retryCount = 0;
       while (retryCount < maxRetries) {
         try {
           stage3Text = '';
@@ -1401,7 +2455,10 @@ const App: React.FC = () => {
 
           stage3Result = parseStage3Output(stage3Text);
           setCotStage3(stage3Result);
-          setStreamText(prev => prev + '\n\n✅ 阶段3完成！');
+          // 🆕 保存阶段3结果到localStorage（断点续传）
+          localStorage.setItem(STORAGE_KEYS.COT_STAGE3, JSON.stringify(stage3Result));
+          localStorage.setItem('storyboard_cot_stage3_raw', stage3Text);
+          setStreamText(prev => prev + '\n\n✅ 阶段3完成！（已保存）');
           break;
 
         } catch (error: any) {
@@ -1416,259 +2473,17 @@ const App: React.FC = () => {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
+      }
 
       // ========== 阶段4：逐镜设计 ==========
-      setCotCurrentStage(4);
-      const shotList = stage3Result.shotList || [];
-      const allDesignedShots: ShotDesign[] = [];
+      if (startFromStage <= 4) {
+        setCotCurrentStage(4);
+        const shotList = stage3Result.shotList || [];
 
-      // 🆕 辅助函数：将设计结果转换为Shot格式（用于实时显示）
-      const convertDesignToShot = (rawDesign: any, idx: number): Shot => {
-        const design = rawDesign.design || rawDesign;
-        const comp = design.composition || {};
-        const lightingData = design.lighting || {};
-        const camera = design.camera || {};
-        const characters = design.characters || {};
-        const aiPrompt = rawDesign.aiPrompt || {};
-        const storyBeatData = rawDesign.storyBeat || {};
+      // 🔧 注意：convertDesignToShot、applyFrontViewLimit、applyAngleDiversityLimit 函数已移到外部作用域（第1406行）
 
-        // 🆕 改进：从多个可能的字段路径提取角度信息
-        const shotSize = comp.shotSize || design.shotSize || rawDesign.shotSize || 'MS';
-        const cameraAngle = comp.cameraAngle || design.cameraAngle || rawDesign.cameraAngle || '轻微仰拍(Mild Low)';
-        const cameraDirection = comp.cameraDirection || design.cameraDirection || rawDesign.cameraDirection || '3/4正面(3/4 Front)';
-
-        // 🆕 调试日志：记录 LLM 返回的数据结构
-        if (idx === 0) {
-          console.log('[convertDesignToShot] 第一个镜头的数据结构:', {
-            shotNumber: rawDesign.shotNumber,
-            shotSize: { comp: comp.shotSize, design: design.shotSize, raw: rawDesign.shotSize, final: shotSize },
-            cameraAngle: { comp: comp.cameraAngle, design: design.cameraAngle, raw: rawDesign.cameraAngle, final: cameraAngle },
-            cameraDirection: { comp: comp.cameraDirection, design: design.cameraDirection, raw: rawDesign.cameraDirection, final: cameraDirection }
-          });
-        }
-
-        const depthLayers = comp.depthLayers || {};
-        const fg = depthLayers.foreground || comp.foreground || '';
-        const mg = depthLayers.midground || comp.midground || '';
-        const bg = depthLayers.background || comp.background || '';
-
-        const lightingDesc = lightingData.description || lightingData.mood ||
-                            (lightingData.keyLight ? `主光:${lightingData.keyLight}` : '');
-
-        const cameraMovement = camera.movement || '固定';
-        const cameraSpeed = camera.speed || '';
-
-        const visualDesignText = [
-          `【景别】${shotSize}`,
-          `【角度】${cameraAngle} + ${cameraDirection}`,
-          `【透视】${comp.perspective || '标准透视'}`,
-          `【构图】${comp.framing || ''}`,
-          `  FG: ${fg}`,
-          `  MG: ${mg}`,
-          `  BG: ${bg}`,
-          `【光影】${lightingDesc}`,
-          cameraMovement && cameraMovement !== '固定' ? `【运镜】${cameraMovement}${cameraSpeed ? ` (${cameraSpeed})` : ''}` : ''
-        ].filter(Boolean).join('\n');
-
-        const storyEvent = storyBeatData.event ||
-                          characters.actions ||
-                          shotList[idx]?.briefDescription ||
-                          `镜头${idx + 1}`;
-
-        const dialogue = storyBeatData.dialogue || '';
-
-        const isMoving = cameraMovement && cameraMovement !== '固定' && cameraMovement !== 'static' && cameraMovement !== 'Static';
-
-        // 🆕 解析videoMode - 如果LLM返回了，直接使用；否则根据规则自动判定
-        // 🆕 使用 determineVideoMode 函数进行代码级校验
-        let videoMode: 'I2V' | 'Keyframe' | undefined;
-        const llmVideoMode = rawDesign.videoMode?.toLowerCase();
-
-        if (llmVideoMode === 'keyframe') {
-          videoMode = 'Keyframe';
-        } else if (llmVideoMode === 'i2v' || llmVideoMode === 'static') {
-          videoMode = 'I2V'; // Static 已废弃，归入 I2V
-        } else if (isMoving) {
-          // LLM 未指定时，使用 determineVideoMode 进行自动判断
-          const durationNum = parseInt(rawDesign.duration || '5', 10) || 5;
-          const hasSignificantChange = camera.startFrame && camera.endFrame &&
-            camera.startFrame !== '—' && camera.endFrame !== '—' &&
-            camera.startFrame !== camera.endFrame;
-          const decision = determineVideoMode(
-            storyEvent,
-            durationNum,
-            !!hasSignificantChange,
-            isMoving ? '运动' : '静态',
-            cameraMovement
-          );
-          videoMode = decision.mode === 'Keyframe' ? 'Keyframe' : 'I2V';
-        } else {
-          videoMode = 'I2V'; // 静态镜头默认使用 I2V
-        }
-
-        const shotSizeMap: Record<string, string> = {
-          'ELS': '大远景(ELS)', 'LS': '远景(LS)', 'MLS': '中全景(MLS)',
-          'MS': '中景(MS)', 'MCU': '中近景(MCU)', 'CU': '近景(CU)',
-          'ECU': '特写(ECU)', 'Macro': '微距(Macro)'
-        };
-        const normalizedShotSize = shotSizeMap[shotSize] || shotSize;
-
-        const angleDirectionMap: Record<string, string> = {
-          'front': '正面(Front)', 'front view': '正面(Front)',
-          '3/4 front': '3/4正面(3/4 Front)', '3/4 front view': '3/4正面(3/4 Front)',
-          'side': '正侧面(Full Side)', 'side view': '正侧面(Full Side)', 'profile': '正侧面(Full Side)',
-          'back': '背面(Back)', 'back view': '背面(Back)',
-          '正面': '正面(Front)', '侧面': '正侧面(Full Side)', '背面': '背面(Back)'
-        };
-        const normalizedAngleDirection = angleDirectionMap[cameraDirection.toLowerCase()] || cameraDirection;
-
-        const angleHeightMap: Record<string, string> = {
-          'eye level': '平视(Eye Level)', 'eye-level': '平视(Eye Level)',
-          'low angle': '仰拍(Low Angle)', 'low': '仰拍(Low Angle)',
-          'mild low angle': '轻微仰拍(Mild Low)', 'slight low angle': '轻微仰拍(Mild Low)',
-          'high angle': '俯拍(High Angle)', 'high': '俯拍(High Angle)',
-          'mild high angle': '轻微俯拍(Mild High)', 'slight high angle': '轻微俯拍(Mild High)',
-          'extreme high angle': '鸟瞰(Extreme High)', 'top-down': '鸟瞰(Extreme High)',
-          'extreme low angle': '蚁视(Extreme Low)',
-          '平视': '平视(Eye Level)', '俯拍': '俯拍(High Angle)', '仰拍': '仰拍(Low Angle)'
-        };
-        const normalizedAngleHeight = angleHeightMap[cameraAngle.toLowerCase()] || cameraAngle;
-
-        const cameraMoveMap: Record<string, string> = {
-          'static': '固定(Static)', '固定': '固定(Static)',
-          'push in': '推进(Push In)', 'push': '推进(Push In)',
-          'pull out': '拉远(Pull Out)', 'pull': '拉远(Pull Out)',
-          'pan': '横摇(Pan)', 'pan left': '横摇(Pan)', 'pan right': '横摇(Pan)',
-          'tilt': '竖摇(Tilt)', 'tilt up': '竖摇(Tilt)', 'tilt down': '竖摇(Tilt)',
-          'track': '跟随(Track)', 'tracking': '跟随(Track)', 'follow': '跟随(Track)',
-          'crane': '升降(Crane)', 'crane up': '升降(Crane)', 'crane down': '升降(Crane)',
-          'dolly': '移动(Dolly)', 'dolly in': '移动(Dolly)', 'dolly out': '移动(Dolly)',
-          'handheld': '手持(Handheld)', 'shake': '手持(Handheld)',
-          'arc': '环绕(Arc)', 'orbit': '环绕(Arc)', '360': '环绕(Arc)',
-          'zoom': '变焦(Zoom)'
-        };
-        const normalizedCameraMove = cameraMoveMap[cameraMovement.toLowerCase()] || cameraMovement;
-
-        return {
-          id: `shot-cot-${idx}`,
-          shotNumber: rawDesign.shotNumber?.replace('#', '') || String(idx + 1).padStart(2, '0'),
-          duration: rawDesign.duration || `${shotList[idx]?.duration || 4}s`,
-          shotType: isMoving ? '运动' : '静态',
-          // 🆕 场景ID（用于关联空间布局）
-          sceneId: rawDesign.sceneId || shotList[idx]?.sceneId || '',
-          // 🆕 视频生成模式
-          videoMode: videoMode,
-          storyBeat: storyEvent,
-          dialogue: dialogue,
-          shotSize: normalizedShotSize as any,
-          angleDirection: normalizedAngleDirection as any,
-          angleHeight: normalizedAngleHeight as any,
-          dutchAngle: comp.dutchAngle || '',
-          foreground: fg,
-          midground: mg,
-          background: bg,
-          lighting: lightingDesc,
-          cameraMove: normalizedCameraMove as any,
-          cameraMoveDetail: cameraSpeed || camera.description || '',
-          motionPath: comp.blocking || characters.positions || '',
-          // 🆕 改进：从多个可能的字段路径提取首帧/尾帧描述
-          startFrame: camera.startFrame || rawDesign.startFrame || '',
-          endFrame: camera.endFrame || rawDesign.endFrame || '',
-          // 🆕 视频提示词（从aiPrompt.videoPrompt/videoPromptCn获取）
-          videoPromptCn: aiPrompt.videoPromptCn || '',
-          videoPrompt: aiPrompt.videoPrompt || '',
-          // 🆕 导演意图与技术备注
-          directorNote: rawDesign.directorNote || '',
-          technicalNote: rawDesign.technicalNote || '',
-          // 思维链阶段不自动写入提示词，由后续专门的提示词生成能力或用户手动填充
-          promptCn: '',
-          promptEn: '',
-          endFramePromptCn: '',
-          endFramePromptEn: '',
-          // 理论依据
-          theory: rawDesign.theory || '',
-          status: 'pending'
-        };
-      };
-
-      // Helper: limit full front-view shots to at most 2 across the whole sequence
-      const applyFrontViewLimit = (inputShots: Shot[]): Shot[] => {
-        let frontCount = 0;
-        return inputShots.map((shot) => {
-          if (shot.angleDirection === '正面(Front)') {
-            frontCount += 1;
-            if (frontCount > 2) {
-              const downgradedDirection = '3/4正面(3/4 Front)' as Shot['angleDirection'];
-              return {
-                ...shot,
-                angleDirection: downgradedDirection,
-              };
-            }
-          }
-          return shot;
-        });
-      };
-
-      // 🆕 Helper: enforce angle diversity, limit static shots, ensure dutch angle usage
-      const applyAngleDiversityLimit = (inputShots: Shot[]): Shot[] => {
-        const totalShots = inputShots.length;
-        const maxThreeQuarterFront = Math.max(3, Math.floor(totalShots * 0.25)); // 最多25%
-        const maxStaticShots = 2; // 一集最多1-2个完全固定镜头
-        let threeQuarterCount = 0;
-        let staticCount = 0;
-
-        // 用于替换过多3/4正面的备选角度
-        const alternativeDirections: Shot['angleDirection'][] = [
-          '正侧面(Full Side)',
-          '1/3侧面(1/3 Side)',
-          '3/4背面(3/4 Back)',
-          '1/3背面(1/3 Back)'
-        ];
-        // 用于替换固定镜头的运镜（使用正确的CameraMove类型）
-        const alternativeMoves: Shot['cameraMove'][] = [
-          '推镜(Dolly In)',
-          '拉镜(Dolly Out)',
-          '左摇(Pan Left)',
-          '右摇(Pan Right)'
-        ];
-        let altDirIdx = 0;
-        let altMoveIdx = 0;
-
-        return inputShots.map((shot, idx) => {
-          let modifiedShot = { ...shot };
-
-          // 1. 限制3/4正面占比
-          if (modifiedShot.angleDirection === '3/4正面(3/4 Front)') {
-            threeQuarterCount += 1;
-            if (threeQuarterCount > maxThreeQuarterFront) {
-              const newDirection = alternativeDirections[altDirIdx % alternativeDirections.length];
-              altDirIdx += 1;
-              console.log(`[角度多样化] 镜头#${modifiedShot.shotNumber}: 3/4正面(${threeQuarterCount}个) → ${newDirection}`);
-              modifiedShot = { ...modifiedShot, angleDirection: newDirection };
-            }
-          }
-
-          // 2. 限制固定镜头数量（固定镜头改为轻微运动）
-          if (modifiedShot.cameraMove === '固定(Static)') {
-            staticCount += 1;
-            if (staticCount > maxStaticShots) {
-              const newMove = alternativeMoves[altMoveIdx % alternativeMoves.length];
-              altMoveIdx += 1;
-              console.log(`[运镜多样化] 镜头#${modifiedShot.shotNumber}: 固定(${staticCount}个) → ${newMove}（轻微缓慢）`);
-              modifiedShot = {
-                ...modifiedShot,
-                cameraMove: newMove,
-                cameraMoveDetail: (modifiedShot.cameraMoveDetail || '') + '（轻微缓慢）'
-              };
-            }
-          }
-
-          return modifiedShot;
-        });
-      };
-
-	      // 分批处理（每批6个镜头）
-	      const batchSize = 6;
+      // 分批处理（每批6个镜头）
+      const batchSize = 6;
       const totalBatches = Math.ceil(shotList.length / batchSize);
       let completedShotCount = 0;
 
@@ -1717,11 +2532,15 @@ const App: React.FC = () => {
         setStreamText(prev => `【阶段4】逐镜设计 (批次 ${batchNum}/${totalBatches})\n\n${stage4Text}\n\n✅ 已完成 ${completedShotCount} 个镜头`);
       }
 
-      setCotStage4(allDesignedShots);
-      setStreamText(prev => prev + `\n\n✅ 阶段4完成！共设计 ${allDesignedShots.length} 个镜头`);
+        setCotStage4(allDesignedShots);
+        // 🆕 保存阶段4结果到localStorage（断点续传）
+        localStorage.setItem(STORAGE_KEYS.COT_STAGE4, JSON.stringify(allDesignedShots));
+        setStreamText(prev => prev + `\n\n✅ 阶段4完成！共设计 ${allDesignedShots.length} 个镜头（已保存）`);
+      }
 
       // ========== 阶段5：质量自检 ==========
-      setCotCurrentStage(5);
+      if (startFromStage <= 5) {
+        setCotCurrentStage(5);
       setProgressMsg("【阶段5/5】质量自检与优化...");
       setStreamText(prev => prev + `\n\n【阶段5】质量自检与优化\n\n正在审核所有镜头设计...`);
 
@@ -1769,9 +2588,12 @@ const App: React.FC = () => {
 
       const stage5Result = parseStage5Output(stage5Text);
       setCotStage5(stage5Result);
+      // 🆕 保存阶段5结果到localStorage（断点续传）
+      localStorage.setItem(STORAGE_KEYS.COT_STAGE5, JSON.stringify(stage5Result));
+      localStorage.setItem('storyboard_cot_stage5_raw', stage5Text);
 
       console.log('[解析成功] 阶段5质量检查结果:', stage5Result);
-      setStreamText(prev => prev + `\n\n✅ 阶段5完成！质量评分: ${stage5Result.overallScore}/100 (${stage5Result.rating})`);
+      setStreamText(prev => prev + `\n\n✅ 阶段5完成！质量评分: ${stage5Result.overallScore}/100 (${stage5Result.rating})（已保存）`);
 
       // 显示质量检查结果
       const allIssues = [
@@ -1861,44 +2683,60 @@ const App: React.FC = () => {
         console.log('✅ 角度分布完全符合规则！');
       }
 
-      setCotCurrentStage(null);
-      setProgressMsg(`✅ 思维链生成完成！共 ${finalShots.length} 个镜头`);
+        setCotCurrentStage(null);
+        setProgressMsg(`✅ 思维链生成完成！共 ${finalShots.length} 个镜头`);
 
-      // 🔧 核心修复：保存当前剧集的分镜数据到后端
-      if (currentProject && currentEpisodeNumber !== null) {
-        const currentEpisode = currentProject.episodes?.find(ep => ep.episodeNumber === currentEpisodeNumber);
-        if (currentEpisode) {
-          // 🔧 验证项目ID和剧集ID是否匹配
-          console.log(`[D1存储] 准备保存分镜 - 项目: ${currentProject.name} (${currentProject.id}), 剧集: 第${currentEpisodeNumber}集 (${currentEpisode.id})`);
-          console.log(`[D1存储] 分镜数量: ${finalShots.length}, 第1个镜头: ${typeof finalShots[0]?.storyBeat === 'string' ? finalShots[0].storyBeat : finalShots[0]?.storyBeat?.event || '未知'}`);
+        // 🔧 核心修复：保存当前剧集的分镜数据到后端
+        if (currentProject && currentEpisodeNumber !== null) {
+          const currentEpisode = currentProject.episodes?.find(ep => ep.episodeNumber === currentEpisodeNumber);
+          if (currentEpisode) {
+            // 🔧 验证项目ID和剧集ID是否匹配
+            console.log(`[D1存储] 准备保存分镜 - 项目: ${currentProject.name} (${currentProject.id}), 剧集: 第${currentEpisodeNumber}集 (${currentEpisode.id})`);
+            console.log(`[D1存储] 分镜数量: ${finalShots.length}, 第1个镜头: ${typeof finalShots[0]?.storyBeat === 'string' ? finalShots[0].storyBeat : finalShots[0]?.storyBeat?.event || '未知'}`);
 
-          const updatedEpisode: Episode = {
-            ...currentEpisode,
-            shots: finalShots,
-            status: 'generated',
-            updatedAt: new Date().toISOString(),
-          };
+            const updatedEpisode: Episode = {
+              ...currentEpisode,
+              shots: finalShots,
+              status: 'generated',
+              updatedAt: new Date().toISOString(),
+            };
 
-          try {
-            await saveEpisode(currentProject.id, updatedEpisode);
-            console.log(`[D1存储] ✅ 第${currentEpisodeNumber}集分镜保存成功`);
-          } catch (error) {
-            console.error('[D1存储] ❌ 保存剧集失败:', error);
-            // 不阻断用户操作，只记录错误
+            try {
+              await saveEpisode(currentProject.id, updatedEpisode);
+              console.log(`[D1存储] ✅ 第${currentEpisodeNumber}集分镜保存成功`);
+            } catch (error) {
+              console.error('[D1存储] ❌ 保存剧集失败:', error);
+              // 不阻断用户操作，只记录错误
+            }
+          } else {
+            console.warn(`[D1存储] ⚠️ 未找到第${currentEpisodeNumber}集的元信息，跳过保存`);
           }
         } else {
-          console.warn(`[D1存储] ⚠️ 未找到第${currentEpisodeNumber}集的元信息，跳过保存`);
+          console.warn(`[D1存储] ⚠️ 缺少项目或剧集信息，跳过保存 - currentProject: ${!!currentProject}, currentEpisodeNumber: ${currentEpisodeNumber}`);
         }
-      } else {
-        console.warn(`[D1存储] ⚠️ 缺少项目或剧集信息，跳过保存 - currentProject: ${!!currentProject}, currentEpisodeNumber: ${currentEpisodeNumber}`);
+
+        // 🆕 成功完成后清除保存的进度
+        clearSavedCotProgress();
       }
 
     } catch (error) {
       console.error('思维链生成失败:', error);
       setStreamText(prev => prev + `\n\n❌ 错误: ${error}`);
-      alert(`思维链生成失败: ${error}`);
+
+      // 🆕 设置错误信息（显示在对话框中）
+      setCotError(String(error));
+
+      // 不再使用alert，改用对话框显示错误
+      // alert(`思维链生成失败: ${error}`);
     } finally {
       setIsLoading(false);
+
+      // 🆕 如果没有错误，3秒后自动关闭对话框
+      if (!cotError) {
+        setTimeout(() => {
+          setShowCotProgressModal(false);
+        }, 3000);
+      }
     }
   };
 
@@ -2530,26 +3368,9 @@ const App: React.FC = () => {
     }
   };
 
-  // 🆕 九宫格生成控制器（用于停止生成）
-  const [abortController, setAbortController] = React.useState<AbortController | null>(null);
-
-  // 🆕 九宫格生成时间跟踪
-  const [gridGenerationStartTime, setGridGenerationStartTime] = React.useState<number | null>(null);
-  const [currentGeneratingGrid, setCurrentGeneratingGrid] = React.useState<number | null>(null);
-
   const generateHQ = async () => {
     setIsLoading(true);
     setHqUrls([]);
-    const totalGrids = Math.ceil(shots.length / 9);
-    setProgressMsg(`正在使用「${selectedStyle.name}」风格绘制 ${totalGrids} 张九宫格...`);
-
-    // 🆕 创建 AbortController
-    const controller = new AbortController();
-    setAbortController(controller);
-
-    // 🆕 重置生成时间跟踪
-    setGridGenerationStartTime(Date.now());
-    setCurrentGeneratingGrid(0);
 
     try {
       // 🔧 验证项目和剧集信息
@@ -2558,6 +3379,32 @@ const App: React.FC = () => {
         setIsLoading(false);
         return;
       }
+
+      // 🆕 严格校验：检查项目是否已设置渲染风格
+      if (!hasProjectStyle(currentProject)) {
+        alert('⚠️ 请先设置项目风格\n\n项目风格用于角色、场景和分镜的统一视觉呈现。\n请前往"角色设定"页面设置项目风格后再生成分镜。');
+        setIsLoading(false);
+        return;
+      }
+
+      // 🆕 获取生效的九宫格风格（考虑覆盖）
+      const effectiveStyle = getEffectiveStoryboardStyle(currentProject);
+      if (!effectiveStyle) {
+        alert('⚠️ 无法获取项目风格，请检查项目设置');
+        setIsLoading(false);
+        return;
+      }
+
+      const totalGrids = Math.ceil(shots.length / 9);
+      setProgressMsg(`正在使用「${effectiveStyle.name}」风格绘制 ${totalGrids} 张九宫格...`);
+
+      // 🆕 创建 AbortController
+      const controller = new AbortController();
+      setAbortController(controller);
+
+      // 🆕 重置生成时间跟踪
+      setGridGenerationStartTime(Date.now());
+      setCurrentGeneratingGrid(0);
 
       if (currentEpisodeNumber === null) {
         alert('⚠️ 未选择剧集，无法生成九宫格');
@@ -2591,10 +3438,10 @@ const App: React.FC = () => {
         characterRefs,
         'hq',
         imageModel,
-        selectedStyle,
+        effectiveStyle, // 🆕 使用项目风格（考虑覆盖）
         // 进度回调
         (current, total, info) => {
-          setProgressMsg(`正在生成 ${info} (${current}/${total}) - ${selectedStyle.name}`);
+          setProgressMsg(`正在生成 ${info} (${current}/${total}) - ${effectiveStyle.name}`);
           // 🆕 更新当前生成的九宫格索引
           setCurrentGeneratingGrid(current - 1);
           setGridGenerationStartTime(Date.now());
@@ -2679,23 +3526,6 @@ const App: React.FC = () => {
       console.log('[九宫格] 用户请求停止生成');
     }
   };
-
-  // 🆕 计算当前九宫格生成耗时
-  const [generationElapsedTime, setGenerationElapsedTime] = React.useState<number>(0);
-
-  React.useEffect(() => {
-    if (!gridGenerationStartTime || currentGeneratingGrid === null) {
-      setGenerationElapsedTime(0);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - gridGenerationStartTime) / 1000);
-      setGenerationElapsedTime(elapsed);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [gridGenerationStartTime, currentGeneratingGrid]);
 
 	/**
 	 * 🎨 B1：将“九宫格图片URL”按序映射到每个镜头（虚拟切割，不生成独立小图文件）
@@ -2787,11 +3617,43 @@ const App: React.FC = () => {
 	  }
 	};
 
-  const downloadImage = (url: string, filename: string) => {
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = url;
-    link.click();
+  /**
+   * 下载图片（修复跨域问题）
+   * 使用 fetch + Blob 方式下载，避免浏览器直接打开预览
+   */
+  const downloadImage = async (url: string, filename: string) => {
+    try {
+      setProgressMsg(`正在下载 ${filename}...`);
+
+      // 使用 fetch 获取图片
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`下载失败: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+
+      // 创建临时 URL
+      const blobUrl = URL.createObjectURL(blob);
+
+      // 触发下载
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // 释放 URL
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+
+      setProgressMsg(`✅ ${filename} 下载成功`);
+    } catch (error) {
+      console.error('下载失败:', error);
+      setProgressMsg(`⚠️ 下载失败，尝试在新标签页打开...`);
+      // 降级方案：在新标签页打开
+      window.open(url, '_blank');
+    }
   };
 
   /**
@@ -3490,12 +4352,20 @@ const App: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                <div className="bg-gray-700 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-blue-500 h-full transition-all duration-300"
-                    style={{ width: `${(reanalyzeProgress.currentBatch / reanalyzeProgress.totalBatches) * 100}%` }}
-                  />
-                </div>
+                {/* 进度条：第1批刚开始时给最低 8% 宽度并加呼吸动效，避免用户误以为卡死 */}
+                {(() => {
+                  const rawPct = (reanalyzeProgress.currentBatch / reanalyzeProgress.totalBatches) * 100;
+                  const isIdle = rawPct < 8 && reanalyzeProgress.status === 'analyzing';
+                  const effectivePct = isIdle ? 8 : rawPct;
+                  return (
+                    <div className="bg-gray-700 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`bg-blue-500 h-full transition-all duration-300${isIdle ? ' animate-pulse' : ''}`}
+                        style={{ width: `${effectivePct}%` }}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -3589,6 +4459,7 @@ const App: React.FC = () => {
               <div className="text-center py-12">
                 <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                 <p className="text-gray-400">正在分析 {currentProject?.episodes?.length || 0} 集剧本...</p>
+                <p className="text-sm text-blue-400 mt-2 animate-pulse">AI 正在逐步分析，请稍候…</p>
               </div>
             )}
           </div>
@@ -3994,32 +4865,6 @@ const App: React.FC = () => {
                 </h2>
                 {cleaningResult && !isCleaning && (
                   <div className="flex items-center gap-2">
-                    {/* 生成模式选择 */}
-                    <div className="flex items-center gap-1 bg-[var(--color-bg)] rounded-lg px-2 py-1 border border-[var(--color-border)]">
-                      <span className="text-xs text-[var(--color-text-tertiary)]">模式:</span>
-                      <button
-                        onClick={() => setGenerationMode('traditional')}
-                        className={`px-2 py-1 rounded text-xs font-medium transition-all ${
-                          generationMode === 'traditional'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
-                        }`}
-                      >
-                        传统
-                      </button>
-                      <button
-                        onClick={() => setGenerationMode('chain-of-thought')}
-                        className={`px-2 py-1 rounded text-xs font-medium transition-all ${
-                          generationMode === 'chain-of-thought'
-                            ? 'bg-green-600 text-white'
-                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
-                        }`}
-                        title="5阶段思维链模式：剧本分析→视觉策略→镜头分配→逐镜设计→质量自检"
-                      >
-                        🧠 思维链
-                      </button>
-                    </div>
-
                     {/* 方案B：角色提取警告 */}
                     {characterRefs.length === 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-900/20 border border-amber-700/50 rounded-lg">
@@ -4032,8 +4877,35 @@ const App: React.FC = () => {
                       onClick={startShotListGeneration}
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-all shadow-lg"
                     >
-                      {generationMode === 'chain-of-thought' ? '🧠 开始5阶段生成' : '生成分镜脚本'} →
+                      🧠 开始5阶段生成 →
                     </button>
+
+                    {/* 🆕 从失败处继续按钮 */}
+                    {checkSavedCotProgress().hasProgress && (
+                      <button
+                        onClick={() => startChainOfThoughtGeneration()}
+                        className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium text-sm hover:bg-amber-700 transition-all shadow-lg flex items-center gap-2"
+                        title={`检测到上次在阶段${checkSavedCotProgress().lastStage}中断，点击继续`}
+                      >
+                        🔄 从阶段{checkSavedCotProgress().lastStage + 1}继续
+                      </button>
+                    )}
+
+                    {/* 🆕 清除进度按钮 */}
+                    {checkSavedCotProgress().hasProgress && (
+                      <button
+                        onClick={() => {
+                          if (confirm('确定要清除保存的进度吗？')) {
+                            clearSavedCotProgress();
+                            alert('✅ 已清除保存的进度');
+                          }
+                        }}
+                        className="px-3 py-2 bg-gray-600 text-white rounded-lg font-medium text-xs hover:bg-gray-700 transition-all"
+                        title="清除保存的思维链进度"
+                      >
+                        🗑️ 清除进度
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -4134,17 +5006,40 @@ const App: React.FC = () => {
               <div>
                 <h2 className="text-lg font-bold text-white">
                    分镜脚本 ({shots.length} 镜)
-                   {generationMode === 'chain-of-thought' && cotCurrentStage && (
+                   {cotCurrentStage && (
                      <span className="ml-2 text-green-400 text-sm">
                        🧠 阶段 {cotCurrentStage}/5
                      </span>
                    )}
                 </h2>
                 <p className="text-xs text-gray-400 mt-1">
-                  模型: {analysisModel.split('/')[1]} | 模式: {generationMode === 'chain-of-thought' ? '思维链' : '传统'}
+                  模型: {analysisModel.split('/')[1]} | 模式: 思维链
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                {/* 🆕 重新生成分镜脚本按钮 */}
+                <button
+                  onClick={() => {
+                    if (confirm('确定要重新生成分镜脚本吗？\n\n这将清除当前所有进度，从阶段1重新开始。')) {
+                      clearSavedCotProgress();
+                      setShots([]);
+                      setCotStage1(null);
+                      setCotStage2(null);
+                      setCotStage3(null);
+                      setCotStage4(null);
+                      setCotStage5(null);
+                      setCotCurrentStage(null);
+                      setStreamText('');
+                      startChainOfThoughtGeneration(1);
+                    }
+                  }}
+                  disabled={isLoading}
+                  className={`px-4 py-2 bg-amber-600 text-white rounded-lg font-medium text-sm transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-700'}`}
+                  title="清除所有进度，从头重新生成分镜脚本"
+                >
+                  🔄 重新生成分镜脚本
+                </button>
+
                 <button
                   onClick={startReview}
                   disabled={isLoading}
@@ -4156,7 +5051,7 @@ const App: React.FC = () => {
             </div>
 
             {/* 思维链可视化面板 */}
-            {generationMode === 'chain-of-thought' && (cotCurrentStage || cotStage1 || cotStage4) && (
+            {(cotCurrentStage || cotStage1 || cotStage4) && (
               <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
                 {/* 进度条 */}
                 <div className="flex items-center gap-2 mb-3">
@@ -4367,6 +5262,7 @@ const App: React.FC = () => {
                           }}
                           onClick={(e) => e.stopPropagation()}
                           className="mt-0.5 w-4 h-4 rounded border-gray-600 text-amber-500 focus:ring-amber-500 cursor-pointer bg-gray-700"
+                          aria-label={`选择镜头 #${s.shotNumber}`}
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
@@ -4481,6 +5377,7 @@ const App: React.FC = () => {
                             <button
                                 onClick={handleConsultDirector}
                                 disabled={isLoading}
+                                aria-label="发送"
                                 className="absolute right-1 bottom-1 p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-all disabled:opacity-50"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -5465,6 +6362,7 @@ const App: React.FC = () => {
                   type="file"
                   accept="image/*"
                   onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  title="上传本地图片"
                   className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
                 />
                 {uploadFile && (
@@ -5497,6 +6395,143 @@ const App: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 🆕 思维链进度对话框 */}
+      {showCotProgressModal && !cotProgressMinimized && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[300]">
+          <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 max-w-lg w-full mx-4 shadow-2xl">
+            {/* 标题栏 */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-[var(--color-text-primary)] flex items-center gap-2">
+                🧠 AI思维链生成中...
+              </h3>
+              <div className="flex items-center gap-2">
+                {/* 最小化按钮 */}
+                <button
+                  onClick={() => setCotProgressMinimized(true)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] transition-all"
+                  title="最小化"
+                >
+                  −
+                </button>
+                {/* 关闭按钮（仅在完成或出错时显示） */}
+                {(!isLoading || cotError) && (
+                  <button
+                    onClick={() => setShowCotProgressModal(false)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] transition-all"
+                    title="关闭"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 错误显示 */}
+            {cotError ? (
+              <div className="space-y-4">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                  <p className="text-red-400 font-medium mb-2">❌ 思维链生成失败</p>
+                  <p className="text-sm text-[var(--color-text-secondary)]">{cotError}</p>
+                </div>
+
+                {/* 错误操作按钮 */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setCotError(null);
+                      startChainOfThoughtGeneration(cotCurrentStage || 1);
+                    }}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all"
+                  >
+                    🔄 重试
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCotError(null);
+                      clearSavedCotProgress();
+                      startChainOfThoughtGeneration(1);
+                    }}
+                    className="flex-1 px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg font-medium hover:bg-[var(--color-surface-hover)] transition-all"
+                  >
+                    🔁 从头开始
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* 正常进度显示 */
+              <div className="space-y-4">
+                {/* 当前阶段 */}
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[var(--color-accent-blue)] mb-2">
+                    【阶段 {cotCurrentStage || 1}/5】
+                    {cotCurrentStage === 1 && '剧本分析'}
+                    {cotCurrentStage === 2 && '视觉策略'}
+                    {cotCurrentStage === 3 && '镜头分配'}
+                    {cotCurrentStage === 4 && '逐镜设计'}
+                    {cotCurrentStage === 5 && '质量自检'}
+                  </p>
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    {progressMsg || '准备中...'}
+                  </p>
+                </div>
+
+                {/* 进度条 */}
+                <div className="relative">
+                  <div className="h-3 bg-[var(--color-bg)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500 ease-out"
+                      style={{ width: `${((cotCurrentStage || 0) / 5) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-center text-sm font-medium text-[var(--color-text-primary)] mt-2">
+                    {Math.round(((cotCurrentStage || 0) / 5) * 100)}%
+                  </p>
+                </div>
+
+                {/* 预计剩余时间 */}
+                {cotStartTime && cotCurrentStage && cotCurrentStage < 5 && (
+                  <div className="text-center text-sm text-[var(--color-text-tertiary)]">
+                    ⏱️ 预计剩余时间：约 {Math.max(10, (5 - cotCurrentStage) * 20)} 秒
+                  </div>
+                )}
+
+                {/* 提示信息 */}
+                <div className="bg-[var(--color-accent-blue)]/10 border border-[var(--color-accent-blue)]/30 rounded-lg p-3">
+                  <p className="text-xs text-[var(--color-text-secondary)] text-center">
+                    💡 提示：您可以点击"最小化"继续浏览其他内容
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 思维链进度最小化显示（右下角） */}
+      {showCotProgressModal && cotProgressMinimized && !cotError && (
+        <div className="fixed bottom-4 right-4 z-[300]">
+          <button
+            onClick={() => setCotProgressMinimized(false)}
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] px-4 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all flex items-center gap-3"
+          >
+            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="text-left">
+              <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                【阶段 {cotCurrentStage || 1}/5】
+                {cotCurrentStage === 1 && '剧本分析中...'}
+                {cotCurrentStage === 2 && '视觉策略中...'}
+                {cotCurrentStage === 3 && '镜头分配中...'}
+                {cotCurrentStage === 4 && '逐镜设计中...'}
+                {cotCurrentStage === 5 && '质量自检中...'}
+              </p>
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                点击展开详情
+              </p>
+            </div>
+          </button>
         </div>
       )}
       </>

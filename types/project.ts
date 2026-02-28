@@ -123,11 +123,63 @@ export interface ProjectSettings {
   /** 世界观概述 */
   worldView: string;
 
-  /** 整体视觉风格 */
+  /** 整体视觉风格（概念层，用于美术方向/题材风格描述） */
   visualStyle: string;
 
   /** 专有名词解释 */
   keyTerms: KeyTerm[];
+
+  // ========== 🆕 项目统一渲染画风（权威来源，用于角色/场景/九宫格） ==========
+  /** 项目渲染画风ID（'anime_2d' | 'custom' | null）
+   * - null: 新项目默认，用户必须主动选择
+   * - 'custom': 自定义风格
+   * - 其他: STORYBOARD_STYLES 中的 styleId
+   */
+  projectStyleId?: string | null;
+
+  /** 自定义风格-中文描述（仅当 projectStyleId='custom' 时使用） */
+  projectStyleCustomPromptCn?: string;
+
+  /** 自定义风格-英文渲染后缀（仅当 projectStyleId='custom' 时使用，这是实际生图的 promptSuffix） */
+  projectStyleCustomPromptEn?: string;
+
+  // ========== 🆕 九宫格覆盖风格（可选，用于线稿草图等特殊需求） ==========
+  /** 九宫格覆盖风格配置
+   * - null: 九宫格使用项目统一风格（默认）
+   * - 非null: 九宫格使用此覆盖风格（如线稿、黑白草图等）
+   */
+  storyboardStyleOverride?: {
+    styleId: string;           // 'hand_drawn_sketch' | 'custom'
+    customPromptCn?: string;   // 自定义风格-中文
+    customPromptEn?: string;   // 自定义风格-英文后缀
+  } | null;
+
+  /** 🆕 后台任务状态（用于项目创建后的异步补全） */
+  backgroundJobs?: {
+    /** 角色补全任务 - 按角色维度记录进度 */
+    supplement?: {
+      /** 顶层任务状态（ProjectWizard 初始化时设置，用于触发后台补全） */
+      status?: 'queued' | 'running' | 'complete' | 'error';
+      /** 任务开始时间（ISO字符串，ProjectWizard 写入） */
+      startedAt?: string;
+      /** 任务完成时间（ISO字符串） */
+      completedAt?: string;
+      /** 顶层错误信息 */
+      error?: string;
+      /** 按角色ID记录每个角色的补全进度 */
+      perCharacter?: {
+        [characterId: string]: {
+          status: 'queued' | 'running' | 'complete' | 'error';
+          message?: string; // 详细进度消息（如"Stage1 剧本分析..."）
+          stage?: string; // 当前阶段（Stage1/Stage2/Stage3/Stage4）
+          progress?: number; // 进度百分比（0-100）
+          startTime?: number; // 开始时间戳
+          endTime?: number; // 结束时间戳
+          errorMessage?: string; // 错误信息
+        };
+      };
+    };
+  };
 }
 
 /**
@@ -278,6 +330,11 @@ export interface ProjectAnalysisResult {
   volumes?: StoryVolume[];        // 🆕 分卷结构
   antagonists?: Antagonist[];     // 🆕 反派/BOSS档案
   episodeSummaries: EpisodeSummary[];
+  // 🆕 AI 猜测的主角列表（用于信息确认对话框）
+  suggestedMainCharacters?: Array<{
+    name: string;
+    reason: string;
+  }>;
 }
 
 /**
@@ -287,7 +344,7 @@ export interface BatchAnalysisProgress {
   currentBatch: number;           // 当前批次 (1-based)
   totalBatches: number;           // 总批次数
   batchEpisodeRange: string;      // 当前批次集数范围，如 "1-20"
-  partialResult: ProjectAnalysisResult;  // 累积的分析结果（实时更新）
+  partialResult: ProjectAnalysisResult | null;  // 累积的分析结果（初始为null，分析完成才有值）
   status: 'analyzing' | 'merging' | 'complete';
 }
 
@@ -310,6 +367,11 @@ export function createEmptyProject(name: string): Project {
       worldView: '',
       visualStyle: '',
       keyTerms: [],
+      // 🆕 新项目默认：渲染画风为空，用户必须主动选择
+      projectStyleId: null,
+      projectStyleCustomPromptCn: '',
+      projectStyleCustomPromptEn: '',
+      storyboardStyleOverride: null,
     },
     characters: [],
     scenes: [],

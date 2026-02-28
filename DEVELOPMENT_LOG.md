@@ -18,6 +18,493 @@
 
 ---
 
+## [2026-02-25 17:00] 🐛 问题修复 + ✨ 体验优化
+
+**修改内容**：修复"AI 角色设计师"点击后报 AbortSignal 类型错误导致补充失败的 Bug；同时在项目向导步骤3（新建项目分析）和重新分析页均加入 Loading 进度条下限和呼吸动效，避免用户误认为页面卡死。
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/components/ProjectDashboard.tsx`：两处 `supplementCharacterDetails` 调用中在 `onProgress` 之后显式补齐 `undefined, undefined`，确保 `onStageComplete` 对齐第9个参数，彻底修复 AbortSignal 类型错误
+  - `storyboard/components/ProjectWizard.tsx`：步骤3进度条在 `analysisProgress < 5%` 时给最低10%宽度并加 `animate-pulse`，单批次文案改为更具体的"正在分析第X集剧本…"
+  - `storyboard/App.tsx`：重新分析进度条在 `rawPct < 8%` 且状态为 `analyzing` 时给最低8%宽度并加 `animate-pulse`；分析中无结果区块加"AI 正在逐步分析，请稍候…"呼吸文案
+
+**修改原因**：
+- `supplementCharacterDetails` 共9个参数，`onStageComplete` 位于第9位，但调用方跳过了第7位（abortSignal）和第8位（cacheContext），导致 `onStageComplete` 函数落在 abortSignal 位置，浏览器 fetch 在读取 signal 属性时抛出类型转换错误
+- 单集或第一批分析期间进度从0%到有意义数值之间存在延迟，用户看到静止进度条无法判断是否正常运行
+
+**预期效果**：
+- 点击"AI 角色设计师"后不再报 AbortSignal 错误，角色补充流程正常执行
+- 分析开始即可看到进度条有最低宽度并闪烁动效，用户明确感知系统正在工作而非卡死
+
+**相关文档**：
+- `storyboard/services/characterSupplement/index.ts`（supplementCharacterDetails 9参数签名）
+
+---
+
+## [2026-02-25 15:30] 🐛 问题修复
+
+**修改内容**：收紧角色设定图美型模板的使用范围，仅对理想美型角色追加简化版美型提示，避免大伯、反派等非理想美型角色被统一套用偶像剧滤镜；同时修复项目单集/少集剧本分析时进度回调缺失导致前端 Loading 条长时间停留在 0% 的体验问题。
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/components/ProjectDashboard.tsx`：调整 getBeautyLevelPrompt，仅对 beautyLevel=idealized 返回美型风格提示，其余档位不再叠加统一美型模板
+  - `storyboard/services/projectAnalysis.ts`：为 analyzeProjectScriptsWithProgress 的单集/少集分支补充 onProgress 回调，统一进度上报行为
+
+**修改原因**：
+- 设定图统一追加理想美型风格提示，导致大伯、反派等角色的视觉呈现过度偶像化，与剧本定位不符
+- 单集/少集分析走“快捷路径”时未发送中间进度回调，用户界面长时间停留在 0%，易被误判为卡死
+
+**预期效果**：
+- 只有明确设定为理想美型的主角/关键角色会在设定图中叠加轻量美型风格提示，其余角色保持项目统一视觉风格但不过度美颜
+- 单集/少集剧本分析时，前端能在分析开始和结束时都收到进度更新，Loading 状态从“正在分析”自然过渡到“分析完成”，避免 0% 长时间不变
+
+**相关文档**：
+- `storyboard/docs/rules/角色设定图与美型策略统一方案.md`
+- `storyboard/docs/总结：4个问题的核心原因.ini`
+- `.augment/rules/project_Rules.md`
+
+---
+
+## [2026-02-25 14:00] 🏗️ 架构调整 + 🐛 问题修复
+
+**修改内容**：角色设定图与美型策略第一阶段架构改造：修复东亚角色被生成为欧美白人脸的问题，统一 Stage4 detailed/fast 版本的"穷但精致"服装规则，补全下装强制描述约束，新增 R00X 架构级问题处理规范，并创建方案设计文档。
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/components/ProjectDashboard.tsx`（模块级新增3个函数 + prompt构建4处注入）
+    - 新增 `detectEthnicityCategory()`：中文关键词→人种分类（8大类 + fantasy）
+    - 新增 `detectGenderFromText()`：外观文本→性别识别
+    - 新增 `getEthnicitySlot()`：返回英文 identity 描述 + 可选负向词
+    - 注入点1：`cleanedAppearance` 后立即计算 ethnicitySlot
+    - 注入点2：常态图/形态图 `subjectPrompt` 前置 `ethnicitySlot.identityEn`
+    - 注入点3：编辑式形态图 `keepUnchangedParts` 首行插入 `Ethnicity:` 行
+    - 注入点4：`negativePrompt` 追加 `ethnicitySlot.negativeEn`（东亚：防 Caucasian/Western features）
+  - `storyboard/services/characterSupplement/stage4-costume-design-optimized.ts`（3处修改）
+    - 关键判断第1条：补全连体/分体 bottom 字段填写规则
+    - idealized段落：将"底层/乡村→朴素实用"修正为"穷但精致"（权威规则对齐）
+    - JSON模板后：新增 `⚠️ bottom 字段强制要求（输出前自检）` 独立块
+  - `storyboard/services/characterSupplement/stage4-costume-design-fast.ts`（同上，与 optimized 完全同步）
+  - `.augment/rules/project_Rules.md`：新增 R00X 架构级问题处理规范
+  - `storyboard/docs/rules/角色设定图与美型策略统一方案.md`（新增）：第一阶段完整方案文档
+
+**修改原因**：
+1. **人种错误**：秦枭等中国人角色设定图生成欧美白人脸，根因是 `subjectPrompt` 无人种 slot，LLM 按默认白人模板生成
+2. **服装规则漂移**：`stage4-costume-design-optimized/fast.ts` 将"底层/乡村"映射为"朴素实用"，与原始权威规则"穷但精致"不一致
+3. **下装缺失**：分体服装 bottom 字段在 detailed/fast 两版中均无顶层强制约束，LLM 偶尔留空或填占位符
+4. **规则漂移机制缺失**：缺乏防止多版本规则再次漂移的架构级约束
+
+**预期效果**：
+- 秦枭等东亚角色的设定图 prompt 头部出现 `East Asian, Chinese male...`，negativePrompt 包含 `Caucasian, Western features...`，人种稳定贴合角色设定
+- 极致美型类底层角色的 Stage4 输出（detailed/fast 均）出现"穷但精致"语义，不再有"朴素实用"
+- 分体服装 bottom 字段输出具体描述（≥50字），连体服装填固定说明，不再出现空值或占位符
+
+**相关文档**：
+- `storyboard/docs/rules/角色设定图与美型策略统一方案.md`（第一阶段方案设计）
+- `.augment/rules/project_Rules.md`（R00X 规范）
+- `.augment/rules/角色补充核心规则.md`（Stage4 穷但精致权威规则）
+
+---
+
+## [2026-02-24 23:30] 🐛 问题修复
+
+**修改内容**：修复后台补全四大问题：角色描述延迟显示、merge卡住、baseline重复、形态格式不一致
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/services/utils/stateNameUtils.ts`（新增：状态名归一化工具）
+  - `storyboard/services/characterSupplement/index.ts`（S2加权评分、T2-b兜底）
+  - `storyboard/services/characterSupplement/extractCharacterStates.ts`（baseline过滤）
+  - `storyboard/App.tsx`（写库队列、节流、onStageComplete、baseline去重）
+  - `storyboard/components/StateManagementModal.tsx`（使用统一工具）
+  - `storyboard/docs/近期记录.ini`（更新S2评分规则说明）
+
+**修改原因**：
+1. **问题1**：角色描述要等所有角色完成才显示
+   - **根因**：无onStageComplete回调，App.tsx在全部角色结束后才写库
+   - **解决**：添加onStageComplete，Stage3/Stage4完成立即写库
+
+2. **问题2**：角色卡在"🔄 merge - ✅ 全部完成！"
+   - **根因**：高频patchProject导致AbortError
+   - **解决**：写库串行队列 + 5秒节流（非终态合并，终态立即flush）
+
+3. **问题3**：正道修士乙有重复baseline
+   - **根因**：精确字符串匹配`f.name !== '常规状态（完好）'`无法识别名称变体
+   - **解决**：统一使用normalizeStateName归一化判断
+
+4. **问题4**：形态描述格式不一致
+   - **根因**：只有最重要形态生成结构化描述，其他形态保留旧提取
+   - **解决**：S2加权评分选择最重要形态（出现集数+视觉冲击关键词+描述长度+T2-b跨度兜底）
+
+**预期效果**：
+1. Stage3完成立即显示【主体人物】【外貌特征】
+2. Stage4完成立即显示【服饰造型】
+3. 不再出现merge卡住/AbortError
+4. 每个角色只保留一份baseline
+5. 最重要形态使用结构化描述，其他形态保留旧提取
+
+**相关文档**：
+- 测试日志：`storyboard/docs/测试15.ini`
+- 规则文档：`.augment/rules/角色补充核心规则.md`
+
+---
+
+## [2026-02-24 XX:XX] 🐛 问题修复
+
+**修改内容**：修复形态图生成中的三个关键问题：战损形态无视觉变化、眼部外显被移除、颜色锚点过度泛化
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/components/ProjectDashboard.tsx`（sanitizeAppearanceWithLLM、translateClothingToEnglish、Keep/Apply兜底）
+  - `storyboard/services/characterSupplement/generateStateAppearance.ts`（战损规则补强）
+  - `storyboard/services/characterSupplement/stage4-costume-design-fast.ts`（颜色锚点约束）
+  - `storyboard/services/characterSupplement/index.ts`（全同色系告警）
+
+**修改原因**：
+1. **问题1**：女修士"素衣战损（轻微）"形态与"常规完好"生成同一张图
+   - **根因**：形态Delta提取输出全false，Keep/Apply模板输出"No changes (keep as reference)"
+   - **深层原因**：形态描述写成"整体保持完好"，且没有强制战损规则
+
+2. **问题2**：女修士"双目泛红、眼神深沉坚定带恨意"未在图中体现
+   - **根因**：sanitizeAppearanceWithLLM在form模式下移除了所有表情词，包括可画出的视觉外显
+
+3. **问题3**：方源内外层+鞋子全绿，缺乏层次
+   - **根因**：颜色锚点"碧绿大袍"被LLM过度泛化到所有层，提示词约束力度不够
+
+**预期效果**：
+1. 战损形态稳定呈现四要素（衣物破损、脏污、血迹、发型散乱）
+2. 眼部外显（泛红、坚定目光）被保留并进入Apply changes
+3. Stage4输出更容易有层次，减少"全绿套装"
+
+**相关文档**：
+- 测试日志：`storyboard/docs/测试15.ini`
+- 任务记录：`storyboard/docs/近期记录.ini`
+
+---
+
+## [2026-02-24 16:00] ✨ 新功能
+
+**修改内容**：实现角色补充骨架屏与分段更新 UI，提升用户体验
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/components/ProjectDashboard.tsx`
+    - 第273-296行：handleSupplementCharacter 添加 onStageComplete 回调
+    - 第378-404行：handleBatchSupplementCharacters 添加 onStageComplete 回调
+    - 第3854-3911行：外观描述区域显示骨架屏（补全中）
+
+**修改原因**：
+1. 之前补全过程中，UI 完全隐藏外观区域，用户只能看到"补全中..."，体验不佳
+2. 修改1已经实现了 onStageComplete 回调，但前端没有使用
+3. 用户希望看到实时进度，了解当前生成到哪个段落
+
+**预期效果**：
+1. 补全过程中，角色卡片显示骨架屏，实时显示各段落的生成状态
+2. Stage3 完成后，立即显示【主体人物】和【外貌特征】
+3. Stage4 完成后，立即显示【服饰造型】
+4. 提升用户体验，减少等待焦虑
+
+**相关文档**：
+- storyboard/docs/近期记录.ini（修改2讨论记录）
+
+---
+
+## [2026-02-24 15:30] ⚡ 性能优化
+
+**修改内容**：优化形态图生成提示词格式，采用 Nano Banana Pro 官方推荐的"Keep UNCHANGED + Apply changes"编辑式模板，提升参考图一致性
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/components/ProjectDashboard.tsx`
+    - 第1162-1309行：translateClothingToEnglish formPrompt 添加 hasClothingChange/hasMakeupChange/hasHairStyleChange 判断标志
+    - 第1383-1391行：强制要求形态图必须有常态参考图（allowTransformation 例外）
+    - 第1526-1560行：提升 formDelta/baselineLook/identityOnly 作用域
+    - 第1574-1680行：形态图使用 Keep/Apply 编辑模板，clothingDetailsPrompt 留空
+
+**修改原因**：
+1. 当前形态图虽然传了参考图，但 prompt 仍是"描述型关键词拼接"，缺少明确的参考图编辑指令
+2. Nano Banana Pro 官方手册强调：参考图编辑需要显式声明"Keep X unchanged / Apply changes Y"
+3. 形态图的 clothingDetailsPrompt 会把 JSON 原样拼进 prompt，干扰模型理解
+4. 用户要求：所有模型生效、形态图必须有参考图（常规完好图）、常规完好图不需要参考图
+
+**预期效果**：
+1. 形态图生成时，模型能明确理解"哪些保持不变（身份特征/骨相）、哪些需要修改（战损/换装/换妆）"
+2. 提升形态图与常态图的面部一致性（同一个人）
+3. 避免 JSON 拼接导致的 prompt 混乱
+4. 强制要求先生成常态图，确保形态图有参考基准
+
+**相关文档**：
+- storyboard/docs/references/nano banana pro提示词官方手册.txt
+- storyboard/docs/近期记录.ini（修改6讨论记录）
+
+---
+
+## [2026-02-24 13:54] 🐛 问题修复
+
+**修改内容**：修复角色补充进度更新被拒绝问题（stage5 rank缺失、undefined stage导致更新被误判为回退）
+
+**影响范围**：
+- 文件/模块：
+  - `App.tsx`（修改第730-772行、第993-1000行、第1040-1046行）- updateCharacterProgress 函数
+
+**修改原因**：
+1. stageRank 映射表缺少 `stage5` 条目，导致 stage5 更新的 rank 被计算为 0，被误判为"比 stage4 更早的旧状态"而拒绝
+2. 两处 updateCharacterProgress 调用未传 stage 字段（完成/错误分支），导致 `stage=undefined(rank=0)` 更新被拒绝
+3. 缺少对未知/缺失 stage 的兜底策略，任何拼写错误或新增 stage 都会被当作 rank=0 处理
+
+**预期效果**：
+1. 后台补全进度能正常从 stage4 → stage5 → merge → complete 单调推进，不再出现"拒绝更新"警告
+2. Stage5（事实字段补充）和 Stage5.5（智能形态补充）能正常执行并更新进度
+3. 未知 stage 会打印警告但不会触发误判，提升系统健壮性
+
+**相关文档**：storyboard/docs/测试15.ini（问题日志）
+
+---
+
+## [2026-02-28 22:00] 🐛 问题修复
+
+**修改内容**：1）修复 Stage5.5 形态扫描在正则 0 命中时不触发的问题，对从未进行过 LLM 扫描的角色也会补一次形态列表；2）简化 Stage5 abilities 输出，将带证据长句改为简短能力/性格标签；3）统一 Stage4 快速/详细模式的“随身道具”处理，将随身道具移出当前阶段，改为头饰/首饰分层并以 props 占位。
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/services/characterCompleteness.ts`
+  - `storyboard/services/characterSupplement/stage5-character-facts.ts`
+  - `storyboard/services/characterSupplement/stage4-costume-design-optimized.ts`
+  - `storyboard/docs/进度情况说明.ini`
+
+**修改原因**：
+- 言情角色（如苏曼）在重置后无法自动生成形态列表，原因是正则提取不到形态时被误判为 100% 完整，Stage5.5 从不执行。
+- abilities 字段强制附带集数+原文，既影响阅读体验，也增加 LLM 输出失败概率。
+- Stage4 fast 已移除【随身道具】改为【头饰/首饰】，但 optimized 仍使用旧的【随身道具】分层，导致两种模式规则不一致。
+
+**预期效果**：
+- 对未做过形态扫描的角色，至少执行一次 LLM 轻量形态扫描，生成可编辑的 formSummaries。
+- AI 角色设计师中的 abilities 以简短标签形式呈现，便于浏览和筛选。
+- Stage4 快速/详细模式在“随身道具 vs 服饰分层”上的规则完全一致，道具统一在后续场景/道具链路中处理。
+
+**相关文档**：
+- `storyboard/docs/测试.ini`
+- `storyboard/docs/进度情况说明.ini`
+
+---
+
+## [2026-02-24 00:30] 🐛 问题修复
+
+**修改内容**：修复角色补充与生图的4个核心问题（UI分层吞段、颜色漂移、补全闪现、形态prompt断裂）
+
+**影响范围**：
+- 文件/模块：
+  - storyboard/components/ProjectDashboard.tsx
+    - 修复 `parseAppearanceSections()`：递归解析【服饰造型】内的子段落（内层/中层/外层/鞋靴/腰带与挂件/随身道具）
+    - 修复外观区：补全中隐藏外观区（`isSupplementing` 时返回 null），避免闪现非结构化文本
+    - 修复形态生图：包含常态服装基底细节（`baseClothingKeywordsEn + formClothingKeywordsEn`）
+  - storyboard/services/characterSupplement/stage4-costume-design-fast.ts
+    - 删除硬编码"魔道/反派避免碧绿/翡翠绿"规则（101行）
+    - 新增剧本颜色锚点机制（`extractColorAnchor()` / `extractGarmentAnchor()`）
+  - storyboard/services/characterSupplement/index.ts
+    - 修复【服饰造型】拼接时强制换行（786/790行）
+
+**修改原因**：
+1. UI 解析吞掉【内/中/外层】分层服装细节（正则只抓取顶级【】，且固定顺序过滤）
+2. Stage4 硬编码"避免碧绿"与剧本"碧绿大袍"锚点冲突，导致模型漂移到紫色系
+3. 补全中闪现非结构化文本（UI 未在 `isSupplementing` 时隐藏外观区）
+4. 形态生图 prompt 未包含常态服装基底细节，导致中文分层很细但英文完全另一套
+
+**预期效果**：
+1. UI 完整展示分层服装细节（【内层】【中层】【外层】【鞋靴】【腰带与挂件】【随身道具】）
+2. 服装颜色严格遵循剧本锚点（"碧绿大袍"→深绿/墨绿，不再漂移到紫色）
+3. 补全中不再闪现"剧本简单描述"
+4. 形态生图 prompt 包含常态服装基底细节（常态基底 + 形态delta）
+
+**相关文档**：.augment/rules/角色补充核心规则.md
+
+---
+
+## [2026-02-23 23:50] 🏗️ 架构调整
+
+**修改内容**：升级形态图生成架构为"三层结构 + LLM结构化输出 + slot覆盖合并"，移除硬编码的妆容/唇色禁止规则
+
+**影响范围**：
+- 文件/模块：
+  - storyboard/components/ProjectDashboard.tsx（核心架构升级）
+    - 新增 `extractJSON()` 函数：解析LLM返回的JSON（支持 ```json 包裹）
+    - 新增 `mergeSlots()` 函数：通用slot覆盖合并（优先级：formDelta > baselineLook > identity）
+    - 修改 `extractKeyAppearanceFeatures()`：支持3种模式（'identity'/'baselineLook'/'full'）
+    - 修改 `translateClothingToEnglish()`：'form'模式输出结构化JSON（lipsColor/makeup/hairStyle/clothing/damage/appearance）
+    - 修改形态图prompt拼装逻辑：使用三层架构替代原有的"Identity + Delta"简单拼接
+    - 修改 `FORM_IMAGE_NEGATIVE_PROMPT`：移除硬编码的"lipstick/heavy makeup"禁止，只保留通用的"换人/变形"约束
+
+**修改原因**：
+- 原方案问题：硬编码"排除唇色/妆容"、"禁止口红"违背通用软件原则，无法支持剧本中的换妆/换唇色需求
+- 根本bug：同一部位在同一张图的提示词里出现互相竞争的描述（如 `light orange lips` + `pale lips` 同时存在），导致图像模型折中成"怪颜色/口红感/脏色"
+
+**新架构设计**：
+1. **Identity层**：只包含骨相结构（脸型、五官形状、骨架、瞳色、发色、体型比例、唯一标记）
+2. **Baseline Look层**：默认造型（唇色、妆容、发型、发色），从常规完好形态提取，形态图默认继承
+3. **Form Delta层**：形态明确提到的变化（唇色/妆容/发型/服装/污渍/外貌变化），只输出变化项
+4. **Slot覆盖规则**：同一slot只能有一个来源，优先级：formDelta > baselineLook > identity
+5. **LLM结构化输出**：Baseline Look和Form Delta都输出JSON格式，避免正则解析的不确定性
+
+**预期效果**：
+- 允许妆容/唇色变化：形态可以明确要求"换口红/换妆/卸妆"，不被negativePrompt压死
+- 避免slot冲突：同一部位不会同时出现两种描述（如唇色只保留formDelta的"pale lips"，自动移除baselineLook的"light orange lips"）
+- 保持同一人：Identity层锁定骨相结构，确保不同形态看起来像同一个人
+- 通用性：不硬编码审美规则，支持所有剧本类型（言情/悬疑/历史/现代等）
+
+**验证方式**：
+- 日志级验证：
+  - 检查控制台输出的三层结构（Identity/Baseline Look/Form Delta）
+  - 确认最终prompt中同一slot只有一个值（无冲突）
+- 效果回归：
+  - Case 1：形态只写"战损/疲惫/失血苍白唇" → 同一个人（脸一致），唇色苍白，无"淡橘口红感"
+  - Case 2：形态明确写"换成正红口红、浓妆" → 仍是同一个人（脸一致），但妆容确实变化，且不会出现混合冲突色
+  - Case 3：形态明确写"卸妆/素颜" → 妆容弱化/消失，但脸仍一致
+
+**相关文档**：
+- `.augment/rules/project_Rules.md` - 通用工具原则、专业判断 vs 硬编码规则
+
+---
+
+## [2026-02-23 23:30] 🐛 问题修复
+
+**修改内容**：修复角色形态一致性问题、泪痣生成异常、服装描述过于简单三个核心问题
+
+**影响范围**：
+- 文件/模块：
+  - storyboard/components/ProjectDashboard.tsx（Identity提取、slot冲突消解、泪痣约束、形态负面词）
+  - storyboard/services/characterSupplement/stage4-costume-design-optimized.ts（分层服装结构）
+  - storyboard/services/characterSupplement/stage4-costume-design-fast.ts（分层服装结构）
+  - storyboard/services/characterSupplement/getCostumeReference.ts（场景归一化、fallback优先级）
+
+**修改原因**：
+- 问题1：形态图与常态图不像同一人 + 重伤唇色异常
+  - 根因：Identity提取包含唇色/妆容，与形态Delta（pale lips）冲突，导致"脏橘色"
+- 问题2：泪痣变多/变大/跑位
+  - 根因：描述模糊（"泪痣" → "mole on face"），缺少排他性约束（无"only one"、无"no other moles"）
+- 问题3：服装描述过于简单
+  - 根因：Stage4缺少强制的"内/中/外层层次化结构"与6维度描述要求
+
+**预期效果**：
+- 形态一致性：Identity不再包含唇色/妆容，slot冲突自动消解，形态图添加专用负面词（禁止口红/夸张表情）
+- 泪痣稳定：锁定为"single tiny (2mm) tear mole just below the outer corner of the right eye"，添加排他性负面词
+- 服装细节：finalDescription升级为分层结构（内/中/外层+鞋靴+挂件），总字数180-260字，每层包含6维度描述
+- 参考命中率：场景关键词映射到"特殊"，fallback优先尝试"特殊"场景再降级到"日常"
+
+**验证方式**：
+- 自动验证：
+  - 断言：形态prompt不含唇色冲突（不同时出现 `light orange lips` 和 `pale lips`）
+  - 断言：泪痣触发时negativePrompt含排他词（`extra moles, multiple moles, big mole, misplaced mole`）
+- 人工回归：
+  - 同一角色生成常态图 + 重伤形态图，对比五官结构一致性、唇色是否苍白、泪痣数量/位置/大小
+  - 随机抽3个角色（含玄幻修仙）检查【服饰造型】是否稳定出现分层描述
+
+**相关文档**：
+- storyboard/docs/测试13.ini - 问题证据日志
+- .augment/rules/角色补充核心规则.md - 角色补充规范
+
+---
+
+## [2026-02-23 XX:XX] ♻️ 代码重构 + ✨ 新功能
+
+**修改内容**：去除硬编码规则，实现通用工具原则；新增变身策略开关，支持彻底变身形态
+
+**影响范围**：
+- 文件/模块：
+  - storyboard/types.ts（CharacterForm 新增 consistencyMode 字段）
+  - storyboard/components/EditModal.tsx（形态编辑表单新增变身复选框）
+  - storyboard/components/ProjectDashboard.tsx（去硬编码 + 变身策略实现）
+
+**修改原因**：
+- 问题1：提示词中存在大量硬编码规则（如"盘发必须long hair"、"重伤必须无玉佩/灵石"、"禁止翻译瞳色发色"），违反"通用工具原则"，不支持变身/染发/换瞳等剧情
+- 问题2：所有形态图强制使用常态参考图+identitySeed，导致彻底变身（换脸/变物种）无法实现
+
+**预期效果**：
+- 通用性提升：不再硬编码特定角色类型/题材/饰品，改用"提问式引导"让LLM做专业判断
+- 变身可控：用户可手动勾选"允许变身"，系统自动切换策略（不用参考图，使用形态专属seed）
+- 稳定性保持：默认仍为"锁定同一人"，保证绝大多数形态的脸部一致性
+
+**验证方式**：
+- 编译验证：`cd storyboard && npm run build`
+- 回归测试：
+  - Case A（战损无特定饰品）：形态描述只写"衣物破损、沾血、泥污" → delta 只输出战损/污渍，不会凭空出现 `no crown/no jade pendant`
+  - Case B（明确缺失物品）：形态写"头盔丢失/项链不见/武器折断" → delta 输出 `missing helmet/no necklace/broken sword` 等通用否定
+  - Case C（变身）：形态写"银发蓝瞳/皮肤变灰/长出角/鳞片覆盖" → delta 会输出对应变化关键词（不再被"禁止翻译发色瞳色"挡住）
+  - Case D（变身形态勾选）：创建形态并勾选"允许变身" → 验证生成图不使用参考图且使用不同seed
+  - 对比常态/形态：脸仍保持一致（lockSamePerson形态），但允许出现"文本明确"的差异项
+
+**相关文档**：
+- .augment/rules/project_Rules.md - 通用工具原则、专业判断 vs 硬编码规则
+- .augment/rules/角色补充核心规则.md - 角色补充核心规则
+
+---
+
+## [2026-02-22 XX:XX] 🐛 问题修复
+
+**修改内容**：修复测试8发现的两个问题：CoT期间forms/缺失字段仍显示、baseline设定图凭空出现血迹
+
+**影响范围**：
+- 文件/模块：
+  - storyboard/components/ProjectDashboard.tsx（sanitizeAppearanceWithLLM升级为mode参数、CharacterCard UI门禁扩展）
+
+**修改原因**：
+- 问题1：CharacterCard的CoT门禁只覆盖外观描述区，forms列表和缺失字段区无门禁，导致CoT期间仍显示剧本提取的战损形态
+- 问题2：sanitizeAppearanceWithLLM的prompt包含"血迹改写示例"，LLM会凭空新增"少量血迹/不易察觉的血迹"，导致baseline设定图出现血迹
+
+**预期效果**：
+- CoT queued/running期间，主要角色卡片只显示"后台补充进度"块（有进度条），隐藏外观区/缺失字段区/forms区
+- baseline模式生成设定图时，经过二次严格清理+关键词兜底，最终提示词不含血迹相关词，生成图无血迹
+
+**相关文档**：
+- storyboard/docs/测试8.ini - 测试日志（包含血迹问题证据）
+
+---
+
+## [2026-02-20 XX:XX] 🐛 问题修复
+
+**修改内容**：修复角色补充 CoT 生成被旧逻辑跳过的问题（方案A：清空主要角色 appearance 草稿，强制触发思维链）
+
+**影响范围**：
+- 文件/模块：`storyboard/App.tsx`（`runBackgroundSupplement` 函数，新增 `identifyMainCharacters` 引入）
+
+**修改原因**：
+- `projectAnalysis.ts` 在项目创建阶段就把"从剧本提取"的外观写进了 `characters[].appearance`（包含正确的结构化标记【主体人物】【外貌特征】【服饰造型】）
+- `identifyMainCharacters.ts::needsSupplement()` 检查到标记存在且长度够，就认为"已完整"，跳过 CoT 补充
+- 导致控制台一直显示"所有主要角色都已有完整描述"，实际角色描述是简单的剧本提取文本（50字以内），而非详细的 CoT 生成内容（100-150字结构化设计）
+
+**预期效果**：
+- 后台补充时强制清空主要角色的 `appearance` 字段（仅传入补充函数的副本，不改原数据）
+- `needsSupplement()` 返回 true，触发 Stage1（剧本分析）→ Stage2（视觉标签）→ Stage3（外貌设计）→ Stage4（服装设计）的完整 CoT 生成
+- 控制台显示"将补充 X 个主要角色"，角色描述变为详细的结构化设计内容，符合影视美学标准
+
+**相关文档**：
+- `.augment/rules/角色补充核心规则.md` - 角色补充核心规则（剧本类型决定美学标准、外貌服装分离、影视美学词汇）
+- `.augment/rules/project_Rules.md` - AI Director 核心原则（通用工具原则、专业判断 vs 硬编码规则）
+
+---
+
+## [2026-02-20 03:15] 🐛 问题修复
+
+**修改内容**：修复角色补充功能的三大核心问题：缓存短路导致思维链未执行、并发补充导致角色数据覆盖、后台补全进度条不显示。通过升级缓存隔离机制（key纳入projectId/characterId/scriptHash/mode/beautyLevel）、实现字段级缓存合并与结构化校验、修复并发更新使用projectRef.current避免stale snapshot、实时同步后台任务进度到React状态（带节流）、增加queued状态UI展示、过滤群像角色名称（群雄/众人/诸人等）避免误补充。
+
+**影响范围**：
+- 文件/模块：
+  - storyboard/services/characterSupplement/cache.ts（缓存版本1.0→1.1、key升级、scriptHash生成）
+  - storyboard/services/characterSupplement/index.ts（字段级合并、结构化校验）
+  - storyboard/services/characterSupplement/identifyMainCharacters.ts（群像过滤、结构化标记校验）
+  - storyboard/services/characterCompleteness.ts（服饰造型段落缺失检测）
+  - storyboard/services/characterSupplement/autoSupplement.ts（cacheContext传递）
+  - storyboard/App.tsx（syncBackgroundJobStatus辅助函数、进度节流、函数式setState）
+  - storyboard/components/ProjectDashboard.tsx（projectRef.current并发修复、queued状态UI）
+
+**修改原因**：测试发现角色补充质量异常（描述过于简单、疑似缓存污染）、并发补充2个角色时数据丢失（last-write-wins覆盖）、Dashboard进度条不显示（仅写DB未同步React状态）。根因分析定位到：旧缓存命中导致CoT阶段跳过、缓存key缺少项目/剧本隔离、缺失字段判断被长文本误判、React状态更新使用stale snapshot、后台进度未同步到前端。
+
+**预期效果**：新项目不会命中旧缓存、跨项目/跨剧本缓存完全隔离、角色补充生成完整的结构化描述（包含【主体人物】【外貌特征】【服饰造型】段落）、并发补充多个角色时数据不丢失、Dashboard实时显示后台补全进度（queued→running→complete/error）、群像角色（群雄/众人等）不进入自动补全候选名单。
+
+**相关文档**：
+- `.augment/rules/角色补充核心规则.md`（角色补充核心规则）
+- `.augment/rules/global-rules.md`（R007开发日志规范）
+
+---
+
 ## [2026-02-08 20:12] ✨ 新功能 + 🐛 问题修复
 
 **修改内容**：为九宫格分镜图生成增加 task_code 持久化与断网/刷新自动恢复；新增 episodes 局部更新（PATCH）用于仅更新 shots，并在应用九宫格后清理任务元信息，避免重复生成与多余写入。
@@ -3694,4 +4181,35 @@ mkdir -p docs/rules
 ---
 
 **注意**：本文件由开发规则R007自动维护，请遵循规范格式添加日志条目。
+
+---
+
+## [2026-02-25 10:00] 🐛 问题修复
+
+**修改内容**：修复后台角色补全5个根本性 bug：角色描述延迟显示、Stage4服装写回失效、进度卡在 merge 不推进、forms 被后置提取覆盖、baseline 重复出现。通过 B2 同义名策略和 F2 合并策略彻底解决。
+
+**影响范围**：
+- 文件/模块：
+  - `storyboard/services/utils/stateNameUtils.ts`（新增 BASELINE_SYNONYMS B2 同义名列表，修改 isBaselineStateName 支持同义匹配）
+  - `storyboard/services/characterSupplement/index.ts`（Stage3回调改为传含标记的结构化文本；Stage4回调修复两处bug：finalDescription 多层访问为 undefined、baseAppearance 缺少段落标记）
+  - `storyboard/services/characterSupplement/identifyMainCharacters.ts`（getMissingFields 新增 forms 缺失判定，触发 Stage5.5 智能形态补全）
+  - `storyboard/App.tsx`（Stage4 分支判断 result.costume → result.appearance；后置 forms 提取改为 F2 合并而非覆盖，保留 Stage5.5 结构化形态）
+
+**修改原因**：
+1. Stage3 回调传 facialFeatures（无【主体人物】标记），UI 骨架屏 includes 判定永远失败，角色卡须等全部完成才刷新
+2. Stage4 回调 finalDescription?.finalDescription 多层访问（string 无此属性）costumeText 始终为空；App.tsx 判断 result.costume（永远 false）写回无效
+3. getMissingFields 不含 forms，needForms 永远 false，Stage5.5 从不执行，"只结构化最重要1个形态"无效
+4. 后置 extractCharacterStates 直接覆盖 forms，清空 Stage5.5 生成的结构化形态
+5. "完好常服"等同义名未被识别为 baseline，与"常规状态（完好）"同时出现
+
+**预期效果**：
+- Stage3/Stage4 完成后立即刷新角色卡（含骨架屏展示），不再等所有角色完成
+- 进度从 stage3→stage4→stage5→merge→complete 正常推进，不再卡 merge
+- forms 中不再同时出现"常规状态（完好）"和"完好常服"等同义重复
+- Stage5.5 正常执行，最重要的1个形态拥有结构化描述，其余保留文本提取
+- 后置提取追加而非覆盖，保留 Stage5.5 结构化成果
+
+**相关文档**：`storyboard/docs/测试15.ini`（验收测试日志）、`.augment/rules/角色补充核心规则.md`
+
+---
 

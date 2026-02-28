@@ -309,8 +309,8 @@ ${episodeSummary.storySummary}`;
 
   // 降级：从所有镜头的storyBeat中提取关键剧情点
   const storyBeats = shots
-    .map(shot => shot.storyBeat)
-    .filter(beat => beat && beat.trim().length > 0);
+    .map(shot => typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat?.event)
+    .filter((beat): beat is string => typeof beat === 'string' && beat.trim().length > 0);
 
   if (storyBeats.length === 0) {
     return `本集故事梗概：
@@ -371,7 +371,8 @@ function generateStoryContent(shots: Shot[]): string {
 
     // 故事节拍（动作描述）
     if (shot.storyBeat) {
-      parts.push(`▲${shot.storyBeat}`);
+      const beatText = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event;
+      if (beatText) parts.push(`▲${beatText}`);
     }
 
     // 对白

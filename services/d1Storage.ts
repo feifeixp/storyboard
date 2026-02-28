@@ -7,7 +7,16 @@ import { Project, Episode } from '../types/project';
 import { getAccessToken } from './auth';
 
 // API 基础 URL（根据环境切换）
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.yourdomain.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+// 🆕 是否使用本地存储模式（当 API_BASE_URL 未配置时）
+const USE_LOCAL_STORAGE = !API_BASE_URL;
+
+if (USE_LOCAL_STORAGE) {
+  console.log('🔧 [存储模式] 使用浏览器 localStorage（未配置远程 API）');
+} else {
+  console.log('🌐 [存储模式] 使用远程 API:', API_BASE_URL);
+}
 
 /**
  * 通用 API 请求函数
@@ -20,6 +29,14 @@ async function apiRequest<T>(
   timeout: number = 30000 // 30秒超时
 ): Promise<T> {
   const accessToken = getAccessToken();
+
+  // 🆕 远程模式下必须有 token（强制登录策略）
+  if (!USE_LOCAL_STORAGE && !accessToken) {
+    const error = new Error('Unauthorized: Missing access token. Please login first.');
+    (error as any).code = 'AUTH_REQUIRED';
+    console.error('[API请求] 缺少访问令牌，请先登录');
+    throw error;
+  }
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -41,7 +58,16 @@ async function apiRequest<T>(
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(error.error || `HTTP ${response.status}`);
+        const errorMessage = error.error || `HTTP ${response.status}`;
+
+        // 🆕 401 错误特殊处理：明确提示需要登录
+        if (response.status === 401) {
+          const authError = new Error(`Unauthorized: ${errorMessage}. Please login again.`);
+          (authError as any).code = 'AUTH_REQUIRED';
+          throw authError;
+        }
+
+        throw new Error(errorMessage);
       }
 
       return response.json();
@@ -49,8 +75,14 @@ async function apiRequest<T>(
       const isLastAttempt = attempt === retries;
       const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('timeout'));
       const isNetworkError = error instanceof Error && error.message.includes('Failed to fetch');
+      const isAuthError = error instanceof Error && ((error as any).code === 'AUTH_REQUIRED' || error.message.includes('Unauthorized'));
 
       console.warn(`[API请求] ${endpoint} 第${attempt}次尝试失败:`, error);
+
+      // 🆕 认证错误不重试，直接抛出
+      if (isAuthError) {
+        throw error;
+      }
 
       // 如果是超时或网络错误，且不是最后一次尝试，则重试
       if ((isTimeout || isNetworkError) && !isLastAttempt) {
@@ -76,6 +108,18 @@ async function apiRequest<T>(
  * 获取所有项目（仅元数据）
  */
 export async function getAllProjects(): Promise<Project[]> {
+  // 🆕 本地存储模式
+  if (USE_LOCAL_STORAGE) {
+    try {
+      const stored = localStorage.getItem('storyboard_projects');
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('读取本地项目失败:', error);
+      return [];
+    }
+  }
+
+  // 远程 API 模式
   try {
     const data = await apiRequest<{ projects: any[] }>('/api/projects');
 
@@ -102,6 +146,21 @@ export async function getAllProjects(): Promise<Project[]> {
  * 获取单个项目（完整数据）
  */
 export async function getProject(projectId: string): Promise<Project | null> {
+  // 🆕 本地存储模式
+  if (USE_LOCAL_STORAGE) {
+    try {
+      const stored = localStorage.getItem('storyboard_projects');
+      if (!stored) return null;
+
+      const projects: Project[] = JSON.parse(stored);
+      return projects.find(p => p.id === projectId) || null;
+    } catch (error) {
+      console.error('读取本地项目失败:', error);
+      return null;
+    }
+  }
+
+  // 远程 API 模式
   try {
     const project = await apiRequest<any>(`/api/projects/${projectId}`);
 
@@ -223,6 +282,11 @@ export async function createProject(name: string): Promise<Project> {
         worldView: '',
         visualStyle: '',
         keyTerms: [],
+        // 🆕 新项目：渲染画风为空，用户必须主动选择
+        projectStyleId: null,
+        projectStyleCustomPromptCn: '',
+        projectStyleCustomPromptEn: '',
+        storyboardStyleOverride: null,
       },
       characters: [],
       scenes: [],

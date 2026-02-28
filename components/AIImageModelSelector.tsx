@@ -103,20 +103,17 @@ export const AIImageModelSelector: React.FC<AIImageModelSelectorProps> = ({
         ))}
       </select>
 
-      {/* 模型信息提示 */}
+      {/* 模型信息提示（精简版） */}
       {selectedModel && (
         <div className="mt-2 text-[11px] text-[var(--color-text-tertiary)] space-y-1">
-          <div>{selectedModel.model_description}</div>
           <div className="flex items-center gap-3 flex-wrap">
             <span>💰 {selectedModel.points_cost_per_image} 积分/张</span>
-            <span>📐 {selectedModel.supported_aspect_ratios.join(', ')}</span>
-            <span>📏 {selectedModel.supported_sizes.join(', ')}</span>
+            {selectedModel.require_membership && (
+              <span className="text-[var(--color-accent-amber)]">
+                🔒 需要会员等级: {selectedModel.min_membership_level}
+              </span>
+            )}
           </div>
-          {selectedModel.require_membership && (
-            <div className="text-[var(--color-accent-amber)]">
-              🔒 需要会员等级: {selectedModel.min_membership_level}
-            </div>
-          )}
         </div>
       )}
     </div>

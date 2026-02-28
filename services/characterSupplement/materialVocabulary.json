@@ -1,0 +1,347 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "布料材质描述词汇库",
+  "description": "适用于 AI 图像生成的服装材质描述参考（全量版本）",
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-23",
+  
+  "categories": {
+    "fabricTypes": {
+      "title": "布料材质类型",
+      "naturalFibers": [
+        { "zh": "丝绸", "en": "silk", "desc": "柔软顺滑，有光泽，垂坠感好" },
+        { "zh": "真丝", "en": "pure silk", "desc": "天然光泽，轻盈飘逸" },
+        { "zh": "桑蚕丝", "en": "mulberry silk", "desc": "细腻柔滑，温润光泽" },
+        { "zh": "棉", "en": "cotton", "desc": "柔软透气，哑光质感" },
+        { "zh": "棉麻", "en": "cotton linen", "desc": "自然肌理，略带褶皱感" },
+        { "zh": "麻", "en": "linen", "desc": "粗糙质感，天然褶皱" },
+        { "zh": "羊毛", "en": "wool", "desc": "温暖厚实，略带绒感" },
+        { "zh": "羊绒", "en": "cashmere", "desc": "柔软细腻，轻盈保暖" },
+        { "zh": "天鹅绒", "en": "velvet", "desc": "绒面丰厚，光泽变化丰富" }
+      ],
+      "specialFabrics": [
+        { "zh": "纱", "en": "gauze / chiffon", "desc": "轻薄透明，飘逸朦胧" },
+        { "zh": "欧根纱", "en": "organza", "desc": "挺括透明，有轻微光泽" },
+        { "zh": "蕾丝", "en": "lace", "desc": "镂空花纹，精致优雅" },
+        { "zh": "缎面", "en": "satin", "desc": "高光泽，顺滑细腻" },
+        { "zh": "丝绒", "en": "velour", "desc": "柔软绒面，温暖质感" },
+        { "zh": "雪纺", "en": "chiffon", "desc": "轻盈飘逸，半透明" },
+        { "zh": "塔夫绸", "en": "taffeta", "desc": "挺括有型，带有轻微沙沙声感" },
+        { "zh": "锦缎", "en": "brocade", "desc": "华丽织花，厚重有质感" }
+      ],
+      "modernMaterials": [
+        { "zh": "皮革", "en": "leather", "desc": "光滑或粗糙纹理，挺括有型" },
+        { "zh": "仿皮", "en": "faux leather", "desc": "光滑表面，人造质感" },
+        { "zh": "尼龙", "en": "nylon", "desc": "光滑防水，略带光泽" },
+        { "zh": "涤纶", "en": "polyester", "desc": "挺括抗皱，光泽稳定" },
+        { "zh": "氨纶/弹力布", "en": "spandex / stretch fabric", "desc": "贴身弹性，顺滑光泽" }
+      ]
+    },
+    
+    "structure": {
+      "title": "材质结构特征",
+      "weaveTypes": [
+        { "zh": "平纹", "en": "plain weave", "effect": "简洁均匀，表面平整" },
+        { "zh": "斜纹", "en": "twill weave", "effect": "对角纹理，立体感强" },
+        { "zh": "缎纹", "en": "satin weave", "effect": "光滑光亮，反光强" },
+        { "zh": "针织", "en": "knit", "effect": "柔软弹性，纹理细腻" },
+        { "zh": "提花", "en": "jacquard", "effect": "织入图案，立体花纹" },
+        { "zh": "网眼", "en": "mesh", "effect": "镂空透气，网格状" },
+        { "zh": "毛圈", "en": "terry cloth", "effect": "柔软蓬松，吸水性强" }
+      ],
+      "thickness": [
+        { "zh": "轻薄", "en": "lightweight / sheer", "scene": "夏装、纱衣、内衬" },
+        { "zh": "中等厚度", "en": "medium weight", "scene": "常规服装" },
+        { "zh": "厚重", "en": "heavyweight", "scene": "外套、冬装" },
+        { "zh": "密织", "en": "tightly woven", "scene": "挺括有型" },
+        { "zh": "稀疏", "en": "loosely woven", "scene": "透气轻盈" }
+      ],
+      "transparency": [
+        { "zh": "完全不透明", "en": "opaque", "effect": "无透光，遮挡性强" },
+        { "zh": "半透明", "en": "semi-transparent", "effect": "隐约透光，朦胧感" },
+        { "zh": "透明", "en": "transparent / sheer", "effect": "清晰透视，轻盈飘逸" }
+      ]
+    },
+    
+    "sheen": {
+      "title": "光泽与反射",
+      "sheenTypes": [
+        { "zh": "哑光", "en": "matte", "desc": "无光泽，柔和低调" },
+        { "zh": "柔光", "en": "soft sheen", "desc": "微弱光泽，温润内敛" },
+        { "zh": "缎面光泽", "en": "satin sheen", "desc": "柔和光泽，细腻反光" },
+        { "zh": "珍珠光泽", "en": "pearlescent", "desc": "珍珠般变幻光泽" },
+        { "zh": "金属光泽", "en": "metallic sheen", "desc": "强烈反光，如金属般闪亮" },
+        { "zh": "镜面光泽", "en": "glossy / mirror-like", "desc": "极强反光，如镜面般光滑" },
+        { "zh": "暗光泽", "en": "subtle luster", "desc": "低调内敛的微光" }
+      ],
+      "lightEffects": [
+        { "zh": "高光", "en": "highlights", "desc": "受光面的明亮反射" },
+        { "zh": "柔和反光", "en": "soft reflection", "desc": "温和的光线折射" },
+        { "zh": "变幻光泽", "en": "iridescent", "desc": "随角度变化的色彩光泽" },
+        { "zh": "闪光", "en": "shimmer / sparkle", "desc": "细微闪烁，如星光点点" },
+        { "zh": "漫反射", "en": "diffused reflection", "desc": "光线均匀散射，无强烈反光" }
+      ]
+    },
+    
+    "texture": {
+      "title": "纹理与触感",
+      "surfaceTexture": [
+        { "zh": "光滑", "en": "smooth", "feel": "平整无颗粒感" },
+        { "zh": "细腻", "en": "fine / delicate", "feel": "质地紧密，触感柔和" },
+        { "zh": "粗糙", "en": "coarse / rough", "feel": "表面不平，有摩擦感" },
+        { "zh": "柔软", "en": "soft", "feel": "蓬松舒适，易于压缩" },
+        { "zh": "挺括", "en": "crisp / stiff", "feel": "有型不软塌，支撑性强" },
+        { "zh": "蓬松", "en": "fluffy / puffy", "feel": "立体膨胀，充满空气感" },
+        { "zh": "紧密", "en": "dense / compact", "feel": "质地厚实，结构紧凑" }
+      ],
+      "specialTexture": [
+        { "zh": "绒面", "en": "nap / pile", "desc": "细密绒毛，柔软温暖" },
+        { "zh": "颗粒感", "en": "textured / grainy", "desc": "细微凸起，立体触感" },
+        { "zh": "褶皱肌理", "en": "crinkled / creased", "desc": "自然褶痕，不规则纹理" },
+        { "zh": "波纹", "en": "rippled", "desc": "波浪状起伏" },
+        { "zh": "褶皱", "en": "pleated", "desc": "规则或不规则的褶痕" },
+        { "zh": "压纹", "en": "embossed", "desc": "压制出的凸起图案" }
+      ]
+    },
+
+    "craftsmanship": {
+      "title": "工艺与装饰",
+      "embroidery": [
+        { "zh": "平绣", "en": "flat embroidery", "effect": "平面刺绣，贴合布料" },
+        { "zh": "立体绣", "en": "raised embroidery", "effect": "凸起立体，层次丰富" },
+        { "zh": "暗纹绣", "en": "tone-on-tone embroidery", "effect": "同色系刺绣，低调精致" },
+        { "zh": "彩绣", "en": "colored embroidery", "effect": "多色线条，图案丰富" },
+        { "zh": "金线绣", "en": "gold thread embroidery", "effect": "金属线刺绣，华贵光泽" },
+        { "zh": "珠绣", "en": "bead embroidery", "effect": "珠片点缀，闪光效果" },
+        { "zh": "蕾丝绣", "en": "lace embroidery", "effect": "镂空花纹，精致优雅" }
+      ],
+      "printing": [
+        { "zh": "印花", "en": "print", "effect": "平面图案，色彩鲜明" },
+        { "zh": "扎染", "en": "tie-dye", "effect": "渐变晕染，不规则纹理" },
+        { "zh": "手绘", "en": "hand-painted", "effect": "手工绘制，笔触可见" },
+        { "zh": "渐变染", "en": "ombre / gradient dye", "effect": "色彩渐变过渡" },
+        { "zh": "数码印花", "en": "digital print", "effect": "精细图案，色彩丰富" }
+      ],
+      "decorativeDetails": [
+        { "zh": "镶边", "en": "piping / trim", "effect": "边缘装饰线条" },
+        { "zh": "滚边", "en": "binding", "effect": "包边处理，利落收口" },
+        { "zh": "流苏", "en": "fringe / tassel", "effect": "垂坠装饰，动态感强" },
+        { "zh": "珠片", "en": "sequins", "effect": "闪光装饰，华丽感" },
+        { "zh": "亮片", "en": "glitter", "effect": "细小闪光颗粒" },
+        { "zh": "蕾丝花边", "en": "lace trim", "effect": "镂空边饰，精致优雅" },
+        { "zh": "褶边", "en": "ruffle", "effect": "波浪边缘，浪漫感" },
+        { "zh": "绑带", "en": "ribbon / ties", "effect": "装饰性系带" },
+        { "zh": "纽扣", "en": "buttons", "effect": "功能性或装饰性扣子" }
+      ]
+    },
+
+    "silhouette": {
+      "title": "版型与剪裁",
+      "overallSilhouette": [
+        { "zh": "修身", "en": "fitted / tailored", "feature": "贴合身形，线条流畅" },
+        { "zh": "宽松", "en": "loose / oversized", "feature": "宽大舒适，自由感" },
+        { "zh": "A字型", "en": "A-line", "feature": "上窄下宽，优雅大方" },
+        { "zh": "H型", "en": "straight / H-line", "feature": "上下等宽，简洁利落" },
+        { "zh": "X型", "en": "hourglass / X-line", "feature": "收腰设计，强调曲线" },
+        { "zh": "茧型", "en": "cocoon silhouette", "feature": "中间宽松，收口处收紧" },
+        { "zh": "直筒", "en": "straight-cut", "feature": "垂直线条，简约大方" }
+      ],
+      "localTailoring": [
+        { "zh": "领口", "en": "neckline", "types": "round neck, V-neck, square neck, high collar" },
+        { "zh": "袖型", "en": "sleeve", "types": "long sleeve, short sleeve, sleeveless, puff sleeve, bell sleeve" },
+        { "zh": "下摆", "en": "hem", "types": "straight hem, asymmetric hem, fishtail hem" },
+        { "zh": "腰线", "en": "waistline", "types": "high waist, mid waist, low waist, cinched waist" }
+      ],
+      "length": [
+        { "zh": "超短", "en": "mini", "position": "大腿中部以上" },
+        { "zh": "短款", "en": "short", "position": "臀部以上" },
+        { "zh": "中长", "en": "midi", "position": "小腿中部" },
+        { "zh": "长款", "en": "long / maxi", "position": "脚踝或以下" },
+        { "zh": "及地", "en": "floor-length", "position": "拖地长度" }
+      ]
+    },
+
+    "draping": {
+      "title": "褶皱与垂坠",
+      "wrinkleTypes": [
+        { "zh": "自然褶皱", "en": "natural creases", "desc": "随身体动作产生的自然褶痕" },
+        { "zh": "规则褶皱", "en": "pleats", "desc": "人为压制的规则褶痕" },
+        { "zh": "不规则褶皱", "en": "irregular wrinkles", "desc": "随机分布，生活感强" },
+        { "zh": "柔和褶痕", "en": "soft folds", "desc": "轻柔曲线，流动感强" },
+        { "zh": "深度褶皱", "en": "deep creases", "desc": "明显的凹凸褶痕" },
+        { "zh": "细密褶皱", "en": "fine pleats", "desc": "密集细小的褶痕" }
+      ],
+      "drapingEffects": [
+        { "zh": "自然垂坠", "en": "natural draping", "effect": "顺重力自然下垂" },
+        { "zh": "流畅垂坠", "en": "fluid draping", "effect": "流动感强，线条柔美" },
+        { "zh": "挺括有型", "en": "structured", "effect": "保持版型，不软塌" },
+        { "zh": "柔软垂落", "en": "soft fall", "effect": "轻柔下垂，贴合身形" },
+        { "zh": "堆叠感", "en": "puddling / gathering", "effect": "底部堆叠，层次丰富" },
+        { "zh": "飘逸感", "en": "flowing", "effect": "随风飘动，动态美感" }
+      ],
+      "dynamicStates": [
+        { "zh": "静态垂落", "en": "static drape", "desc": "静止状态的自然悬垂" },
+        { "zh": "随风飘动", "en": "windblown / billowing", "desc": "风吹动态，轻盈飘逸" },
+        { "zh": "行走摆动", "en": "swaying with movement", "desc": "随步伐自然摆动" },
+        { "zh": "旋转飞扬", "en": "twirling / swirling", "desc": "旋转时的动态美感" }
+      ]
+    },
+
+    "layering": {
+      "title": "分层与组合",
+      "layerStructure": [
+        { "zh": "单层", "en": "single layer", "method": "单一布料，简洁利落" },
+        { "zh": "双层", "en": "double layer", "method": "两层叠加，增加厚度或透视感" },
+        { "zh": "多层", "en": "multi-layer", "method": "三层以上，层次丰富" },
+        { "zh": "内衬", "en": "lining", "method": "内层面料，增加挺括度" },
+        { "zh": "夹层", "en": "interlining", "method": "中间层，保暖或塑形" }
+      ],
+      "transparencyOverlay": [
+        { "zh": "透视效果", "en": "see-through", "desc": "透明材质露出内层" },
+        { "zh": "若隐若现", "en": "sheer overlay", "desc": "半透明覆盖，朦胧美感" },
+        { "zh": "层叠错位", "en": "layered offset", "desc": "不同长度的层次叠加" },
+        { "zh": "拼接组合", "en": "paneling / mixed materials", "desc": "不同材质拼接" }
+      ],
+      "materialContrast": [
+        { "zh": "光泽与哑光", "en": "sheen vs matte", "effect": "视觉对比，层次分明" },
+        { "zh": "厚重与轻薄", "en": "heavy vs lightweight", "effect": "质感对比" },
+        { "zh": "透明与不透明", "en": "transparent vs opaque", "effect": "通透性对比" },
+        { "zh": "粗糙与细腻", "en": "rough vs smooth", "effect": "触感对比" }
+      ]
+    },
+
+    "stylePresets": {
+      "title": "常见服装风格组合",
+      "ancientHanfu": {
+        "zh": "古风/汉服",
+        "materials": "丝绸 + 真丝纱 + 缎面",
+        "materialsEn": "silk + gauze + satin",
+        "sheen": "柔光、缎面光泽",
+        "sheenEn": "soft sheen, satin sheen",
+        "draping": "自然垂坠、飘逸感",
+        "drapingEn": "natural draping, flowing",
+        "decoration": "暗纹绣、滚边",
+        "decorationEn": "tone-on-tone embroidery, binding",
+        "silhouette": "修身上衣 + 飘逸下摆",
+        "silhouetteEn": "fitted top + flowing hem"
+      },
+      "modernProfessional": {
+        "zh": "现代时尚/职业装",
+        "materials": "棉麻 + 羊毛 + 涤纶混纺",
+        "materialsEn": "cotton linen + wool + polyester blend",
+        "sheen": "哑光或柔光",
+        "sheenEn": "matte or soft sheen",
+        "draping": "挺括有型",
+        "drapingEn": "structured",
+        "decoration": "简洁镶边、纽扣",
+        "decorationEn": "simple piping, buttons",
+        "silhouette": "修身剪裁、H型轮廓",
+        "silhouetteEn": "tailored fit, H-line silhouette"
+      },
+      "eveningGlamorous": {
+        "zh": "晚礼服/华丽风",
+        "materials": "缎面 + 蕾丝 + 天鹅绒",
+        "materialsEn": "satin + lace + velvet",
+        "sheen": "高光泽、珍珠光",
+        "sheenEn": "high sheen, pearlescent",
+        "draping": "流畅垂坠、拖地长度",
+        "drapingEn": "fluid draping, floor-length",
+        "decoration": "珠绣、亮片、褶边",
+        "decorationEn": "bead embroidery, sequins, ruffle",
+        "silhouette": "修身或A字型",
+        "silhouetteEn": "fitted or A-line"
+      },
+      "casualSport": {
+        "zh": "休闲/运动风",
+        "materials": "棉 + 针织 + 弹力布",
+        "materialsEn": "cotton + knit + stretch fabric",
+        "sheen": "哑光",
+        "sheenEn": "matte",
+        "draping": "柔软贴身",
+        "drapingEn": "soft, body-hugging",
+        "decoration": "简洁或无装饰",
+        "decorationEn": "minimal or no decoration",
+        "silhouette": "宽松或修身",
+        "silhouetteEn": "loose or fitted"
+      },
+      "ethereal": {
+        "zh": "仙气/飘逸风",
+        "materials": "雪纺 + 欧根纱 + 真丝纱",
+        "materialsEn": "chiffon + organza + silk gauze",
+        "sheen": "柔光、微光泽",
+        "sheenEn": "soft sheen, subtle luster",
+        "draping": "飘逸、随风飞扬",
+        "drapingEn": "flowing, billowing",
+        "decoration": "蕾丝边、流苏",
+        "decorationEn": "lace trim, fringe",
+        "silhouette": "A字型、多层叠加",
+        "silhouetteEn": "A-line, multi-layer"
+      },
+      "vintageMedieval": {
+        "zh": "复古/中世纪风",
+        "materials": "锦缎 + 天鹅绒 + 厚重丝绸",
+        "materialsEn": "brocade + velvet + heavy silk",
+        "sheen": "暗光泽、金属光",
+        "sheenEn": "subtle luster, metallic sheen",
+        "draping": "挺括有型、深度褶皱",
+        "drapingEn": "structured, deep creases",
+        "decoration": "金线绣、立体绣",
+        "decorationEn": "gold thread embroidery, raised embroidery",
+        "silhouette": "宫廷式、蓬裙",
+        "silhouetteEn": "court style, voluminous skirt"
+      }
+    },
+
+    "templates": {
+      "title": "实用提示词模板",
+      "materialDescription": {
+        "zh": "[材质名称] 面料，呈现 [光泽类型] 光泽，具有 [纹理特征] 质感和 [垂坠效果] 垂坠效果。表面展现 [特殊效果]。",
+        "en": "[材质名称] fabric with [光泽类型] finish, featuring [纹理特征] texture and [垂坠效果] draping. The surface exhibits [特殊效果]."
+      },
+      "overallGarment": {
+        "zh": "一件 [版型] 轮廓的服装，采用 [材质] 制作，在 [位置] 处有 [装饰] 细节。面料呈现 [光泽] 光泽和 [垂坠] 垂坠感，营造出 [整体氛围] 的美学效果。",
+        "en": "A [版型] silhouette garment made of [材质], with [装饰] details at [位置]. The fabric has [光泽] sheen and [垂坠] draping, creating [整体氛围] aesthetic."
+      },
+      "multiMaterial": {
+        "zh": "分层设计，结合 [材质1] 和 [材质2]：外层：[材质1]，具有 [特征1]；内层：[材质2]，具有 [特征2]。这种组合营造出 [视觉效果]。",
+        "en": "A layered design combining [材质1] and [材质2]: Outer layer: [材质1] with [特征1]; Inner layer: [材质2] with [特征2]. The combination creates [视觉效果]."
+      }
+    },
+
+    "quickReference": {
+      "title": "快速查找索引",
+      "sheenScale": {
+        "zh": "光泽程度（从低到高）",
+        "scale": "哑光 → 柔光 → 缎面光泽 → 珍珠光泽 → 金属光泽 → 镜面光泽",
+        "scaleEn": "matte → soft sheen → satin sheen → pearlescent → metallic sheen → glossy"
+      },
+      "thicknessScale": {
+        "zh": "厚度（从薄到厚）",
+        "scale": "轻薄纱 → 薄丝绸 → 中等棉布 → 厚呢料 → 羊毛外套料",
+        "scaleEn": "sheer gauze → thin silk → medium cotton → thick wool → heavy coat fabric"
+      },
+      "transparencyScale": {
+        "zh": "透明度（从透到不透）",
+        "scale": "透明纱 → 半透雪纺 → 薄棉 → 厚棉 → 完全不透明",
+        "scaleEn": "transparent gauze → semi-transparent chiffon → thin cotton → thick cotton → opaque"
+      },
+      "stiffnessScale": {
+        "zh": "挺括度（从软到硬）",
+        "scale": "柔软雪纺 → 垂坠丝绸 → 普通棉 → 挺括棉麻 → 硬质塔夫绸",
+        "scaleEn": "soft chiffon → draping silk → regular cotton → crisp cotton linen → stiff taffeta"
+      }
+    },
+
+    "colorMaterialPairing": {
+      "title": "配色与材质搭配建议",
+      "pairings": [
+        { "color": "白色/米色", "colorEn": "white/beige", "materials": "丝绸、棉麻、纱", "materialsEn": "silk, cotton linen, gauze", "sheen": "柔光、缎面光泽", "sheenEn": "soft sheen, satin sheen" },
+        { "color": "深色（黑/深蓝/酒红）", "colorEn": "dark (black/navy/burgundy)", "materials": "天鹅绒、缎面、锦缎", "materialsEn": "velvet, satin, brocade", "sheen": "暗光泽、珍珠光", "sheenEn": "subtle luster, pearlescent" },
+        { "color": "金色/银色", "colorEn": "gold/silver", "materials": "金属丝、亮片面料", "materialsEn": "metallic thread, sequined fabric", "sheen": "金属光泽", "sheenEn": "metallic sheen" },
+        { "color": "粉彩色", "colorEn": "pastel", "materials": "雪纺、欧根纱、轻薄丝绸", "materialsEn": "chiffon, organza, lightweight silk", "sheen": "柔光", "sheenEn": "soft sheen" },
+        { "color": "大地色", "colorEn": "earth tones", "materials": "棉麻、粗布、羊毛", "materialsEn": "cotton linen, coarse fabric, wool", "sheen": "哑光", "sheenEn": "matte" }
+      ]
+    }
+  }
+}
+

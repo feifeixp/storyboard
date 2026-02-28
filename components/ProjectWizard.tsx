@@ -19,6 +19,10 @@ import { CharacterRef } from '../types';
 import { ModelSelector } from './ModelSelector';
 import { MODELS } from '../services/openrouter';
 import mammoth from 'mammoth';
+import { autoSupplementMainCharacters, type AutoSupplementProgress } from '../services/characterSupplement/autoSupplement';
+import type { BeautyLevel } from '../services/characterSupplement/types';
+import { getBeautyLevelByGenre } from '../services/characterSupplement/getBeautyLevelByGenre';
+import { ProjectInfoConfirmDialog } from './ProjectInfoConfirmDialog';
 
 interface ProjectWizardProps {
   onComplete: (project: Project) => void;
@@ -31,8 +35,18 @@ interface ProjectWizardProps {
   ) => Promise<ProjectAnalysisResult>;
 }
 
+// 🔧 修复：扩充常见题材选项（特别是女频/短剧常见类型）
 const GENRE_OPTIONS = [
-  '仙侠', '科幻', '现代都市', '奇幻', '悬疑', '历史', '校园', '混合'
+  // 女频/言情类
+  '女频言情', '都市言情', '甜宠', '重生', '逆袭', '霸总',
+  // 古装/仙侠类
+  '古装言情', '宫廷', '仙侠', '玄幻', '修仙', '武侠',
+  // 现代/现实类
+  '现代都市', '年代', '家庭', '职场', '现实主义', '纪实',
+  // 其他类型
+  '悬疑', '推理', '犯罪', '校园', '科幻', '奇幻',
+  // 混合（自定义）
+  '混合'
 ];
 
 export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizardProps) {
@@ -48,6 +62,19 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
   const [selectedModel, setSelectedModel] = useState(MODELS.GEMINI_2_5_FLASH);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 🆕 自动补充状态
+  const [isAutoSupplementing, setIsAutoSupplementing] = useState(false);
+  const [supplementProgress, setSupplementProgress] = useState<AutoSupplementProgress | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // 🆕 每个角色的进度状态（用于独立显示）
+  const [characterProgresses, setCharacterProgresses] = useState<Map<string, {
+    name: string;
+    status: 'waiting' | 'processing' | 'completed' | 'error';
+    stage: string;
+    message: string;
+  }>>(new Map());
+
   // 🆕 提取模式和范围设置
   const [analysisMode, setAnalysisMode] = useState<'quick' | 'standard' | 'deep'>('standard');
   const [includeSupporting, setIncludeSupporting] = useState(true);
@@ -55,6 +82,9 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
 
   // 分批分析进度状态
   const [batchProgress, setBatchProgress] = useState<BatchAnalysisProgress | null>(null);
+
+  // 🆕 信息确认对话框状态
+  const [showInfoConfirm, setShowInfoConfirm] = useState(false);
 
   // 从文件名推断集数（支持多种格式）
   const parseEpisodeNumber = (fileName: string): number | undefined => {
@@ -154,9 +184,9 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
         setBatchProgress(progress);
         // 计算总进度百分比
         const baseProgress = ((progress.currentBatch - 1) / progress.totalBatches) * 100;
-        const batchProgress = progress.status === 'analyzing' ? 0 :
-                              progress.status === 'merging' ? 50 : 100;
-        const addProgress = (batchProgress / progress.totalBatches);
+        const batchIncrementalProgress = progress.status === 'analyzing' ? 0 :
+                                         progress.status === 'merging' ? 50 : 100;
+        const addProgress = (batchIncrementalProgress / progress.totalBatches);
         setAnalysisProgress(Math.min(Math.round(baseProgress + addProgress), 99));
 
         // 实时更新部分结果
@@ -170,7 +200,9 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
 
       setAnalysisProgress(100);
       setAnalysisResult(result);
-      setStep('review-confirm');
+
+      // 🆕 显示信息确认对话框，而不是直接跳到 review-confirm
+      setShowInfoConfirm(true);
     } catch (error: any) {
       console.error('AI分析失败:', error);
       const errorMsg = error?.message || 'AI分析失败';
@@ -202,8 +234,52 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
     }
   };
 
+  // 🆕 用户确认信息后的回调
+  const handleInfoConfirm = (data: { genres: string[]; mainCharacters: string[] }) => {
+    if (!analysisResult) return;
+
+    // 1. 更新 genre（通过 setGenre/setCustomGenre，而不是直接改 analysisResult.genre）
+    // 这样可以和 Wizard 现有的题材选择逻辑保持一致
+    const updatedGenre = data.genres.join(' / ');
+
+    // 检查是否有预设选项之外的自定义题材（GENRE_OPTIONS 是字符串数组，直接使用）
+    const predefinedGenres = GENRE_OPTIONS;
+    const customGenres = data.genres.filter(g => !predefinedGenres.includes(g));
+
+    // 更新 Wizard 的 genre 状态（用于后续 confirmCreate）
+    setGenre(updatedGenre);
+    if (customGenres.length > 0) {
+      setCustomGenre(customGenres.join(' / '));
+    }
+
+    // 2. 更新角色的 description，给主角加上【主角】标记（immutable 操作，避免直接 mutate state）
+    const mainCharSet = new Set(data.mainCharacters);
+    const updatedCharacters = analysisResult.characters.map(char => {
+      if (!mainCharSet.has(char.name)) return char;
+      const existingDesc = char.description || '';
+      const newDesc = existingDesc.startsWith('【主角】')
+        ? existingDesc
+        : `【主角】${existingDesc}`;
+      return { ...char, description: newDesc };
+    });
+
+    // 3. 更新状态（深层拷贝 characters，确保 React 检测到变更并重渲染）
+    setAnalysisResult({ ...analysisResult, characters: updatedCharacters });
+
+    // 4. 关闭对话框，进入 review-confirm 步骤
+    setShowInfoConfirm(false);
+    setStep('review-confirm');
+  };
+
+  // 🆕 用户选择"全部使用 AI 默认值"的回调
+  const handleUseDefaults = () => {
+    // 直接关闭对话框，进入 review-confirm 步骤，不做任何修改
+    setShowInfoConfirm(false);
+    setStep('review-confirm');
+  };
+
   // 确认创建项目
-  const confirmCreate = () => {
+  const confirmCreate = async () => {
     if (!analysisResult) return;
 
     // 🆕 优先使用 AI 分析结果中的 genre，其次用户选择的
@@ -216,6 +292,12 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
       finalGenre = analysisResult.genre;  // 使用 AI 分析的类型
     }
 
+    // 🔧 修复：C1 策略 - 检查 finalGenre 是否为空，为空则阻止创建
+    if (!finalGenre || !finalGenre.trim()) {
+      alert('⚠️ 题材类型未设置\n\n请选择一个题材类型（如：女频言情、古装仙侠等），或选择"混合"并填写自定义题材。\n\n这将影响角色外貌的美学标准选择。');
+      return;
+    }
+
     const project = createEmptyProject(projectName);
 
     project.settings = {
@@ -224,6 +306,11 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
       worldView: analysisResult.worldView,
       visualStyle: analysisResult.visualStyle || PROJECT_MEDIA_TYPES[mediaType].visualStyle,
       keyTerms: analysisResult.keyTerms,
+      // 🆕 新项目：渲染画风为空，用户必须主动选择
+      projectStyleId: null,
+      projectStyleCustomPromptCn: '',
+      projectStyleCustomPromptEn: '',
+      storyboardStyleOverride: null,
     };
     project.characters = analysisResult.characters;
     project.scenes = analysisResult.scenes;
@@ -243,6 +330,16 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
     // 确保剧集按集数排序
     project.episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
 
+    // 🆕 标记后台任务状态为 queued（将在 App.tsx 中启动）
+    project.settings.backgroundJobs = {
+      supplement: {
+        status: 'queued',
+        startedAt: new Date().toISOString()
+      }
+    };
+
+    // ✅ 立即完成项目创建，不等待角色补充
+    console.log('[ProjectWizard] ✅ 项目创建完成，后台补充将在 Dashboard 启动');
     onComplete(project);
   };
 
@@ -379,6 +476,7 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
                 multiple
                 onChange={handleFileUpload}
                 className="hidden"
+                aria-hidden="true"
               />
               <div className="text-4xl mb-3">📄</div>
               <p className="text-gray-300 font-medium">拖拽剧本文件到此处</p>
@@ -566,19 +664,31 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
                   <span className="text-gray-500 ml-2">(第{batchProgress.batchEpisodeRange}集)</span>
                 </p>
               ) : (
-                <p className="text-gray-400 mb-4">正在提取世界观、角色、场景和剧情大纲</p>
+                <p className="text-gray-400 mb-4">
+                  正在分析
+                  {batchProgress?.batchEpisodeRange ? `第${batchProgress.batchEpisodeRange}集剧本，` : '剧本，'}
+                  提取世界观、角色、场景和剧情大纲…
+                </p>
               )}
 
-              {/* 进度条 */}
-              <div className="max-w-md mx-auto mb-6">
-                <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
-                    style={{ width: `${analysisProgress}%` }}
-                  />
-                </div>
-                <p className="text-sm text-gray-400 mt-2">{analysisProgress}%</p>
-              </div>
+              {/* 进度条：analysisProgress < 5 时给最低 10% 宽度并加呼吸动效，避免用户误以为卡死 */}
+              {(() => {
+                const isIdle = analysisProgress < 5;
+                const effectiveWidth = isIdle ? 10 : analysisProgress;
+                return (
+                  <div className="max-w-md mx-auto mb-6">
+                    <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500${isIdle ? ' animate-pulse' : ''}`}
+                        style={{ width: `${effectiveWidth}%` }}
+                      />
+                    </div>
+                    <p className="text-sm text-gray-400 mt-2">
+                      {isIdle ? '正在连接 AI…' : `${analysisProgress}%`}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* 实时结果预览 */}
@@ -715,24 +825,140 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
               </div>
             </div>
 
+            {/* 🆕 自动补充进度显示 - 每个角色独立显示 */}
+            {isAutoSupplementing && characterProgresses.size > 0 && (
+              <div className="mt-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl animate-pulse">✨</div>
+                    <h4 className="text-sm font-bold text-blue-300">
+                      正在智能补充主要角色 ({supplementProgress?.current || 0}/{supplementProgress?.total || characterProgresses.size})
+                    </h4>
+                  </div>
+                  <button
+                    onClick={() => abortControllerRef.current?.abort()}
+                    className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded"
+                  >
+                    取消
+                  </button>
+                </div>
+
+                {/* 每个角色的独立进度卡片 */}
+                <div className="space-y-2">
+                  {Array.from(characterProgresses.values()).map((charProgress: {
+                    name: string;
+                    status: 'waiting' | 'processing' | 'completed' | 'error';
+                    stage: string;
+                    message: string;
+                  }, index) => {
+                    const isProcessing = charProgress.status === 'processing';
+                    const isCompleted = charProgress.status === 'completed';
+                    const isError = charProgress.status === 'error';
+                    const isWaiting = charProgress.status === 'waiting';
+
+                    return (
+                      <div
+                        key={charProgress.name}
+                        className={`p-3 rounded-lg border transition-all ${
+                          isCompleted ? 'bg-green-900/20 border-green-500/30' :
+                          isError ? 'bg-red-900/20 border-red-500/30' :
+                          isProcessing ? 'bg-blue-900/20 border-blue-500/30' :
+                          'bg-gray-800/50 border-gray-700/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* 状态图标 */}
+                          <div className="text-lg">
+                            {isCompleted && '✅'}
+                            {isError && '❌'}
+                            {isProcessing && <span className="animate-pulse">⚡</span>}
+                            {isWaiting && '⏳'}
+                          </div>
+
+                          {/* 角色信息 */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-sm font-medium ${
+                                isCompleted ? 'text-green-300' :
+                                isError ? 'text-red-300' :
+                                isProcessing ? 'text-blue-300' :
+                                'text-gray-400'
+                              }`}>
+                                {index + 1}. {charProgress.name}
+                              </span>
+                              {isProcessing && (
+                                <span className="text-xs text-gray-500">
+                                  {charProgress.stage}
+                                </span>
+                              )}
+                            </div>
+                            <p className={`text-xs mt-0.5 truncate ${
+                              isCompleted ? 'text-green-400' :
+                              isError ? 'text-red-400' :
+                              isProcessing ? 'text-blue-400' :
+                              'text-gray-500'
+                            }`}>
+                              {charProgress.message}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-between mt-8">
               <button
                 onClick={() => setStep('upload-scripts')}
                 className="px-6 py-2.5 text-gray-400 hover:text-white"
+                disabled={isAutoSupplementing}
               >
                 ← 返回修改
               </button>
               <button
                 onClick={confirmCreate}
+                disabled={isAutoSupplementing}
                 className="px-8 py-2.5 bg-green-600 text-white rounded-lg font-bold
-                          hover:bg-green-700 flex items-center gap-2"
+                          hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ✓ 确认并创建项目
+                {isAutoSupplementing ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    正在创建项目...
+                  </>
+                ) : (
+                  <>
+                    ✓ 确认并创建项目
+                  </>
+                )}
               </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* 🆕 信息确认对话框 */}
+      {showInfoConfirm && analysisResult && (
+        <ProjectInfoConfirmDialog
+          open={showInfoConfirm}
+          onClose={() => setShowInfoConfirm(false)}
+          suggestedGenres={analysisResult.genre?.split(' / ').filter((g: string) => g.trim()) || []}
+          characters={analysisResult.characters.map((char: any) => ({
+            name: char.name,
+            isMainCharacter: analysisResult.suggestedMainCharacters?.some(
+              (mc: any) => mc.name === char.name
+            ) || false,
+            appearances: char.appearsInEpisodes?.length || 0,
+            reason: analysisResult.suggestedMainCharacters?.find(
+              (mc: any) => mc.name === char.name
+            )?.reason,
+          }))}
+          onConfirm={handleInfoConfirm}
+          onUseDefaults={handleUseDefaults}
+        />
+      )}
     </div>
   );
 }

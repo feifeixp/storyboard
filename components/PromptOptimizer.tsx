@@ -107,6 +107,7 @@ export function PromptOptimizer() {
             <select
               value={formData.shotSize}
               onChange={(e) => setFormData({ ...formData, shotSize: e.target.value })}
+              title="景别"
             >
               <option value="">请选择</option>
               {SHOT_SIZE_OPTIONS.map(opt => (
@@ -122,6 +123,7 @@ export function PromptOptimizer() {
             <select
               value={formData.angleHeight}
               onChange={(e) => setFormData({ ...formData, angleHeight: e.target.value })}
+              title="角度高度"
             >
               <option value="">请选择</option>
               {ANGLE_HEIGHT_OPTIONS.map(opt => (
@@ -137,6 +139,7 @@ export function PromptOptimizer() {
             <select
               value={formData.angleDirection}
               onChange={(e) => setFormData({ ...formData, angleDirection: e.target.value })}
+              title="人物朝向"
             >
               <option value="">请选择</option>
               {ANGLE_DIRECTION_OPTIONS.map(opt => (

@@ -1524,8 +1524,22 @@ const cleanJsonOutput = (text: string): string => {
  */
 export async function extractCharactersFromScript(
   script: string,
-  model: string = DEFAULT_MODEL
+  model: string = DEFAULT_MODEL,
+  onProgress?: (message: string) => void
 ): Promise<Array<{ name: string; gender: '男' | '女' | '未知'; appearance: string }>> {
+
+  // 🆕 1. 检查缓存
+  const { getCachedCharacters, setCachedCharacters } = await import('./characterExtraction/cache');
+
+  onProgress?.('🔍 检查缓存...');
+  const cached = getCachedCharacters(script);
+  if (cached) {
+    onProgress?.(`✅ 使用缓存结果（共${cached.length}个角色）`);
+    return cached;
+  }
+
+  // 🆕 2. 调用LLM提取
+  onProgress?.('🤖 正在分析剧本...');
   const prompt = `
 # 任务：从剧本中提取角色，并生成AI生图用的外观描述
 
@@ -1569,6 +1583,8 @@ ${script}
       max_tokens: 3000,
     });
 
+    onProgress?.('📝 正在解析结果...');
+
     const text = response.choices[0]?.message?.content || '[]';
 
     // 提取JSON数组
@@ -1577,12 +1593,20 @@ ${script}
 
     if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
       const jsonStr = text.substring(jsonStart, jsonEnd + 1);
-      return JSON.parse(jsonStr);
+      const result = JSON.parse(jsonStr);
+
+      // 🆕 3. 保存缓存
+      setCachedCharacters(script, result);
+      onProgress?.(`✅ 提取完成（共${result.length}个角色）`);
+
+      return result;
     }
 
+    onProgress?.('⚠️ 未找到角色');
     return [];
   } catch (error) {
     console.error('提取角色失败:', error);
+    onProgress?.('❌ 提取失败');
     return [];
   }
 }

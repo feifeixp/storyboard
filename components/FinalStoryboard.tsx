@@ -329,7 +329,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
 /**
  * 单个故事板卡片组件
  */
-function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
+function StoryboardCard({ shot, index }: { shot: Shot; index: number; key?: React.Key }) {
   const storyBeat = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat.event;
 
   return (

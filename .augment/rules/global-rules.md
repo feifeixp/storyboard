@@ -1,7 +1,6 @@
 ---
 type: "always_apply"
 description: "通用开发规范，适用于所有项目的代码操作、规则管理和开发日志记录"
-scope: "global"
 ---
 
 # Augment Code 全局规则配置文件
