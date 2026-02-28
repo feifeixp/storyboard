@@ -89,7 +89,7 @@ import {
   getProject,
   getEpisode,  // 🔧 获取单个剧集完整数据
 } from './services/d1Storage';
-import { getGenerationResult, pollGenerationResult, TaskStatus } from './services/aiImageGeneration';
+import { getGenerationResult, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType, ImageGenerationModel } from './services/aiImageGeneration';
 import { analyzeProjectScriptsWithProgress, analyzeProjectScripts } from './services/projectAnalysis';
 import { BatchAnalysisProgress } from './types/project';
 // 🆕 本集概述生成
@@ -396,9 +396,10 @@ const App: React.FC = () => {
   const [uploadUrl, setUploadUrl] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-	// ✅ 生图模型：强制锁定 nanobanana-pro（服务层在会员限制时自动降级）
-	// 说明：UI 不再允许切换；服务层也会忽略传入模型并锁定到 nanobanana-pro。
-	const imageModel = 'nanobanana-pro';
+  // 🆕 生图模型选择（动态从 Neodomain API 获取）
+  const [imageModel, setImageModel] = useState<string>('nanobanana-pro');
+  const [availableImageModels, setAvailableImageModels] = useState<ImageGenerationModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
 
   // 🆕 分镜草图风格选择
   const [selectedStyle, setSelectedStyle] = useState<StoryboardStyle>(STORYBOARD_STYLES[0]);
@@ -462,6 +463,32 @@ const App: React.FC = () => {
       setCurrentTab('manual');
     }
   }, [currentStep]);
+
+  // 🆕 进入图片生成步骤时，从 Neodomain 加载可用生图模型列表
+  useEffect(() => {
+    if (currentStep !== AppStep.GENERATE_IMAGES || !loggedIn) return;
+    if (availableImageModels.length > 0) return; // 已加载，无需重复请求
+
+    const loadModels = async () => {
+      setIsLoadingModels(true);
+      try {
+        const models = await getModelsByScenario(ScenarioType.STORYBOARD);
+        setAvailableImageModels(models);
+        // 若当前 imageModel 不在列表里，自动切换为默认分镜模型
+        if (models.length > 0 && !models.find(m => m.model_name === imageModel)) {
+          const defaultModel = models.find(m => m.is_default_shot_model) || models[0];
+          setImageModel(defaultModel.model_name);
+        }
+        console.log(`[App] 加载到 ${models.length} 个可用生图模型`);
+      } catch (err) {
+        console.error('[App] 获取生图模型列表失败:', err);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+    loadModels();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, loggedIn]);
 
   // Robust Parsing helper for partial JSON streams
   useEffect(() => {
@@ -4070,6 +4097,9 @@ const App: React.FC = () => {
             customStylePrompt={customStylePrompt}
             setCustomStylePrompt={setCustomStylePrompt}
             imageModel={imageModel}
+            setImageModel={setImageModel}
+            availableImageModels={availableImageModels}
+            isLoadingModels={isLoadingModels}
             uploadGridIndex={uploadGridIndex}
             setUploadGridIndex={setUploadGridIndex}
             uploadDialogOpen={uploadDialogOpen}

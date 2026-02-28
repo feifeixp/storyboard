@@ -1,5 +1,6 @@
 import React from 'react';
 import { Shot, StoryboardStyle, STORYBOARD_STYLES, CharacterRef } from '../../types';
+import { ImageGenerationModel } from '../../services/aiImageGeneration';
 
 interface ImageGenerationPageProps {
   // 分镜数据
@@ -20,6 +21,9 @@ interface ImageGenerationPageProps {
 
   // 生图模型
   imageModel: string;
+  setImageModel: (model: string) => void;
+  availableImageModels: ImageGenerationModel[];
+  isLoadingModels: boolean;
 
   // 上传相关
   uploadGridIndex: number | null;
@@ -68,6 +72,9 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
   customStylePrompt,
   setCustomStylePrompt,
   imageModel,
+  setImageModel,
+  availableImageModels,
+  isLoadingModels,
   uploadGridIndex,
   setUploadGridIndex,
   uploadDialogOpen,
@@ -125,11 +132,31 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
             <span className="text-xs text-gray-400">{showStyleCards ? '▲' : '▼'}</span>
           </button>
 
-          {/* 生图模型：锁定 nanobanana-pro */}
+          {/* 生图模型选择 */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-900/30 border border-purple-700 rounded-lg">
             <span className="text-xs text-purple-300 font-medium">生图模型:</span>
-            <span className="text-sm font-bold text-purple-200">{imageModel}</span>
-            <span className="text-[10px] text-purple-400">(已锁定)</span>
+            {isLoadingModels ? (
+              <span className="text-xs text-purple-400 animate-pulse">加载中...</span>
+            ) : availableImageModels.length > 0 ? (
+              <select
+                value={imageModel}
+                onChange={(e) => setImageModel(e.target.value)}
+                disabled={isLoadingModels}
+                className="text-sm font-bold text-purple-200 bg-transparent border-none outline-none cursor-pointer appearance-none pr-4"
+                style={{ backgroundImage: 'none' }}
+              >
+                {availableImageModels.map((m) => (
+                  <option key={m.model_name} value={m.model_name} className="bg-gray-900 text-purple-200">
+                    {m.model_display_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-sm font-bold text-purple-200">{imageModel}</span>
+            )}
+            {!isLoadingModels && availableImageModels.length > 1 && (
+              <span className="text-[10px] text-purple-400">▼</span>
+            )}
           </div>
 
           {/* 自定义风格提示词 */}

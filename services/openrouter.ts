@@ -2165,11 +2165,7 @@ export async function generateMergedStoryboardSheet(
 ): Promise<string[]> {
   const styleName = style?.name || '粗略线稿';
   const styleSuffix = style?.promptSuffix || 'rough sketch, black and white, storyboard style';
-  // ✅ 强制锁定生图模型：始终使用 nanobanana-pro（降级逻辑在 generateSingleImage 内处理）
-  const requestedModel = imageModel;
-  const effectiveModel = 'nanobanana-pro';
-  const ignoredHint = requestedModel && requestedModel !== effectiveModel ? `, 忽略请求模型: ${requestedModel}` : '';
-  console.log(`[OpenRouter] 九宫格AI生成请求: ${shots.length} 个镜头, 锁定模型: ${effectiveModel}${ignoredHint}, 风格: ${styleName}${episodeNumber ? `, 第${episodeNumber}集` : ''}${artStyleType ? `, 美术风格: ${artStyleType}` : ''}`);
+  console.log(`[OpenRouter] 九宫格AI生成请求: ${shots.length} 个镜头, 请求模型: ${imageModel || 'auto'}, 风格: ${styleName}${episodeNumber ? `, 第${episodeNumber}集` : ''}${artStyleType ? `, 美术风格: ${artStyleType}` : ''}`);
 
   const GRID_SIZE = 9; // 每张图9个镜头 (3x3)
   const totalGrids = Math.ceil(shots.length / GRID_SIZE);
@@ -2188,7 +2184,7 @@ export async function generateMergedStoryboardSheet(
   const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
 
   console.log('[OpenRouter] 获取分镜场景可用模型列表...');
-  let availableModels;
+  let availableModels: import('./aiImageGeneration').ImageGenerationModel[] = [];
   try {
     availableModels = await getModelsByScenario(ScenarioType.STORYBOARD);
     console.log(`[OpenRouter] 获取到 ${availableModels.length} 个可用模型`);
@@ -2197,7 +2193,7 @@ export async function generateMergedStoryboardSheet(
     throw new Error('无法获取可用模型列表，请稍后重试');
   }
 
-  // 🔍 查找目标模型
+  // 🔍 查找目标模型 - 优先使用用户选择的模型，否则按关键词匹配
   const PRIMARY_MODEL_KEYWORDS = ['nano', 'banana', 'pro'];
   const FALLBACK_MODEL_KEYWORDS = ['seedream'];
 
@@ -2212,16 +2208,18 @@ export async function generateMergedStoryboardSheet(
     });
   };
 
+  // 优先使用用户指定的模型（按 model_name 精确匹配）
+  const requestedModel = imageModel ? availableModels.find(m => m.model_name === imageModel) : null;
   const primaryModel = findModelByKeywords(PRIMARY_MODEL_KEYWORDS);
   const fallbackModel = findModelByKeywords(FALLBACK_MODEL_KEYWORDS);
-  const preferredModel = primaryModel || fallbackModel;
+  const preferredModel = requestedModel || primaryModel || fallbackModel;
 
   if (!preferredModel) {
     throw new Error('未找到可用的生图模型');
   }
 
   const preferredModelName = preferredModel.model_name;
-  console.log(`[OpenRouter] ✅ 使用模型: ${preferredModelName} (${preferredModel.model_display_name})`);
+  console.log(`[OpenRouter] ✅ 使用模型: ${preferredModelName} (${preferredModel.model_display_name})${requestedModel ? ' [用户选择]' : ' [自动选择]'}`);
 
   const maxRefImages = preferredModel.max_reference_images || 0;
 
@@ -2443,7 +2441,7 @@ export async function generateSingleGrid(
   const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
 
   console.log('[OpenRouter] 单格重绘 - 获取分镜场景可用模型列表...');
-  let availableModels;
+  let availableModels: import('./aiImageGeneration').ImageGenerationModel[] = [];
   try {
     availableModels = await getModelsByScenario(ScenarioType.STORYBOARD);
   } catch (error) {
@@ -2451,7 +2449,7 @@ export async function generateSingleGrid(
     throw new Error('无法获取可用模型列表，请稍后重试');
   }
 
-  // 🔍 查找目标模型（与批量生成逻辑一致）
+  // 🔍 查找目标模型 - 优先使用用户选择的模型，否则按关键词匹配
   const PRIMARY_MODEL_KEYWORDS = ['nano', 'banana', 'pro'];
   const FALLBACK_MODEL_KEYWORDS = ['seedream'];
   const findModelByKeywords = (keywords: string[]) => {
@@ -2465,16 +2463,18 @@ export async function generateSingleGrid(
     });
   };
 
+  // 优先使用用户指定的模型（按 model_name 精确匹配）
+  const requestedModel = imageModel ? availableModels.find(m => m.model_name === imageModel) : null;
   const primaryModel = findModelByKeywords(PRIMARY_MODEL_KEYWORDS);
   const fallbackModel = findModelByKeywords(FALLBACK_MODEL_KEYWORDS);
-  const preferredModel = primaryModel || fallbackModel;
+  const preferredModel = requestedModel || primaryModel || fallbackModel;
 
   if (!preferredModel) {
     throw new Error('未找到可用的生图模型');
   }
 
   const effectiveModel = preferredModel.model_name;
-  console.log(`[OpenRouter] 单独生成第 ${gridIndex + 1}/${totalGrids} 张九宫格, 模型: ${effectiveModel} (${preferredModel.model_display_name}), 风格: ${styleName}`);
+  console.log(`[OpenRouter] 单独生成第 ${gridIndex + 1}/${totalGrids} 张九宫格, 模型: ${effectiveModel} (${preferredModel.model_display_name})${requestedModel ? ' [用户选择]' : ' [自动选择]'}, 风格: ${styleName}`);
 
   // 计算该九宫格包含的镜头范围
   const startIdx = gridIndex * GRID_SIZE;
