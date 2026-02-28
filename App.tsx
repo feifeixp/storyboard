@@ -31,6 +31,7 @@ import {
   chatWithDirectorStream,
   generateMergedStoryboardSheet,
   extractImagePromptsStream,
+  optimizeImagePromptsStream,
   cleanScriptStream,
   extractCharactersFromScript,
   detectArtStyleType,  // 🆕 美术风格检测
@@ -2275,6 +2276,56 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * 一键优化提示词：调用AI修复所有自检发现的问题
+   * 使用直连 OpenRouter，避免 Cloudflare Worker 504 超时
+   */
+  const oneClickOptimizePrompts = async () => {
+    if (promptValidationResults.length === 0) {
+      alert('暂无问题，请先点击"自检提示词"');
+      return;
+    }
+
+    setIsExtracting(true);
+    setExtractProgress(`⚡ 一键优化中，正在修复 ${promptValidationResults.length} 个提示词问题...`);
+
+    try {
+      const stream = optimizeImagePromptsStream(shots, promptValidationResults);
+      let fullText = '';
+      for await (const text of stream) {
+        fullText = text;
+        setExtractProgress(`⚡ 优化中... (${Math.min(Math.round(fullText.length / 100), 99)}%)`);
+      }
+
+      // 解析JSON结果
+      const jsonMatch = fullText.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error('AI 返回格式异常，请重试');
+      }
+      const optimized: Array<{ shotNumber: number; imagePromptCn: string }> = JSON.parse(jsonMatch[0]);
+
+      // 更新对应镜头的提示词
+      const updatedShots = shots.map(shot => {
+        const fix = optimized.find(o => Number(o.shotNumber) === Number(shot.shotNumber));
+        if (fix) {
+          return { ...shot, imagePromptCn: fix.imagePromptCn };
+        }
+        return shot;
+      });
+
+      setShots(updatedShots);
+      setPromptValidationResults([]); // 清空问题列表
+      setExtractProgress(`✅ 一键优化完成！已修复 ${optimized.length} 个镜头的提示词`);
+    } catch (error) {
+      console.error('[一键优化提示词]', error);
+      const msg = error instanceof Error ? error.message : '未知错误';
+      setExtractProgress(`❌ 优化失败：${msg}`);
+      alert(`一键优化失败：${msg}\n请重试`);
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   // 🆕 建议勾选控制函数
   const toggleSuggestionSelection = (shotNumber: string) => {
     setSuggestions(prev => prev.map(s =>
@@ -3978,6 +4029,7 @@ const App: React.FC = () => {
             setPromptValidationResults={setPromptValidationResults}
             extractImagePromptsStream={extractImagePromptsStream}
             validatePrompts={validatePrompts}
+            oneClickOptimizePrompts={oneClickOptimizePrompts}
             setCurrentStep={setCurrentStep}
             currentProject={currentProject}
             currentEpisodeNumber={currentEpisodeNumber}

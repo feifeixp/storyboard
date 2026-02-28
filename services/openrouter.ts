@@ -1826,6 +1826,61 @@ export async function* extractImagePromptsStream(
 }
 
 /**
+ * 一键优化AI生图提示词（流式）
+ * 根据自检报告中的问题列表，让AI重写有问题的镜头提示词
+ * 使用直连 OpenRouter，避免 Cloudflare Worker 30s 超时
+ */
+export async function* optimizeImagePromptsStream(
+  shots: Shot[],
+  validationIssues: Array<{ shotNumber: number | string; suggestion: string; reason: string }>,
+  model: string = DEFAULT_MODEL
+) {
+  // 只传入有问题的镜头，减少 token 消耗
+  const problematicShotNumbers = new Set(validationIssues.map(v => String(v.shotNumber)));
+  const problematicShots = shots
+    .filter(s => problematicShotNumbers.has(String(s.shotNumber)))
+    .map(s => ({ shotNumber: s.shotNumber, imagePromptCn: s.imagePromptCn || '' }));
+
+  const prompt = `你是AI生图提示词专家。请根据以下自检问题，修复对应镜头的中文提示词（imagePromptCn）。
+
+## 修复规则
+1. 删除或替换所有违规词汇（太抽象、比较级、程度过度的词）
+2. 确保提示词包含四要素：主体描述、环境/背景、动作/状态、技术参数（景别/角度/光影）
+3. 保持提示词长度在30-150字之间
+4. 不要添加美术风格标签（风格由用户在生图时指定）
+5. 只返回有问题的镜头，不改动其他镜头
+
+## 自检发现的问题
+${JSON.stringify(validationIssues, null, 2)}
+
+## 需要修复的镜头原始提示词
+${JSON.stringify(problematicShots, null, 2)}
+
+## 输出格式（只返回JSON数组，无其他内容）
+[
+  { "shotNumber": 1, "imagePromptCn": "修复后的提示词" },
+  ...
+]`;
+
+  // 直连 OpenRouter，绕过 Cloudflare Worker 代理避免 504
+  const client = getOpenRouterDirectClient();
+  const stream = await client.chat.completions.create({
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    stream: true,
+    // 每个镜头约200字 × 30镜头上限 ≈ 6000 tokens，设8000留余量
+    max_tokens: 8000,
+  });
+
+  let fullText = '';
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || '';
+    fullText += content;
+    yield fullText;
+  }
+}
+
+/**
  * 根据对话修改分镜（流式）- 兼容 gemini.ts 的 chatEditShotListStream
  */
 export async function* chatEditShotListStream(

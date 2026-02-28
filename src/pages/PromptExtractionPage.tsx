@@ -50,6 +50,7 @@ interface PromptExtractionPageProps {
   // 操作函数
   extractImagePromptsStream: (shots: Shot[], model?: string) => AsyncGenerator<string>;
   validatePrompts: () => void;
+  oneClickOptimizePrompts: () => Promise<void>;
 
   // 导航
   setCurrentStep: (step: number) => void;
@@ -77,6 +78,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
   setPromptValidationResults,
   extractImagePromptsStream,
   validatePrompts,
+  oneClickOptimizePrompts,
   setCurrentStep,
   currentProject,
   currentEpisodeNumber,
@@ -205,6 +207,14 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
             ) : (
               <>🔍 自检提示词</>
             )}
+          </button>
+
+          <button
+            onClick={oneClickOptimizePrompts}
+            disabled={isExtracting || promptValidationResults.length === 0}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium text-sm hover:bg-emerald-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            ⚡ 一键优化 ({promptValidationResults.length})
           </button>
 
           <span className="text-sm text-[var(--color-text-secondary)]">{extractProgress}</span>
