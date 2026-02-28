@@ -412,6 +412,8 @@ const App: React.FC = () => {
   // 🆕 提示词自检状态
   const [promptValidationResults, setPromptValidationResults] = useState<ReviewSuggestion[]>([]);
   const [isValidatingPrompts, setIsValidatingPrompts] = useState(false);
+  // 🆕 一键优化变更记录（用于展示前后对比）
+  const [optimizedChanges, setOptimizedChanges] = useState<Array<{ shotNumber: number | string; oldPrompt: string; newPrompt: string }>>([]);
 
   // 🆕 角色提取状态
   const [isExtractingChars, setIsExtractingChars] = useState(false);
@@ -2210,6 +2212,7 @@ const App: React.FC = () => {
   //    不校验 startFrame / endFrame / promptCn（分镜自然语言描述，合法包含"镜头""画面"等词汇）
   const validatePrompts = () => {
     setIsValidatingPrompts(true);
+    setOptimizedChanges([]); // 重新自检时清空上次的优化对比记录
     const results: ReviewSuggestion[] = [];
 
     for (const shot of shots) {
@@ -2307,18 +2310,27 @@ const App: React.FC = () => {
       }
       const optimized: Array<{ shotNumber: number; imagePromptCn: string }> = JSON.parse(jsonMatch[0]);
 
+      // 计算变更记录（前后对比）
+      const changes: Array<{ shotNumber: number | string; oldPrompt: string; newPrompt: string }> = [];
+
       // 更新对应镜头的提示词
       const updatedShots = shots.map(shot => {
         const fix = optimized.find(o => Number(o.shotNumber) === Number(shot.shotNumber));
-        if (fix) {
+        if (fix && fix.imagePromptCn !== (shot.imagePromptCn || '')) {
+          changes.push({
+            shotNumber: shot.shotNumber,
+            oldPrompt: shot.imagePromptCn || '',
+            newPrompt: fix.imagePromptCn,
+          });
           return { ...shot, imagePromptCn: fix.imagePromptCn };
         }
         return shot;
       });
 
       setShots(updatedShots);
-      setPromptValidationResults([]); // 清空问题列表
-      setExtractProgress(`✅ 一键优化完成！已修复 ${optimized.length} 个镜头的提示词`);
+      setOptimizedChanges(changes);     // 保存前后对比记录
+      setPromptValidationResults([]);   // 清空问题列表
+      setExtractProgress(`✅ 一键优化完成！已修复 ${changes.length} 个镜头的提示词`);
     } catch (error) {
       console.error('[一键优化提示词]', error);
       const msg = error instanceof Error ? error.message : '未知错误';
@@ -4035,6 +4047,8 @@ const App: React.FC = () => {
             extractImagePromptsStream={extractImagePromptsStream}
             validatePrompts={validatePrompts}
             oneClickOptimizePrompts={oneClickOptimizePrompts}
+            optimizedChanges={optimizedChanges}
+            setOptimizedChanges={setOptimizedChanges}
             setCurrentStep={setCurrentStep}
             currentProject={currentProject}
             currentEpisodeNumber={currentEpisodeNumber}

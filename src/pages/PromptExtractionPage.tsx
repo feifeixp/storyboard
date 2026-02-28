@@ -52,6 +52,10 @@ interface PromptExtractionPageProps {
   validatePrompts: () => void;
   oneClickOptimizePrompts: () => Promise<void>;
 
+  // 优化前后对比记录
+  optimizedChanges: Array<{ shotNumber: number | string; oldPrompt: string; newPrompt: string }>;
+  setOptimizedChanges: (changes: Array<{ shotNumber: number | string; oldPrompt: string; newPrompt: string }>) => void;
+
   // 导航
   setCurrentStep: (step: number) => void;
 
@@ -79,6 +83,8 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
   extractImagePromptsStream,
   validatePrompts,
   oneClickOptimizePrompts,
+  optimizedChanges,
+  setOptimizedChanges,
   setCurrentStep,
   currentProject,
   currentEpisodeNumber,
@@ -226,6 +232,40 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
             <h4 className="font-bold text-red-400">⚠️ 发现 {promptValidationResults.length} 个提示词问题</h4>
           </div>
         )}
+
+        {/* 一键优化前后对比面板 */}
+        {optimizedChanges.length > 0 && (
+          <div className="mt-4 p-4 bg-emerald-900/20 border border-emerald-700/50 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-bold text-emerald-400">✅ 已优化 {optimizedChanges.length} 个镜头的提示词（点击展开对比）</h4>
+              <button
+                onClick={() => setOptimizedChanges([])}
+                className="text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1 rounded hover:bg-gray-700"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {optimizedChanges.map((change) => (
+                <div key={String(change.shotNumber)} className="rounded-lg border border-gray-700 overflow-hidden text-xs">
+                  <div className="bg-gray-800 px-3 py-1.5 font-bold text-blue-300">
+                    镜头 {change.shotNumber}
+                  </div>
+                  <div className="grid grid-cols-2 divide-x divide-gray-700">
+                    <div className="p-2 bg-red-900/20">
+                      <div className="text-red-400 font-semibold mb-1">优化前</div>
+                      <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">{change.oldPrompt || '（空）'}</p>
+                    </div>
+                    <div className="p-2 bg-green-900/20">
+                      <div className="text-green-400 font-semibold mb-1">优化后</div>
+                      <p className="text-gray-100 leading-relaxed whitespace-pre-wrap">{change.newPrompt}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 提示词表格 */}
@@ -241,25 +281,36 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {shots.map((shot) => (
-                <tr key={shot.id} className="hover:bg-[var(--color-surface-hover)]">
-                  <td className="px-3 py-2 border border-[var(--color-border)] text-center font-bold text-blue-400">
-                    {shot.shotNumber}
-                  </td>
-                  <td className="px-3 py-2 border border-[var(--color-border)] text-center">
-                    <span className={`px-2 py-0.5 rounded text-xs ${
-                      shot.shotType === '运动'
-                        ? 'bg-green-900/30 text-green-300'
-                        : 'bg-gray-700 text-gray-300'
-                    }`}>
-                      {shot.shotType || '静态'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 border border-[var(--color-border)] text-[var(--color-text-secondary)]">
-                    {shot.imagePromptCn || '—'}
-                  </td>
-                </tr>
-              ))}
+              {shots.map((shot) => {
+                const wasOptimized = optimizedChanges.some(
+                  c => String(c.shotNumber) === String(shot.shotNumber)
+                );
+                return (
+                  <tr
+                    key={shot.id}
+                    className={`hover:bg-[var(--color-surface-hover)] ${wasOptimized ? 'bg-emerald-900/15' : ''}`}
+                  >
+                    <td className="px-3 py-2 border border-[var(--color-border)] text-center font-bold text-blue-400">
+                      {shot.shotNumber}
+                      {wasOptimized && (
+                        <span className="ml-1 text-emerald-400 text-xs" title="已优化">✨</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 border border-[var(--color-border)] text-center">
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        shot.shotType === '运动'
+                          ? 'bg-green-900/30 text-green-300'
+                          : 'bg-gray-700 text-gray-300'
+                      }`}>
+                        {shot.shotType || '静态'}
+                      </span>
+                    </td>
+                    <td className={`px-3 py-2 border border-[var(--color-border)] ${wasOptimized ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>
+                      {shot.imagePromptCn || '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

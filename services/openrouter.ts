@@ -9,6 +9,7 @@ import { buildStage1Prompt } from '../prompts/chain-of-thought/stage1-script-ana
 import { mergeThinkingAndResult } from '../prompts/chain-of-thought/utils';
 import type { StoryboardStyle, CharacterRef, CharacterForm } from '../types';
 import type { SceneRef } from '../types/project';
+import { FORBIDDEN_TERMS } from './promptValidation';
 import {
   GRID_LAYOUT_TEMPLATE,
   PANEL_POSITION_NAMES,
@@ -1841,14 +1842,23 @@ export async function* optimizeImagePromptsStream(
     .filter(s => problematicShotNumbers.has(String(s.shotNumber)))
     .map(s => ({ shotNumber: s.shotNumber, imagePromptCn: s.imagePromptCn || '' }));
 
+  // 将禁词列表格式化为 AI 能理解的规则表格
+  const forbiddenTermsTable = FORBIDDEN_TERMS
+    .map(t => `  - 禁用"${t.term}"（原因：${t.reason}）→ ${t.suggestion}`)
+    .join('\n');
+
   const prompt = `你是AI生图提示词专家。请根据以下自检问题，修复对应镜头的中文提示词（imagePromptCn）。
 
+## 严格禁用词汇（必须全部删除或替换，不得保留任何一个）
+${forbiddenTermsTable}
+
 ## 修复规则
-1. 删除或替换所有违规词汇（太抽象、比较级、程度过度的词）
+1. 逐字检查提示词，找出并替换所有上方禁用词汇，按建议替换方案操作
 2. 确保提示词包含四要素：主体描述、环境/背景、动作/状态、技术参数（景别/角度/光影）
 3. 保持提示词长度在30-150字之间
 4. 不要添加美术风格标签（风格由用户在生图时指定）
 5. 只返回有问题的镜头，不改动其他镜头
+6. 修复后必须再次自检，确保修复结果中不含任何禁用词汇
 
 ## 自检发现的问题
 ${JSON.stringify(validationIssues, null, 2)}
@@ -1858,7 +1868,7 @@ ${JSON.stringify(problematicShots, null, 2)}
 
 ## 输出格式（只返回JSON数组，无其他内容）
 [
-  { "shotNumber": 1, "imagePromptCn": "修复后的提示词" },
+  { "shotNumber": 1, "imagePromptCn": "修复后的提示词（不含任何禁用词）" },
   ...
 ]`;
 
