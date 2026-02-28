@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Shot, StoryboardStyle, STORYBOARD_STYLES, CharacterRef } from '../../types';
 import { ImageGenerationModel } from '../../services/aiImageGeneration';
+import type { SceneRef } from '../../types/project';
 
 interface ImageGenerationPageProps {
   // 分镜数据
@@ -54,6 +55,9 @@ interface ImageGenerationPageProps {
   // 项目信息
   currentProject: any;
   currentEpisodeNumber: number | null;
+
+  // 场景库（用于生成参考上下文）
+  scenes?: SceneRef[];
 }
 
 /**
@@ -95,7 +99,57 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
   setCurrentStep,
   currentProject,
   currentEpisodeNumber,
+  scenes,
 }) => {
+  const GRID_SIZE = 9;
+
+  // 记录哪些九宫格面板被展开（显示上下文）
+  const [expandedGrids, setExpandedGrids] = useState<Set<number>>(new Set());
+  const toggleGrid = (idx: number) =>
+    setExpandedGrids(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+
+  // 合并场景来源（prop 优先，否则从 currentProject 取）
+  const allScenes: SceneRef[] = useMemo(
+    () => scenes ?? (currentProject?.scenes as SceneRef[] | undefined) ?? [],
+    [scenes, currentProject]
+  );
+
+  // ── 警告判断 ──────────────────────────────────────────
+  const hasCharacters = characterRefs.length > 0;
+  const hasScenes = allScenes.length > 0;
+  const charsWithoutImage = useMemo(
+    () => characterRefs.filter(c => !c.imageSheetUrl && !(c.imageUrls && c.imageUrls.length > 0)),
+    [characterRefs]
+  );
+  const scenesWithoutImage = useMemo(
+    () => allScenes.filter(s => !s.imageSheetUrl),
+    [allScenes]
+  );
+
+  // ── 每格上下文（角色 + 场景） ─────────────────────────
+  const totalGrids = Math.ceil(shots.length / GRID_SIZE);
+
+  const getGridContext = (gridIdx: number) => {
+    const startIdx = gridIdx * GRID_SIZE;
+    const gridShots = shots.slice(startIdx, startIdx + GRID_SIZE);
+
+    // 收集该格出现的角色ID
+    const charIds = new Set<string>();
+    gridShots.forEach(s => s.assignedCharacterIds?.forEach(id => charIds.add(id)));
+    const chars = characterRefs.filter(c => charIds.has(c.id));
+
+    // 收集该格涉及的场景ID
+    const sceneIds = new Set<string>();
+    gridShots.forEach(s => { if (s.sceneId) sceneIds.add(s.sceneId); });
+    const usedScenes = allScenes.filter(s => sceneIds.has(s.id));
+
+    return { gridShots, chars, usedScenes };
+  };
+
   return (
     <div className="space-y-4 pb-20">
       {/* 顶部栏 */}
@@ -200,6 +254,37 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
         )}
       </div>
 
+      {/* ── 一致性警告横幅 ────────────────────────────────── */}
+      {(!hasCharacters || !hasScenes || charsWithoutImage.length > 0 || scenesWithoutImage.length > 0) && (
+        <div className="bg-amber-900/40 border border-amber-600 rounded-lg p-4 space-y-2">
+          <div className="flex items-center gap-2 text-amber-300 font-semibold text-sm">
+            ⚠️ 视觉一致性提醒
+          </div>
+          {!hasCharacters && (
+            <p className="text-amber-200 text-xs">
+              📌 <strong>尚未创建角色</strong>——九宫格将无法保持角色外观一致性。建议先在「角色库」中创建并上传角色设定图。
+            </p>
+          )}
+          {hasCharacters && charsWithoutImage.length > 0 && (
+            <p className="text-amber-200 text-xs">
+              📌 以下角色<strong>缺少设定图</strong>，生成时无法保持外观一致：
+              <span className="ml-1 font-mono">{charsWithoutImage.map(c => c.name).join('、')}</span>
+            </p>
+          )}
+          {!hasScenes && (
+            <p className="text-amber-200 text-xs">
+              📌 <strong>尚未创建场景</strong>——九宫格将无法保持场景视觉一致性。建议先在「场景库」中创建并上传场景设定图。
+            </p>
+          )}
+          {hasScenes && scenesWithoutImage.length > 0 && (
+            <p className="text-amber-200 text-xs">
+              📌 以下场景<strong>缺少设定图</strong>，生成时无法保持背景一致：
+              <span className="ml-1 font-mono">{scenesWithoutImage.map(s => s.name).join('、')}</span>
+            </p>
+          )}
+        </div>
+      )}
+
       {/* 九宫格展示 */}
       <div className="space-y-4">
         {/* 生成控制面板 */}
@@ -249,10 +334,22 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
         {/* 九宫格图片网格 */}
         {hqUrls.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {hqUrls.map((url, idx) => (
+            {hqUrls.map((url, idx) => {
+              const { gridShots, chars, usedScenes } = getGridContext(idx);
+              const isExpanded = expandedGrids.has(idx);
+              return (
               <div key={idx} className="bg-gray-800 rounded-lg overflow-hidden border border-green-700">
                 <div className="flex justify-between items-center px-3 py-2 bg-gray-900 border-b border-gray-700">
-                  <span className="text-sm font-bold text-gray-200">第 {idx + 1} 页</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-200">第 {idx + 1} 页</span>
+                    <button
+                      onClick={() => toggleGrid(idx)}
+                      className="text-xs text-blue-400 hover:text-blue-300 underline"
+                      title="查看生成上下文（提示词 + 参考图）"
+                    >
+                      {isExpanded ? '▲ 收起上下文' : '▼ 查看上下文'}
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     {url ? (
                       <>
@@ -310,11 +407,145 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* ── 上下文展开面板 ── */}
+                {isExpanded && (
+                  <div className="bg-gray-900 border-t border-gray-700 p-3 space-y-3 text-xs">
+                    {/* 参考图 */}
+                    {(chars.length > 0 || usedScenes.length > 0) && (
+                      <div className="space-y-2">
+                        {chars.length > 0 && (
+                          <div>
+                            <p className="text-gray-400 font-semibold mb-1">👤 角色参考图</p>
+                            <div className="flex flex-wrap gap-2">
+                              {chars.map(c => (
+                                <div key={c.id} className="flex flex-col items-center gap-1">
+                                  {c.imageSheetUrl ? (
+                                    <img src={c.imageSheetUrl} alt={c.name} className="w-16 h-16 object-cover rounded border border-gray-600" />
+                                  ) : (
+                                    <div className="w-16 h-16 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400 text-lg">?</div>
+                                  )}
+                                  <span className="text-gray-400 text-[10px] max-w-[64px] text-center truncate">{c.name}</span>
+                                  {!c.imageSheetUrl && <span className="text-amber-400 text-[9px]">无设定图</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {usedScenes.length > 0 && (
+                          <div>
+                            <p className="text-gray-400 font-semibold mb-1">🏛️ 场景参考图</p>
+                            <div className="flex flex-wrap gap-2">
+                              {usedScenes.map(s => (
+                                <div key={s.id} className="flex flex-col items-center gap-1">
+                                  {s.imageSheetUrl ? (
+                                    <img src={s.imageSheetUrl} alt={s.name} className="w-16 h-16 object-cover rounded border border-gray-600" />
+                                  ) : (
+                                    <div className="w-16 h-16 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400 text-lg">?</div>
+                                  )}
+                                  <span className="text-gray-400 text-[10px] max-w-[64px] text-center truncate">{s.name}</span>
+                                  {!s.imageSheetUrl && <span className="text-amber-400 text-[9px]">无设定图</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 镜头提示词列表 */}
+                    <div>
+                      <p className="text-gray-400 font-semibold mb-1">📝 镜头生图提示词（共 {gridShots.length} 个）</p>
+                      <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                        {gridShots.map((shot, sIdx) => (
+                          <div key={shot.id} className="flex gap-2 items-start bg-gray-800 rounded px-2 py-1">
+                            <span className="text-gray-500 shrink-0">#{shot.shotNumber || (idx * GRID_SIZE + sIdx + 1)}</span>
+                            <span className="text-gray-300 leading-relaxed">
+                              {shot.imagePromptCn || <em className="text-gray-500">（未提取生图提示词）</em>}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* ── 生成前上下文预览（未生成时显示） ─────────────── */}
+      {hqUrls.length === 0 && shots.length > 0 && (
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-200">📋 生成上下文预览（共 {totalGrids} 张九宫格）</h3>
+            <span className="text-xs text-gray-500">点击可展开/折叠各页</span>
+          </div>
+          <div className="space-y-2">
+            {Array.from({ length: totalGrids }).map((_, idx) => {
+              const { gridShots, chars, usedScenes } = getGridContext(idx);
+              const isExpanded = expandedGrids.has(idx + 1000); // 用 +1000 避免和已生成格子的 key 冲突
+              return (
+                <div key={idx} className="border border-gray-700 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedGrids(prev => {
+                      const next = new Set(prev);
+                      next.has(idx + 1000) ? next.delete(idx + 1000) : next.add(idx + 1000);
+                      return next;
+                    })}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-gray-900 hover:bg-gray-800 transition-all text-left"
+                  >
+                    <span className="text-sm text-gray-300 font-medium">
+                      第 {idx + 1} 页（镜头 {idx * GRID_SIZE + 1}–{Math.min((idx + 1) * GRID_SIZE, shots.length)}）
+                    </span>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      {chars.length > 0 && <span>👤 {chars.map(c => c.name).join('、')}</span>}
+                      {usedScenes.length > 0 && <span>🏛️ {usedScenes.map(s => s.name).join('、')}</span>}
+                      <span>{isExpanded ? '▲' : '▼'}</span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="bg-gray-900 p-3 text-xs space-y-2">
+                      {(chars.length > 0 || usedScenes.length > 0) && (
+                        <div className="flex flex-wrap gap-3">
+                          {chars.map(c => (
+                            <div key={c.id} className="flex items-center gap-1.5">
+                              {c.imageSheetUrl
+                                ? <img src={c.imageSheetUrl} alt={c.name} className="w-10 h-10 object-cover rounded border border-gray-600" />
+                                : <div className="w-10 h-10 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400">?</div>
+                              }
+                              <span className="text-gray-400">{c.name}</span>
+                            </div>
+                          ))}
+                          {usedScenes.map(s => (
+                            <div key={s.id} className="flex items-center gap-1.5">
+                              {s.imageSheetUrl
+                                ? <img src={s.imageSheetUrl} alt={s.name} className="w-10 h-10 object-cover rounded border border-gray-600" />
+                                : <div className="w-10 h-10 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400">?</div>
+                              }
+                              <span className="text-gray-400">{s.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {gridShots.map((shot, sIdx) => (
+                          <div key={shot.id} className="flex gap-2 items-start">
+                            <span className="text-gray-500 shrink-0">#{shot.shotNumber || (idx * GRID_SIZE + sIdx + 1)}</span>
+                            <span className="text-gray-400">{shot.imagePromptCn || <em>（未提取）</em>}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 统计信息 */}
       <div className="glass-card p-4 rounded-xl">
