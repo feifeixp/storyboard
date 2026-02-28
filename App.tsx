@@ -51,8 +51,8 @@ import {
 } from './services/openrouter';
 // 🆕 提示词校验工具
 import {
-  validateShotPrompts,
   detectForbiddenTerms,
+  validateImagePrompt,
   validateKeyframeConsistency,
   determineVideoMode,
   generateValidationSummary,
@@ -2206,28 +2206,30 @@ const App: React.FC = () => {
   };
 
   // 🆕 提示词自检函数（在生成提示词后调用）
+  // ⚠️ 只校验 imagePromptCn / endImagePromptCn（生图提示词），
+  //    不校验 startFrame / endFrame / promptCn（分镜自然语言描述，合法包含"镜头""画面"等词汇）
   const validatePrompts = () => {
     setIsValidatingPrompts(true);
     const results: ReviewSuggestion[] = [];
 
     for (const shot of shots) {
-      // 只有已提取提示词的镜头才进行校验
+      // 只有已提取生图提示词的镜头才进行校验
       if (!shot.imagePromptCn && !shot.imagePromptEn) continue;
 
-      // 1. 校验提示词（违规词汇、字数等）
-      const validation = validateShotPrompts(shot);
+      // 1. 违规词汇检测：仅对 imagePromptCn / endImagePromptCn 执行
+      const fieldsToCheck: Array<{ field: string; text: string }> = [];
+      if (shot.imagePromptCn) fieldsToCheck.push({ field: 'imagePromptCn', text: shot.imagePromptCn });
+      if (shot.endImagePromptCn) fieldsToCheck.push({ field: 'endImagePromptCn', text: shot.endImagePromptCn });
 
-      // 违规词汇检测
-      if (validation.forbiddenTerms.length > 0) {
-        for (const { field, terms } of validation.forbiddenTerms) {
-          for (const t of terms) {
-            results.push({
-              shotNumber: shot.shotNumber,
-              suggestion: `[${field}] 包含违规词汇"${t.term}"，建议改为：${t.suggestion}`,
-              reason: `规则校验：${t.reason}`,
-              selected: true
-            });
-          }
+      for (const { field, text } of fieldsToCheck) {
+        const terms = detectForbiddenTerms(text);
+        for (const t of terms) {
+          results.push({
+            shotNumber: shot.shotNumber,
+            suggestion: `[${field}] 包含违规词汇"${t.term}"，建议改为：${t.suggestion}`,
+            reason: `规则校验：${t.reason}`,
+            selected: true
+          });
         }
       }
 
@@ -2254,14 +2256,15 @@ const App: React.FC = () => {
         }
       }
 
-      // 3. 字数校验
-      if (validation.promptCn.warnings.length > 0 || !validation.promptCn.valid) {
-        const issues = [...validation.promptCn.errors, ...validation.promptCn.warnings];
+      // 3. 字数校验：仅对 imagePromptCn 执行
+      if (shot.imagePromptCn) {
+        const lengthResult = validateImagePrompt(shot.imagePromptCn);
+        const issues = [...lengthResult.errors, ...lengthResult.warnings];
         if (issues.length > 0) {
           results.push({
             shotNumber: shot.shotNumber,
             suggestion: issues.join('；'),
-            reason: '提示词字数校验',
+            reason: '生图提示词字数校验',
             selected: true
           });
         }
@@ -3477,13 +3480,15 @@ const App: React.FC = () => {
                       {shot.videoMode === 'Keyframe' ? '首尾帧' : '图生视频'}
                     </span>
                   )}
-                  {/* 🆕 校验警告指示器 */}
+                  {/* 🆕 校验警告指示器（只检测生图提示词 imagePromptCn） */}
                   {(() => {
-                    const validation = validateShotPrompts(shot);
-                    const hasIssues = validation.forbiddenTerms.length > 0 ||
-                      !validation.promptCn.valid ||
-                      (shot.videoMode === 'Keyframe' && shot.promptCn && shot.endFramePromptCn &&
-                       !validateKeyframeConsistency(shot.promptCn, shot.endFramePromptCn).valid);
+                    if (!shot.imagePromptCn) return null;
+                    const hasForbidden = detectForbiddenTerms(shot.imagePromptCn).length > 0;
+                    const lengthResult = validateImagePrompt(shot.imagePromptCn);
+                    const hasLengthIssue = !lengthResult.valid || lengthResult.warnings.length > 0;
+                    const hasConsistencyIssue = shot.videoMode === 'Keyframe' && shot.imagePromptCn && shot.endImagePromptCn &&
+                       !validateKeyframeConsistency(shot.imagePromptCn, shot.endImagePromptCn).valid;
+                    const hasIssues = hasForbidden || hasLengthIssue || hasConsistencyIssue;
                     return hasIssues ? (
                       <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-red-900/30 text-red-300 border border-red-600/50" title="存在校验问题">
                         ⚠️
