@@ -1758,8 +1758,26 @@ const CharacterCard: React.FC<{
 }) => {
   const completenessInfo = completeness !== undefined ? getCompletenessLevel(completeness) : null;
 
-  // ── Lightbox 全屏查看 ──────────────────────────────────────────────────────
+  // ── Lightbox 全屏查看（支持缩放 + 拖动）──────────────────────────────────
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lbZoom, setLbZoom] = useState(1);
+  const [lbPos, setLbPos]   = useState({ x: 0, y: 0 });
+  const [lbDragging, setLbDragging] = useState(false);
+  const lbDragRef = useRef<{ active: boolean; startX: number; startY: number; posX: number; posY: number; moved: boolean }>(
+    { active: false, startX: 0, startY: 0, posX: 0, posY: 0, moved: false }
+  );
+
+  const openLightbox = (url: string) => {
+    setLightboxUrl(url);
+    setLbZoom(1);
+    setLbPos({ x: 0, y: 0 });
+    setLbDragging(false);
+  };
+
+  const lbZoomBy = (factor: number) =>
+    setLbZoom(z => Math.min(8, Math.max(0.25, z * factor)));
+
+  const lbReset = () => { setLbZoom(1); setLbPos({ x: 0, y: 0 }); };
 
   const handleDownload = async (url: string, filename: string) => {
     try {
@@ -1883,7 +1901,7 @@ const CharacterCard: React.FC<{
             className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[320px] cursor-zoom-in hover:opacity-90 transition-opacity"
             loading="lazy"
             title="点击全屏查看"
-            onClick={() => setLightboxUrl(character.imageSheetUrl!)}
+            onClick={() => openLightbox(character.imageSheetUrl!)}
           />
           {character.imageGenerationMeta && (
             <div className="mt-1.5 text-[10px] text-[var(--color-text-tertiary)]">
@@ -2012,7 +2030,7 @@ const CharacterCard: React.FC<{
                         className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[200px] cursor-zoom-in hover:opacity-90 transition-opacity"
                         loading="lazy"
                         title="点击全屏查看"
-                        onClick={() => setLightboxUrl(form.imageSheetUrl!)}
+                        onClick={() => openLightbox(form.imageSheetUrl!)}
                       />
                       {form.imageGenerationMeta && (
                         <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
@@ -2028,43 +2046,98 @@ const CharacterCard: React.FC<{
         </div>
       )}
 
-      {/* ── Lightbox 全屏查看 Modal ───────────────────────────────────────────── */}
+      {/* ── Lightbox 全屏查看 Modal（支持滚轮缩放 + 鼠标拖动）─────────────────── */}
       {lightboxUrl && (
         <div
-          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
-          onClick={() => setLightboxUrl(null)}
+          className="fixed inset-0 z-[9999] flex flex-col bg-black/92 backdrop-blur-sm select-none"
+          onWheel={(e) => {
+            e.preventDefault();
+            const factor = e.deltaY < 0 ? 1.15 : 0.87;
+            setLbZoom(z => Math.min(8, Math.max(0.25, z * factor)));
+          }}
         >
           {/* 顶部工具栏 */}
-          <div
-            className="absolute top-0 left-0 right-0 flex items-center justify-between px-5 py-3 bg-gradient-to-b from-black/70 to-transparent"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span className="text-white/80 text-[13px]">{character.name} · 设定图</span>
-            <div className="flex items-center gap-3">
+          <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-5 py-3 bg-gradient-to-b from-black/70 to-transparent">
+            <span className="text-white/70 text-[13px]">{character.name} · 设定图</span>
+            <div className="flex items-center gap-2">
+              {/* 缩放控制 */}
+              <button
+                onClick={() => lbZoomBy(0.77)}
+                className="bg-white/15 hover:bg-white/25 text-white w-8 h-8 rounded-full flex items-center justify-center text-[18px] font-light transition-colors"
+                title="缩小 (滚轮也可缩放)"
+              >－</button>
+              <span
+                className="text-white/80 text-[13px] min-w-[46px] text-center cursor-pointer"
+                onClick={lbReset}
+                title="点击恢复 100%"
+              >{Math.round(lbZoom * 100)}%</span>
+              <button
+                onClick={() => lbZoomBy(1.3)}
+                className="bg-white/15 hover:bg-white/25 text-white w-8 h-8 rounded-full flex items-center justify-center text-[18px] font-light transition-colors"
+                title="放大 (滚轮也可缩放)"
+              >＋</button>
+              <div className="w-px h-5 bg-white/20 mx-1" />
+              {/* 下载 */}
               <button
                 onClick={() => handleDownload(lightboxUrl, `${character.name}_设定图.jpg`)}
                 className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-lg text-[13px] transition-colors"
                 title="下载图片"
-              >
-                ⬇️ 下载
-              </button>
+              >⬇️ 下载</button>
+              {/* 关闭 */}
               <button
                 onClick={() => setLightboxUrl(null)}
                 className="bg-white/15 hover:bg-white/25 text-white w-8 h-8 rounded-full flex items-center justify-center text-[16px] transition-colors"
-                title="关闭"
-              >
-                ✕
-              </button>
+                title="关闭 (ESC)"
+              >✕</button>
             </div>
           </div>
 
-          {/* 图片主体 */}
-          <img
-            src={lightboxUrl}
-            alt="全屏查看"
-            className="max-w-[92vw] max-h-[88vh] object-contain rounded-xl shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {/* 图片拖动区域 */}
+          <div
+            className="flex-1 overflow-hidden flex items-center justify-center"
+            style={{ cursor: lbDragging ? 'grabbing' : lbZoom > 1 ? 'grab' : 'default' }}
+            onMouseDown={(e) => {
+              if (e.button !== 0) return;
+              lbDragRef.current = { active: true, startX: e.clientX, startY: e.clientY, posX: lbPos.x, posY: lbPos.y, moved: false };
+              setLbDragging(true);
+              e.preventDefault();
+            }}
+            onMouseMove={(e) => {
+              if (!lbDragRef.current.active) return;
+              const dx = e.clientX - lbDragRef.current.startX;
+              const dy = e.clientY - lbDragRef.current.startY;
+              if (Math.abs(dx) > 2 || Math.abs(dy) > 2) lbDragRef.current.moved = true;
+              setLbPos({ x: lbDragRef.current.posX + dx, y: lbDragRef.current.posY + dy });
+            }}
+            onMouseUp={() => {
+              if (!lbDragRef.current.moved) setLightboxUrl(null); // 点击空白关闭
+              lbDragRef.current.active = false;
+              setLbDragging(false);
+            }}
+            onMouseLeave={() => { lbDragRef.current.active = false; setLbDragging(false); }}
+          >
+            <img
+              src={lightboxUrl}
+              alt="全屏查看"
+              draggable={false}
+              style={{
+                transform: `translate(${lbPos.x}px, ${lbPos.y}px) scale(${lbZoom})`,
+                transformOrigin: 'center',
+                transition: lbDragging ? 'none' : 'transform 0.12s ease',
+                maxWidth: '92vw',
+                maxHeight: '88vh',
+                objectFit: 'contain',
+                borderRadius: '12px',
+                pointerEvents: 'none',
+                userSelect: 'none',
+              }}
+            />
+          </div>
+
+          {/* 底部提示 */}
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center pointer-events-none">
+            <span className="text-white/30 text-[11px]">滚轮缩放 · 拖动平移 · 点击空白关闭</span>
+          </div>
         </div>
       )}
     </div>
