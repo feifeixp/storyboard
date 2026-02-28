@@ -294,6 +294,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       const prompt = [
         baseInfoCn,
+        // 🔧 有主角色参考图时，强调保持面部/发型/身材一致
+        referenceImageUrl
+          ? 'IMPORTANT: Maintain the EXACT same face, hairstyle, body proportions, and skin tone as the reference character image. Only the outfit/costume/form changes.'
+          : '',
         '16:9 canvas, 1x4 horizontal grid layout with 4 equal panels, edge-to-edge, clean background, consistent character, consistent outfit, consistent face.',
         'Panels from left to right: (1) front full-body standing, (2) side profile full-body, (3) back full-body, (4) face close-up portrait.',
         'NO text, NO labels, NO numbers, NO watermark, NO logo.',
@@ -1550,7 +1554,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               onGenerateImage={() => handleGenerateCharacterImageSheet(char.id)}
               isGenerating={generatingIds.has(char.id) || [...generatingIds].some((id: string) => id.startsWith(char.id + '_'))}
               generationProgress={genProgressMap.get(char.id) || null}
-              onGenerateFormImage={(formId) => handleGenerateCharacterImageSheet(char.id, false, formId)}
+              onGenerateFormImage={(formId) => handleGenerateCharacterImageSheet(char.id, false, formId, char.imageSheetUrl || undefined)}
               generatingFormIds={[...generatingIds].filter((id: string) => id.startsWith(char.id + '_')).map((id: string) => id.split('_').slice(1).join('_'))}
               formGenProgressMap={Object.fromEntries([...generatingIds].filter((id: string) => id.startsWith(char.id + '_')).map((id: string) => [id.split('_').slice(1).join('_'), genProgressMap.get(id) || { stage: '', percent: 0 }]))}
             />
@@ -1754,6 +1758,25 @@ const CharacterCard: React.FC<{
 }) => {
   const completenessInfo = completeness !== undefined ? getCompletenessLevel(completeness) : null;
 
+  // ── Lightbox 全屏查看 ──────────────────────────────────────────────────────
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  const handleDownload = async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // CORS 被拒时降级为新标签页打开
+      window.open(url, '_blank');
+    }
+  };
+
   return (
     <div className="glass-card rounded-xl overflow-hidden">
       {/* 角色头部信息 */}
@@ -1857,8 +1880,10 @@ const CharacterCard: React.FC<{
           <img
             src={character.imageSheetUrl}
             alt={`${character.name} 设定图`}
-            className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[320px]"
+            className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[320px] cursor-zoom-in hover:opacity-90 transition-opacity"
             loading="lazy"
+            title="点击全屏查看"
+            onClick={() => setLightboxUrl(character.imageSheetUrl!)}
           />
           {character.imageGenerationMeta && (
             <div className="mt-1.5 text-[10px] text-[var(--color-text-tertiary)]">
