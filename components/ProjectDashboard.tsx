@@ -2009,8 +2009,10 @@ const CharacterCard: React.FC<{
                       <img
                         src={form.imageSheetUrl}
                         alt={`${form.name} 设定图`}
-                        className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[200px]"
+                        className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[200px] cursor-zoom-in hover:opacity-90 transition-opacity"
                         loading="lazy"
+                        title="点击全屏查看"
+                        onClick={() => setLightboxUrl(form.imageSheetUrl!)}
                       />
                       {form.imageGenerationMeta && (
                         <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
@@ -2023,6 +2025,46 @@ const CharacterCard: React.FC<{
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* ── Lightbox 全屏查看 Modal ───────────────────────────────────────────── */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
+          onClick={() => setLightboxUrl(null)}
+        >
+          {/* 顶部工具栏 */}
+          <div
+            className="absolute top-0 left-0 right-0 flex items-center justify-between px-5 py-3 bg-gradient-to-b from-black/70 to-transparent"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="text-white/80 text-[13px]">{character.name} · 设定图</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => handleDownload(lightboxUrl, `${character.name}_设定图.jpg`)}
+                className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-lg text-[13px] transition-colors"
+                title="下载图片"
+              >
+                ⬇️ 下载
+              </button>
+              <button
+                onClick={() => setLightboxUrl(null)}
+                className="bg-white/15 hover:bg-white/25 text-white w-8 h-8 rounded-full flex items-center justify-center text-[16px] transition-colors"
+                title="关闭"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* 图片主体 */}
+          <img
+            src={lightboxUrl}
+            alt="全屏查看"
+            className="max-w-[92vw] max-h-[88vh] object-contain rounded-xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
