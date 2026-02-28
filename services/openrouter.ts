@@ -569,11 +569,8 @@ export async function* generateStage1Analysis(
  */
 export function parseStage1Output(fullText: string): ScriptAnalysis {
   try {
-    // 先尝试宽松解析，不要求所有字段
-    const result = mergeThinkingAndResult<any>(
-      fullText,
-      ['basicInfo'] // 只要求最基本的字段
-    );
+    // 宽松解析：不在 validateJSON 层做字段校验，由下方逻辑补全缺失字段
+    const result = mergeThinkingAndResult<any>(fullText, []);
 
     // 处理 AI 可能返回的不同结构
     // 如果 emotionArc 在 emotionAnalysis 下
@@ -628,10 +625,30 @@ export function parseStage1Output(fullText: string): ScriptAnalysis {
       console.warn('警告：缺少以下字段:', missingFields.join(', '));
       console.warn('已解析的字段:', Object.keys(result).join(', '));
 
-      // 如果只缺少 scenes，创建默认值
+      // 为所有缺失字段补充默认值，保证流程继续
+      if (missingFields.includes('basicInfo')) {
+        result.basicInfo = { genre: '待分析', tone: '待分析', theme: '待分析' };
+        missingFields.splice(missingFields.indexOf('basicInfo'), 1);
+        console.warn('已为 basicInfo 使用默认值');
+      }
+      if (missingFields.includes('emotionArc')) {
+        result.emotionArc = [];
+        missingFields.splice(missingFields.indexOf('emotionArc'), 1);
+        console.warn('已为 emotionArc 使用默认值');
+      }
+      if (missingFields.includes('climax')) {
+        result.climax = { shotNumber: 1, intensity: '高', description: '待分析' };
+        missingFields.splice(missingFields.indexOf('climax'), 1);
+        console.warn('已为 climax 使用默认值');
+      }
+      if (missingFields.includes('conflict')) {
+        result.conflict = { type: '待分析', description: '待分析' };
+        missingFields.splice(missingFields.indexOf('conflict'), 1);
+        console.warn('已为 conflict 使用默认值');
+      }
       if (missingFields.includes('scenes')) {
-        // 尝试从 emotionArc 推断场景
-        if (result.emotionArc && Array.isArray(result.emotionArc)) {
+        // 优先从 emotionArc 推断场景
+        if (result.emotionArc && Array.isArray(result.emotionArc) && result.emotionArc.length > 0) {
           result.scenes = result.emotionArc.map((e: any, i: number) => ({
             id: `S${i + 1}`,
             description: e.event || `场景${i + 1}`,
@@ -639,15 +656,11 @@ export function parseStage1Output(fullText: string): ScriptAnalysis {
             mood: e.emotion || '待定'
           }));
           console.warn('已从 emotionArc 推断 scenes');
-          // 移除 scenes 从缺失列表
-          const idx = missingFields.indexOf('scenes');
-          if (idx > -1) missingFields.splice(idx, 1);
+        } else {
+          result.scenes = [{ id: 'S1', description: '完整场景', duration: '全片', mood: '待定' }];
+          console.warn('已为 scenes 使用默认值');
         }
-      }
-
-      // 如果还有其他缺失字段，抛出错误
-      if (missingFields.length > 0 && !missingFields.every(f => f === 'scenes')) {
-        throw new Error(`缺少必需字段: ${missingFields.join(', ')}`);
+        missingFields.splice(missingFields.indexOf('scenes'), 1);
       }
     }
 
@@ -718,15 +731,14 @@ export async function* generateStage2Analysis(
  */
 export function parseStage2Output(fullText: string): VisualStrategy {
   try {
-    const result = mergeThinkingAndResult<any>(
-      fullText,
-      ['overallStyle', 'cameraStrategy', 'spatialContinuity', 'rhythmControl']
-    );
-
+    // 宽松解析：VisualStrategy 所有字段均为可选，不做强制字段校验
+    const result = mergeThinkingAndResult<any>(fullText, []);
     return result as VisualStrategy;
   } catch (error) {
     console.error('解析阶段2输出失败:', error);
-    throw new Error(`无法解析视觉策略结果: ${error instanceof Error ? error.message : '未知错误'}`);
+    // 返回最小合法默认值，保证后续阶段不因 stage2 解析失败而中断
+    console.warn('阶段2解析失败，使用空默认值继续流程');
+    return {} as VisualStrategy;
   }
 }
 
@@ -2474,7 +2486,7 @@ function buildNineGridPrompt(
   episodeNumber?: number,       // 🆕 当前集数，用于匹配角色形态
   sceneSection: string = '',    // 🆕 场景描述信息
   artStyleSection: string = '', // 🆕 美术风格约束
-  characterRefImages: { name: string; briefDesc: string; imageUrl: string }[] = []  // 🆕 角色参考图信息
+  characterRefImages: { name: string; briefDesc: string; imageUrl: string }[] = [],  // 🆕 角色参考图信息（外部传入的筛选结果）
 ): string {
   // 🆕 精确角度参数映射（防止AI生图误解，如3/4正面变成正面）
   // 每个角度都有精确的角度范围描述，确保AI生图模型理解正确

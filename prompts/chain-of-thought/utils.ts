@@ -189,6 +189,10 @@ function fixCommonJSONSyntax(jsonStr: string): string {
   // 3. 移除多余的逗号
   fixed = fixed.replace(/,(\s*[}\]])/g, '$1');
 
+  // 3.5. 修复 "Expected ':' after property name"：属性名后紧跟非冒号内容
+  // 匹配: "key" 后面有空白但没有冒号，紧跟另一个值或引号
+  fixed = fixed.replace(/"([^"]+)"\s+(?=["{[\d])/g, '"$1": ');
+
   // 4. 修复未闭合的字符串（逐行检查奇数未转义引号）
   const lines = fixed.split('\n');
   for (let i = 0; i < lines.length; i++) {
