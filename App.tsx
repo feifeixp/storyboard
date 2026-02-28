@@ -2420,6 +2420,57 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * 一键优化：全选所有建议 → 立即应用
+   * 直接使用当前 suggestions（不依赖 setState 异步更新）
+   */
+  const oneClickOptimize = async () => {
+    if (suggestions.length === 0) {
+      alert('暂无建议，请先点击"专家自检"');
+      return;
+    }
+    // 全选所有建议（更新UI状态）
+    selectAllSuggestions();
+    // 直接用全量 suggestions 执行优化，不等待 setState 生效
+    const allSuggestions = suggestions.map(s => ({ ...s, selected: true }));
+
+    const hasAngleDistributionIssue = allSuggestions.some(s =>
+      s.reason?.includes('角度分布规则违反') || s.reason?.includes('角度分布建议')
+    );
+    if (hasAngleDistributionIssue) {
+      const fixedShots = await autoFixAngleDistribution(shots);
+      setShots(fixedShots);
+      const angleReport = validateAngleDistribution(fixedShots);
+      if (angleReport.overall.isValid) {
+        alert('✅ 角度分布问题已自动修复！\n\n' + generateAngleDistributionReport(fixedShots));
+      } else {
+        alert('⚠️ 部分角度分布问题已修复，但仍有问题：\n\n' + angleReport.overall.errors.join('\n'));
+      }
+      setSuggestions(prev => prev.filter(s =>
+        !s.reason?.includes('角度分布规则违反') && !s.reason?.includes('角度分布建议')
+      ));
+      return;
+    }
+
+    const currentShots = [...shots];
+    setCurrentStep(AppStep.MANUAL_EDIT);
+    setChatHistory([{role: 'assistant', content: `一键优化：正在应用全部 ${allSuggestions.length} 条建议，请稍候...`}]);
+    setStreamText('');
+    setIsLoading(true);
+    setProgressMsg(`一键优化：正在应用全部 ${allSuggestions.length} 条建议...`);
+    try {
+      const stream = optimizeShotListStream(currentShots, allSuggestions);
+      for await (const text of stream) {
+        setStreamText(text);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("一键优化失败，请重试");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleConsultDirector = async () => {
     if (!chatInput.trim()) return;
     const userMsg = chatInput;
@@ -3893,6 +3944,7 @@ const App: React.FC = () => {
             setSelectedSuggestion={setSelectedSuggestion}
             startReview={startReview}
             applyOptimizations={applyOptimizations}
+            oneClickOptimize={oneClickOptimize}
             getSelectedSuggestionsCount={getSelectedSuggestionsCount}
             selectAllSuggestions={selectAllSuggestions}
             deselectAllSuggestions={deselectAllSuggestions}

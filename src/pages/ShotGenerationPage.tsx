@@ -38,6 +38,7 @@ interface ShotGenerationPageProps {
   setSelectedSuggestion: (s: ReviewSuggestion | null) => void;
   startReview: () => void;
   applyOptimizations: () => void;
+  oneClickOptimize: () => void;
   getSelectedSuggestionsCount: () => number;
   selectAllSuggestions: () => void;
   deselectAllSuggestions: () => void;
@@ -408,6 +409,7 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
   selectedSuggestion,
   setSelectedSuggestion,
   applyOptimizations,
+  oneClickOptimize,
   getSelectedSuggestionsCount,
   selectAllSuggestions,
   deselectAllSuggestions,
@@ -434,6 +436,14 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* 一键优化：全选所有建议并立即应用 */}
+          <button
+            onClick={oneClickOptimize}
+            disabled={isLoading || suggestions.length === 0}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-all disabled:opacity-50"
+          >
+            {isLoading ? '优化中...' : `⚡ 一键优化 (${suggestions.length})`}
+          </button>
           <button
             onClick={applyOptimizations}
             disabled={isLoading || getSelectedSuggestionsCount() === 0}

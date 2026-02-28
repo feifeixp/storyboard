@@ -1737,11 +1737,15 @@ export async function* optimizeShotListStream(
   Data: ${JSON.stringify(shots)}
   Suggestions: ${JSON.stringify(suggestions)}`;
 
-  const client = getClient(model);
+  // 🔧 直连 OpenRouter（HTTPS），绕过 Cloudflare Worker 代理
+  //    原因：Worker 代理到 ALB 有 30s 超时，30个镜头+建议优化耗时超限触发 504
+  const client = getOpenRouterDirectClient();
   const stream = await client.chat.completions.create({
     model,
     messages: [{ role: 'user', content: prompt }],
     stream: true,
+    // 30 镜头 × ~300 tokens/镜头 ≈ 9000 tokens，设 12000 留余量
+    max_tokens: 12000,
   });
 
   let fullText = '';
