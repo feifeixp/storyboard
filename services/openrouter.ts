@@ -2112,18 +2112,40 @@ export async function generateMergedStoryboardSheet(
   const preferredModelName = preferredModel.model_name;
   console.log(`[OpenRouter] ✅ 使用模型: ${preferredModelName} (${preferredModel.model_display_name})`);
 
-  // 🆕 获取角色参考图信息（根据集数匹配形态的设定图）
-  const characterRefImages = getCharacterReferenceImagesForEpisode(characterRefs, episodeNumber);
-  // 根据模型支持的最大参考图数量进行截断
   const maxRefImages = preferredModel.max_reference_images || 0;
-  const limitedRefImages = maxRefImages > 0 ? characterRefImages.slice(0, maxRefImages) : characterRefImages;
-  const referenceImageUrls = limitedRefImages.map(r => r.imageUrl);
-  if (limitedRefImages.length > 0) {
-    console.log(`[OpenRouter] 📸 角色参考图: ${limitedRefImages.length}张（模型最大支持${maxRefImages}张）`, limitedRefImages.map(r => `${r.name}(${r.briefDesc})`));
-    if (characterRefImages.length > limitedRefImages.length) {
-      console.warn(`[OpenRouter] ⚠️ 角色参考图超过模型限制，已截断: ${characterRefImages.length} → ${limitedRefImages.length}`);
+
+  // 🔧 为每个九宫格智能筛选参考图（只放需要的角色和场景）
+  const getFilteredReferencesForGrid = (gridShots: Shot[]): {
+    allCharacterRefImages: CharacterReferenceImage[];
+    filteredRefImages: CharacterReferenceImage[];
+    characterNames: string[];
+  } => {
+    // 🆕 获取角色参考图信息（根据集数匹配形态的设定图）
+    const allCharacterRefImages = getCharacterReferenceImagesForEpisode(characterRefs, episodeNumber);
+
+    // 收集当前九宫格涉及的所有角色ID
+    const involvedCharacterIds = new Set<string>();
+    for (const shot of gridShots) {
+      if (shot.assignedCharacterIds) {
+        shot.assignedCharacterIds.forEach(id => involvedCharacterIds.add(id));
+      }
     }
-  }
+
+    // 筛选角色参考图：只包含当前九宫格涉及的角色
+    const filteredCharacterRefs = allCharacterRefImages.filter(ref => {
+      const character = characterRefs.find(c => c.name === ref.name);
+      return character && involvedCharacterIds.has(character.id);
+    });
+
+    // 构建角色名称列表（用于日志）
+    const characterNames = filteredCharacterRefs.map(r => r.name);
+
+    return {
+      allCharacterRefImages,
+      filteredRefImages: filteredCharacterRefs,
+      characterNames,
+    };
+  };
 
   // 初始化 results 数组（预留位置）
   results = new Array(totalGrids).fill('');
@@ -2149,6 +2171,18 @@ export async function generateMergedStoryboardSheet(
       const gridShots = shots.slice(startIdx, endIdx);
 
       console.log(`[OpenRouter] 🎬 开始生成第 ${gridIndex + 1}/${totalGrids} 张九宫格 (镜头 #${startIdx + 1} - #${endIdx})`);
+
+      // 🔧 智能筛选参考图：只放当前九宫格需要的角色
+      const { allCharacterRefImages, filteredRefImages, characterNames } = getFilteredReferencesForGrid(gridShots);
+
+      const limitedRefImages = maxRefImages > 0 ? filteredRefImages.slice(0, maxRefImages) : filteredRefImages;
+      const referenceImageUrls = limitedRefImages.map(r => r.imageUrl);
+      if (referenceImageUrls.length > 0) {
+        console.log(`[OpenRouter] 📸 九宫格 #${gridIndex + 1} - 角色参考图: ${limitedRefImages.length}张（涉及角色: ${characterNames.join(', ')})`, limitedRefImages.map(r => `${r.name}(${r.briefDesc})`));
+        if (filteredRefImages.length > limitedRefImages.length) {
+          console.warn(`[OpenRouter] ⚠️ 参考图超过模型限制，已截断: ${filteredRefImages.length} → ${limitedRefImages.length}`);
+        }
+      }
 
       // 构建九宫格提示词（🆕 传入角色参考图信息，用于在提示词中添加 [图N] 标记）
       const gridPrompt = buildNineGridPrompt(
@@ -2742,14 +2776,21 @@ ${scriptContent.slice(0, 20000)}`;
   const text = response.choices[0]?.message?.content || '';
 
   try {
-    // 提取JSON（模型可能在JSON前后附加解释）
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // 1. 剥离 markdown 代码块标记（```json ... ``` 或 ``` ... ```）
+    const stripped = text
+      .replace(/^```(?:json)?\s*/m, '')
+      .replace(/\s*```\s*$/m, '')
+      .trim();
+
+    // 2. 提取 JSON 对象（模型可能在前后附加解释文字）
+    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { episodes: [] };
+
     const parsed = JSON.parse(jsonMatch[0]) as EpisodeSplitResult;
     if (!Array.isArray(parsed.episodes)) return { episodes: [] };
     return parsed;
-  } catch {
-    console.error('[splitEpisodesWithAI] JSON解析失败:', text.slice(0, 200));
+  } catch (err) {
+    console.error('[splitEpisodesWithAI] JSON解析失败:', text.slice(0, 300));
     return { episodes: [] };
   }
 }
