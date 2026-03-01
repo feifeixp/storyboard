@@ -7,8 +7,9 @@
  */
 
 import { ScriptFile, SceneRef } from '../types/project';
+import { getLLMChatCompletionsURL } from './openrouter';
 
-const DEFAULT_MODEL = 'google/gemini-2.0-flash-001';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
 const SIMILARITY_THRESHOLD = 0.8; // 相似度阈值（80%）
 
@@ -135,7 +136,7 @@ ${scriptSamples}
     onProgress?.(0, 1);
     
     // 调用API
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

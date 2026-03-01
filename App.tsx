@@ -92,6 +92,7 @@ import {
 } from './services/d1Storage';
 import { getGenerationResult, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType, ImageGenerationModel } from './services/aiImageGeneration';
 import { analyzeProjectScriptsWithProgress, analyzeProjectScripts } from './services/projectAnalysis';
+import { regexPreScanScripts } from './services/projectAnalysis';
 import { BatchAnalysisProgress } from './types/project';
 // 🆕 本集概述生成
 import { generateEpisodeSummary } from './services/episodeSummaryGenerator';
@@ -1530,7 +1531,12 @@ const App: React.FC = () => {
       };
 
       // 调用分批分析服务
-      const result = await analyzeProjectScriptsWithProgress(scriptFiles, undefined, handleProgress);
+      const result = await analyzeProjectScriptsWithProgress(
+        scriptFiles,
+        undefined,  // model: 使用默认模型
+        handleProgress,
+        'standard'   // mode: 标准模式
+      );
       console.log('[重新分析] 分析结果:', result);
       setReanalyzeResult(result);
 

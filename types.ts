@@ -11,6 +11,17 @@ export interface CharacterForm {
   visualPromptCn?: string;   // 中文视觉提示词
   visualPromptEn?: string;   // 英文视觉提示词
 
+  // 🆕 形态变化类型（来自 FormSummary）
+  changeType?: 'costume' | 'makeup' | 'damage' | 'transformation';
+  // 🆕 变化差异描述（相对于基础形态的差异）
+  delta?: string;
+  // 🆕 优先级（数字越小越靠前）
+  priority?: number;
+  // 🆕 是否为关键帧形态
+  isKeyframe?: boolean;
+  // 🆕 外观描述（用于提示词生成）
+  appearance?: string;
+
   // 🆕 形态设定图（1×4 横向四分屏）
   imageSheetUrl?: string;
 
@@ -64,6 +75,19 @@ export interface CharacterRef {
 
   // 🆕 多形态/变装支持
   forms?: CharacterForm[];
+
+  // 🆕 角色描述（从剧本分析中提取的人物简介）
+  description?: string;
+  // 🆕 角色定位（主角/配角/反派等）
+  role?: string;
+  // 🆕 外观配置（可为字符串或结构化 AppearanceConfig 对象，用 unknown 避免循环依赖）
+  appearanceConfig?: unknown;
+  // 🆕 服装配置（可为字符串或结构化 CostumeConfig 对象，用 unknown 避免循环依赖）
+  costumeConfig?: unknown;
+  // 🆕 出现的剧集列表
+  appearsInEpisodes?: number[];
+  // 🆕 形态摘要列表（Phase 1 轻量扫描结果，类型为 unknown[] 避免循环依赖）
+  formSummaries?: unknown[];
 }
 
 // ═══════════ 景别类型（中英文）- 🆕 扩展到11种 ═══════════

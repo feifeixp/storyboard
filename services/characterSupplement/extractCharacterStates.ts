@@ -8,6 +8,7 @@ import type { ScriptFile } from '../../types/project';
 import type { FormSummary, TimelinePhase } from './types';  // 🆕 Phase 1 轻量形态摘要类型
 import { normalizeStateName, isBaselineStateName } from '../utils/stateNameUtils';  // 🆕 导入统一工具
 
+import { getLLMChatCompletionsURL } from '../openrouter';
 /**
  * 🆕 修改F：修复 JSON 字符串内部的控制字符
  * 使用状态机扫描，只修复引号内的控制字符，不修复 JSON 结构中的控制字符
@@ -90,7 +91,7 @@ function repairJSONControlCharacters(jsonStr: string): string {
 export async function extractCharacterStates(
   character: CharacterRef,
   scripts: ScriptFile[],
-  model: string = 'google/gemini-2.5-flash'
+  model: string = 'gemini-2.5-flash'
 ): Promise<CharacterForm[]> {
 
   console.log(`[状态提取] 开始提取角色"${character.name}"的状态...`);
@@ -104,7 +105,7 @@ export async function extractCharacterStates(
   const prompt = buildStateExtractionPrompt(character, scriptContent);
 
   // 调用LLM
-  const apiKey = (import.meta as any).env.VITE_OPENROUTER1_API_KEY;
+  const apiKey = import.meta.env.VITE_OPENROUTER1_API_KEY;
   if (!apiKey) {
     throw new Error('未设置OpenRouter API密钥 (VITE_OPENROUTER1_API_KEY)');
   }
@@ -116,7 +117,7 @@ export async function extractCharacterStates(
   }, 60000); // 60秒超时
 
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1021,7 +1022,7 @@ function parseFormsArray(jsonStr: string): FormSummary[] {
 export async function extractFormSummaries(
   character: CharacterRef,
   scripts: ScriptFile[],
-  model: string = 'google/gemini-2.5-flash',
+  model: string = 'gemini-2.5-flash',
   timelinePhases?: TimelinePhase[]
 ): Promise<FormSummary[]> {
   console.log(`[形态摘要] 开始轻量扫描角色"${character.name}"的形态清单...`);
@@ -1040,7 +1041,7 @@ export async function extractFormSummaries(
     timelinePhases
   );
 
-  const apiKey = (import.meta as any).env.VITE_OPENROUTER1_API_KEY;
+  const apiKey = import.meta.env.VITE_OPENROUTER1_API_KEY;
   if (!apiKey) {
     throw new Error('未设置 OpenRouter API 密钥 (VITE_OPENROUTER1_API_KEY)');
   }
@@ -1049,7 +1050,7 @@ export async function extractFormSummaries(
   const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,

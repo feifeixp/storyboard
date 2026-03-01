@@ -22,7 +22,8 @@
       "Bash(head:*)",
       "Bash(grep:*)",
       "Bash(awk NR>=2661 && NR<=2663:*)",
-      "Bash(/tmp/new_style_section.txt:*)"
+      "Bash(/tmp/new_style_section.txt:*)",
+      "Bash(do:*)"
     ]
   }
 }

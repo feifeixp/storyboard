@@ -148,7 +148,152 @@ services/angleValidation.ts
 
 ---
 
-**创建时间**: 2024-12-26  
-**维护人**: AI Assistant  
+**创建时间**: 2024-12-26
+**维护人**: AI Assistant
 **适用范围**: 仅 visionary-storyboard-studio 项目
+
+---
+
+## 🌐 R009: API 调用规范（强制）
+
+> ⛔ 本节规则因多次线上事故（Mixed Content、ModelSelector崩溃、构建失败）总结而来，**禁止违反**。
+
+### 9.1 后端 API 端点
+
+| 用途 | 地址 | 协议 | 备注 |
+|------|------|------|------|
+| 自建 LLM API（前端直连） | `https://ai-api.neodomain.cn/v1` | **HTTPS** | 唯一允许的前端直连地址 |
+| Cloudflare Worker 代理 | `${VITE_API_URL}/api/ai-proxy` | HTTPS（Worker内部转HTTP） | 短时请求走此路径 |
+| ALB 后端（仅 Worker 内） | `http://alb-r3li6yh4ktpwq7ugkg.ap-southeast-1.alb.aliyuncsslbintl.com:7000/v1` | HTTP（仅服务端可用） | **绝对不能**出现在前端代码 |
+| 旧地址（永久废弃） | `http://47.237.171.88:3000` | ❌ 禁止使用 | Mixed Content 根因 |
+
+**强制规则**：
+- ✅ 前端代码中所有 API URL 必须使用 **HTTPS**
+- ❌ 前端代码中绝对禁止出现 `http://47.237.171.88` 或任何 HTTP 明文地址
+- ❌ 前端代码中绝对禁止出现 ALB 地址（仅 Cloudflare Worker 服务端使用）
+
+### 9.2 三种 API 调用模式
+
+#### 模式 A：`getGeminiClient()`（OpenAI SDK，走 Worker 代理）
+
+```typescript
+// 内部私有，不对外导出
+// baseURL = ${VITE_API_URL}/api/ai-proxy
+// 适用场景：短时请求（<30s），大多数分镜生成调用
+const client = getGeminiClient();
+const resp = await client.chat.completions.create({ model, messages, stream: true });
+```
+
+#### 模式 B：`getOpenRouterDirectClient()`（OpenAI SDK，前端直连）
+
+```typescript
+// 内部私有，不对外导出
+// baseURL = https://ai-api.neodomain.cn/v1
+// 适用场景：长时流式请求（>30s），避免 Worker 30s 超时限制
+// 例：extractImagePromptsStream、generateStoryboard 等主流程函数
+const client = getOpenRouterDirectClient();
+const stream = await client.chat.completions.create({ model, messages, stream: true });
+```
+
+#### 模式 C：`getLLMChatCompletionsURL()` + 原生 `fetch`
+
+```typescript
+// 从 openrouter.ts 导入，返回 'https://ai-api.neodomain.cn/v1/chat/completions'
+import { getLLMChatCompletionsURL } from './openrouter';
+
+const response = await fetch(getLLMChatCompletionsURL(), {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER1_API_KEY}`,
+    'HTTP-Referer': window.location.origin,
+  },
+  body: JSON.stringify({ model, messages, temperature, max_tokens }),
+});
+```
+
+**使用场景**：需要精细控制请求体（如多模态图像上传）的服务文件
+
+**强制规则**：
+- ✅ 使用 `getLLMChatCompletionsURL()` 函数，**永远不要硬编码 URL**
+- ✅ `getLLMChatCompletionsURL` 必须从 `./openrouter` 或 `../openrouter` 导入
+- ❌ 不能自行拼接 `https://ai-api.neodomain.cn/v1/chat/completions`
+
+### 9.3 API Key 管理
+
+```typescript
+// getApiKey() 是 openrouter.ts 内部私有函数，不对外导出
+// 外部服务文件需要 apiKey 时，用以下方式（仅用于原生 fetch 场景）：
+'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER1_API_KEY}`
+```
+
+**强制规则**：
+- ✅ API Key 环境变量名：`VITE_OPENROUTER1_API_KEY`
+- ❌ 不能重复造轮子重新读取环境变量；OpenAI SDK 客户端由 `openrouter.ts` 内部统一管理
+- ❌ 不能将 API Key 硬编码在源代码中
+
+### 9.4 支持的模型（MODELS 常量）
+
+> ⛔ **高危区域**：`MODELS` 对象已裁剪为仅 Gemini 模型。引用不存在的 key 将导致 `undefined`，进而在运行时崩溃（如 `undefined.includes()` 错误）。
+
+```typescript
+// services/openrouter.ts 中当前有效的 MODELS 常量（截至 2026-03）
+export const MODELS = {
+  GEMINI_2_5_FLASH: 'gemini-2.5-flash',        // ✅ 默认，速度快
+  GEMINI_3_FLASH_PREVIEW: 'gemini-3-flash-preview', // 新版快速
+  GEMINI_2_5_PRO: 'gemini-3-pro-preview',       // 注：映射到同一模型
+  GEMINI_3_PRO_PREVIEW: 'gemini-3-pro-preview', // 思维链，复杂任务
+  GEMINI_3_PRO_IMAGE_PREVIEW: 'gemini-3-pro-image-preview', // 图像理解专用
+} as const;
+```
+
+**已永久删除的模型常量（禁止引用）**：
+
+| 常量名 | 值（已废弃） |
+|--------|-------------|
+| `MODELS.GPT_5_MINI` | `gpt-5-mini` |
+| `MODELS.GPT_4O_MINI` | `gpt-4o-mini` |
+| `MODELS.MINIMAX_M2_5` | `minimax-m2.5` |
+| `MODELS.KIMI_K_2_5` | `kimi-k2.5` |
+| `MODELS.CLAUDE_HAIKU_4_5` | `claude-haiku-4.5` |
+| `MODELS.CLAUDE_SONNET_4_5` | `claude-sonnet-4.5` |
+| `MODELS.DEEPSEEK_CHAT` | `deepseek-chat` |
+
+**强制规则**：
+- ✅ 新增模型选择时，必须先确认 `MODELS` 对象中存在对应 key
+- ✅ UI 可选模型列表（`ModelSelector.tsx`）必须只包含 `MODELS` 中存在的 key
+- ❌ 绝对禁止引用上表中的废弃常量
+- ❌ 新增 `ModelSelector.tsx` 的模型条目前，必须同步在 `openrouter.ts` 的 `MODELS` 中添加
+
+### 9.5 文件职责分工
+
+| 文件 | 职责 | 注意事项 |
+|------|------|---------|
+| `services/openrouter.ts` | 所有 LLM 调用的**唯一入口**；定义 MODELS、客户端、getLLMChatCompletionsURL | 修改此文件前先阅读本规则 |
+| `components/ModelSelector.tsx` | UI 模型选择器；模型列表必须与 `MODELS` 同步 | 不能引用不存在的 MODELS key |
+| `cloudflare/src/routes/aiProxy.ts` | Worker 代理路由；服务端 HTTP 转发 | ALB 地址只在此处出现 |
+| `services/sceneSupplement.ts` 等 | 业务服务，使用模式 C（fetch + getLLMChatCompletionsURL） | 禁止硬编码 URL |
+
+### 9.6 部署规范
+
+```bash
+# 标准构建 + 部署流程
+npm run build
+npx wrangler pages deploy dist --project-name=storyboard --commit-dirty=true
+```
+
+**关键参数**：
+- Cloudflare Pages 项目名：`storyboard`（**不是** `visionary-storyboard-studio`）
+- 生产地址：`https://storyboard.neodomain.ai`
+- Worker 地址：`https://storyboard-api.neodomain.ai`
+
+### 9.7 防回归检查清单
+
+修改 API 相关代码前必须确认：
+- [ ] 没有引入任何 HTTP（非 HTTPS）的前端 API 地址
+- [ ] 没有硬编码 `https://ai-api.neodomain.cn/v1/chat/completions`（必须用函数）
+- [ ] `ModelSelector.tsx` 中的每个模型常量都在 `MODELS` 对象中存在
+- [ ] `getLLMChatCompletionsURL` 已从 `openrouter.ts` 导出（构建时会报错）
+- [ ] `getApiKey`、`getGeminiClient`、`getOpenRouterDirectClient` 保持私有（不导出）
+- [ ] 构建命令 `npm run build` 执行成功（无错误，warnings 可忽略）
 

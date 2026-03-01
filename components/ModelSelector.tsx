@@ -22,21 +22,12 @@ interface ModelSelectorProps {
 export type ModelCapability = 'weak' | 'medium' | 'strong';
 
 // 模型能力评级
+// 注意：GEMINI_2_5_PRO 和 GEMINI_3_PRO_PREVIEW 映射到同一个字符串值，
+// 只保留一个键避免 TypeScript "重复属性" 错误。
 export const MODEL_CAPABILITIES: Record<string, ModelCapability> = {
-  // === UI 可选的 6 个主力模型 ===
-  [MODELS.GPT_5_MINI]: 'strong',           // 强：OpenAI最新
-  [MODELS.GEMINI_2_5_FLASH]: 'medium',     // 中等：大多数任务可用（推荐）
-  [MODELS.MINIMAX_M2_5]: 'medium',         // 中等：高性价比
-  [MODELS.KIMI_K_2_5]: 'strong',           // 强：长文本思考能力强
+  [MODELS.GEMINI_2_5_FLASH]: 'medium',      // 中等：大多数任务可用（推荐）
   [MODELS.GEMINI_3_FLASH_PREVIEW]: 'medium', // 中等：大多数任务可用
-  [MODELS.CLAUDE_HAIKU_4_5]: 'medium',     // 中等：快速响应
-
-  // === 保留模型（内部备用）===
-  [MODELS.DEEPSEEK_CHAT]: 'weak',          // ⚠️ 弱：提取信息可能不完整
-  [MODELS.GPT_4O_MINI]: 'weak',            // ⚠️ 弱：提取信息可能不完整
-  [MODELS.GEMINI_2_5_PRO]: 'strong',       // 强：复杂任务推荐
-  [MODELS.GEMINI_3_PRO_PREVIEW]: 'strong', // 强：复杂任务推荐
-  [MODELS.CLAUDE_SONNET_4_5]: 'strong',    // 强：最高质量
+  [MODELS.GEMINI_3_PRO_PREVIEW]: 'strong',  // 强：复杂任务推荐
 };
 
 // 获取模型能力等级提示
@@ -61,30 +52,20 @@ const getCapabilityLabel = (model: string): string => {
   }
 };
 
-// 获取模型列表（按价格从便宜到贵排序）
+// 获取模型列表（按能力从快速到强大排序）
 const getModelList = (type: ModelType): string[] => {
-  // ⚠️ UI 可选的 6 个主力模型（按价格从便宜到贵排序）
-  // 其他模型保留在 MODELS 常量中供内部使用，但不在 UI 中展示
-  const uiAvailableModels = [
-    MODELS.GPT_5_MINI,              // $0.25/$2
-    MODELS.GEMINI_2_5_FLASH,        // $0.30/$2.50 ⭐默认推荐
-    MODELS.MINIMAX_M2_5,            // $0.30/$1.10
-    MODELS.KIMI_K_2_5,              // $0.45/$2.20
-    MODELS.GEMINI_3_FLASH_PREVIEW,  // $0.50/$3.00
-    MODELS.CLAUDE_HAIKU_4_5,        // $1.00/$5.00
+  // UI 可选模型（仅自建 API 支持的 Gemini 模型）
+  const uiAvailableModels: string[] = [
+    MODELS.GEMINI_2_5_FLASH,        // ⭐ 默认推荐，速度快
+    MODELS.GEMINI_3_FLASH_PREVIEW,  // 新版快速
+    MODELS.GEMINI_3_PRO_PREVIEW,    // 💎 复杂任务推荐
   ];
 
   switch (type) {
     case 'thinking':
-      // 从 UI 可选模型中筛选思考型模型
-      return uiAvailableModels.filter(m =>
-        ([MODELS.KIMI_K_2_5, MODELS.CLAUDE_HAIKU_4_5, MODELS.GPT_5_MINI] as string[]).includes(m)
-      );
+      return [MODELS.GEMINI_3_PRO_PREVIEW];
     case 'fast':
-      // 从 UI 可选模型中筛选快速型模型
-      return uiAvailableModels.filter(m =>
-        ([MODELS.GPT_5_MINI, MODELS.GEMINI_2_5_FLASH, MODELS.MINIMAX_M2_5, MODELS.GEMINI_3_FLASH_PREVIEW] as string[]).includes(m)
-      );
+      return [MODELS.GEMINI_2_5_FLASH, MODELS.GEMINI_3_FLASH_PREVIEW];
     case 'image':
       return MODEL_CATEGORIES.IMAGE as unknown as string[];
     case 'all':
@@ -94,7 +75,8 @@ const getModelList = (type: ModelType): string[] => {
 };
 
 // 模型图标
-const getModelIcon = (model: string): string => {
+const getModelIcon = (model: string | undefined): string => {
+  if (!model) return '✨';
   if (model.includes('minimax')) return '⚡';
   if (model.includes('kimi')) return '🌙';
   if (model.includes('deepseek')) return '🐋';
@@ -157,7 +139,7 @@ interface ImageModelSelectorProps {
 
 // 生图模型 - 仅使用 Nano Banana Pro (Gemini 3 Pro Image)
 export const IMAGE_GENERATION_MODELS = {
-  GEMINI_PRO_IMAGE: 'google/gemini-3-pro-image-preview',
+  GEMINI_PRO_IMAGE: 'gemini-3-pro-image-preview',
 } as const;
 
 export const IMAGE_MODEL_NAMES: Record<string, string> = {

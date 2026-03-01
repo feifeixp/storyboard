@@ -18,8 +18,9 @@ import {
   Antagonist
 } from '../types/project';
 import { CharacterRef, CharacterForm } from '../types';
+import { getLLMChatCompletionsURL } from './openrouter';
 
-const DEFAULT_MODEL = 'google/gemini-2.0-flash-001';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 const BATCH_SIZE = 20;  // 每批分析20集
 
 /**
@@ -375,9 +376,14 @@ ${combinedContent}
    - **JSON必须完整**，不要省略或用...代替
 `;
 
+  // 🔧 v7修复：增加客户端超时控制（180秒），避免因后端网关超时导致504无响应挂起
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER1_API_KEY}`,
@@ -387,18 +393,13 @@ ${combinedContent}
         model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
-        // 🔧 v6修复：根据模型能力设置 max_tokens，充分利用模型输出能力
-        // Gemini 2.5/3 Flash Preview: 65,535 output tokens → 用32K足够且更稳定
-        // Gemini 2.0 Flash: 8,192 output tokens
-        // Claude 3.5: 8,192 output tokens
-        // GPT-4o: 16,384 output tokens
-        // 大输出量确保角色/场景列表不被截断
-        max_tokens: model.includes('gemini') && !model.includes('gemini-2.0') ? 32000 :  // Gemini 2.5/3 等新版本
-                    model.includes('gemini-2.0') ? 8192 :   // Gemini 2.0 老版本
-                    model.includes('gpt-4o-mini') ? 16000 :
-                    model.includes('claude') ? 8192 : 32000,
+        // 🔧 v7修复：max_tokens 统一降为 8192，避免生成过长导致 ALB 网关 504 超时
+        // 原 32000 需要 2-3 分钟生成，超过后端网关超时限制
+        // 8192 token 对于角色/场景/剧集概要提取已完全足够
+        max_tokens: 8192,
       }),
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       if (response.status === 402) {
@@ -437,7 +438,12 @@ ${combinedContent}
 
     return normalizedResult;
   } catch (error) {
-    console.error('项目分析失败:', error);
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('项目分析超时（90秒），请减少批次大小或重试');
+    } else {
+      console.error('项目分析失败:', error);
+    }
     // 🔧 v7修复：返回默认结果时，传递预扫描的角色和场景
     const preScanResult = knownCharacters.length > 0 || knownScenes.length > 0
       ? { characterNames: knownCharacters, sceneNames: knownScenes }
@@ -834,7 +840,7 @@ function createDefaultAnalysisResult(
  * 注意：Scene XX｜主题名 不是场景，是分镜小节标题
  * 真正的场景需要从剧情内容中提取（如"月球背面"、"办公室"等地点描述）
  */
-function regexPreScanScripts(scripts: ScriptFile[]): { characterNames: string[]; sceneNames: string[] } {
+export function regexPreScanScripts(scripts: ScriptFile[]): { characterNames: string[]; sceneNames: string[] } {
   console.log(`[正则预扫描] 开始扫描 ${scripts.length} 集剧本...`);
 
   const sceneNames = new Set<string>();
@@ -943,7 +949,7 @@ ${combinedContent}
 `;
 
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

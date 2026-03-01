@@ -259,7 +259,9 @@ export async function getEpisode(episodeId: string): Promise<Episode | null> {
       updatedAt: new Date(episode.updatedAt).toISOString(),
     };
   } catch (error) {
-    console.error('Get episode error:', error);
+    // 🔧 降级为 warn：404 是已知情况（数据迁移前的旧剧集或 D1 中不存在），
+    // handleSelectEpisode 已做降级处理（使用列表数据），不影响正常使用
+    console.warn('Get episode error (已降级为列表数据):', error);
     return null;
   }
 }

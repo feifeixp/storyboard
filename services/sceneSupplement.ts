@@ -4,8 +4,9 @@
  */
 
 import { SceneRef, ScriptFile } from '../types/project';
+import { getLLMChatCompletionsURL } from './openrouter';
 
-const DEFAULT_MODEL = 'google/gemini-2.0-flash-001';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 /**
  * 补充场景详细信息
@@ -25,7 +26,7 @@ export async function supplementSceneDetails(
     const prompt = buildSupplementPrompt(scene, scripts);
 
     // 调用 LLM
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

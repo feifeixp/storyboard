@@ -7,10 +7,11 @@
 
 import type { CharacterRef, CharacterForm } from '../../types';
 import type { ScriptFile } from '../../types/project';
-import type { FormSummary } from './types';
+import type { FormSummary, AppearanceConfig, CostumeConfig } from './types';
 import { compilePrompt } from './promptCompiler';
+import { getLLMChatCompletionsURL } from '../openrouter';
 
-const DEFAULT_MODEL = 'google/gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 // changeType 中文映射（用于 Prompt 描述）
 const CHANGE_TYPE_LABEL: Record<string, string> = {
@@ -253,7 +254,7 @@ export async function generateFormDetail(
   const scriptContext = extractScriptContext(scripts, summary.sourceQuote);
   const prompt = buildFormDetailPrompt(character, summary, scriptContext);
 
-  const apiKey = (import.meta as any).env.VITE_OPENROUTER1_API_KEY;
+  const apiKey = import.meta.env.VITE_OPENROUTER1_API_KEY;
   if (!apiKey) {
     throw new Error('未设置 OpenRouter API 密钥 (VITE_OPENROUTER1_API_KEY)');
   }
@@ -261,10 +262,10 @@ export async function generateFormDetail(
   onProgress?.('生成中', `正在调用 AI 生成形态设定...`);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 90000); // 90秒超时
+  const timeoutId = setTimeout(() => controller.abort(), 120000); // 120秒超时
 
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -321,8 +322,8 @@ export async function generateFormDetail(
     if (character.appearanceConfig && character.costumeConfig) {
       try {
         const compiled = compilePrompt({
-          appearanceConfig: character.appearanceConfig,
-          costumeConfig: character.costumeConfig,
+          appearanceConfig: character.appearanceConfig as AppearanceConfig,
+          costumeConfig: character.costumeConfig as CostumeConfig,
           gender: character.gender || '女',
           era: (character as any).era || '',
           ageValue: summary.estimatedAge,

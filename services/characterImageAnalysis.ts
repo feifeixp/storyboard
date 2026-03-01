@@ -3,7 +3,7 @@
  * 使用 GPT-4o-mini 分析上传的角色图片，生成优化的角色描述
  */
 
-const OPENROUTER_API_KEY = 'sk-or-v1-1e0c4e0e8e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e';
+import { getLLMChatCompletionsURL } from './openrouter';
 
 export interface CharacterAnalysisResult {
   appearance: string;        // 外貌描述
@@ -48,16 +48,16 @@ ${existingDescription ? `现有描述（供参考）：\n${existingDescription}\
 }`;
 
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER1_API_KEY}`,
         'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://visionary-storyboard-studio.app',
         'X-Title': 'Visionary Storyboard Studio',
       },
       body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',  // 支持视觉分析
+        model: 'gpt-4o-mini',  // 支持视觉分析
         messages: [
           {
             role: 'system',
@@ -136,4 +136,3 @@ export function mergeAnalysisToCharacter(
     visualPromptEn: analysis.visualPromptEn || existingCharacter.visualPromptEn,
   };
 }
-

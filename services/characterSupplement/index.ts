@@ -18,6 +18,7 @@ import type {
   SupplementCacheContext
 } from './types';
 
+import { getLLMChatCompletionsURL } from '../openrouter';
 import { buildStage1Prompt } from './stage1-script-analysis-optimized';  // 🆕 使用优化版
 import { buildStage2Prompt } from './stage2-visual-tags-optimized';  // 🆕 详细模式使用优化版
 import { buildStage2PromptFast } from './stage2-visual-tags-fast';  // 🆕 快速模式
@@ -33,7 +34,7 @@ import { extractCharacterStates, refineCharacterForms, extractFormSummaries } fr
 import { evaluateFormSemantics } from './evaluateFormSemantics';  // 🆕 导入形态语义评估功能
 import { isBaselineStateName } from '../utils/stateNameUtils';  // 🆕 导入 baseline 判断工具
 
-const DEFAULT_MODEL = 'google/gemini-2.5-flash';  // 🆕 统一使用Gemini 2.5 Flash
+const DEFAULT_MODEL = 'gemini-2.5-flash';  // 🆕 统一使用Gemini 2.5 Flash
 
 function hasStructuredAppearance(appearance?: string): boolean {
   return !!appearance && appearance.includes('【主体人物】') && appearance.includes('【外貌特征】');
@@ -883,12 +884,12 @@ async function callLLMWithStreamingInternal(
   const startTime = Date.now();
   console.log('[思维链] 开始调用LLM...', { model, promptLength: prompt.length });
 
-  const apiKey = (import.meta as any).env.VITE_OPENROUTER1_API_KEY;
+  const apiKey = import.meta.env.VITE_OPENROUTER1_API_KEY;
   if (!apiKey) {
     throw new Error('未设置OpenRouter API密钥 (VITE_OPENROUTER1_API_KEY)');
   }
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetch(getLLMChatCompletionsURL(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1115,7 +1116,7 @@ function mergeResults(
   // 🆕 Phase 1 轻量形态摘要：合并去重（基于name）
   let mergedFormSummaries = character.formSummaries || [];
   if (stage5?.formSummaries && stage5.formSummaries.length > 0) {
-    const existingNames = new Set(mergedFormSummaries.map(f => f.name));
+    const existingNames = new Set(mergedFormSummaries.map(f => (f as { name: string }).name));
     const newSummaries = stage5.formSummaries.filter(f => !existingNames.has(f.name));
     mergedFormSummaries = [...mergedFormSummaries, ...newSummaries];
   }

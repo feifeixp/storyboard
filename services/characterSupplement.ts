@@ -6,8 +6,9 @@
 import { CharacterRef, CharacterForm } from '../types';
 import { ScriptFile } from '../types/project';
 import { MissingField } from './characterCompleteness';
+import { getLLMChatCompletionsURL } from './openrouter';
 
-const DEFAULT_MODEL = 'google/gemini-2.0-flash-001';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 /**
  * 补充角色详细信息
@@ -29,7 +30,7 @@ export async function supplementCharacterDetails(
     const prompt = buildSupplementPrompt(character, missingFields, scripts);
 
     // 调用 LLM
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

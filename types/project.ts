@@ -128,6 +128,32 @@ export interface ProjectSettings {
 
   /** 专有名词解释 */
   keyTerms: KeyTerm[];
+
+  /** 🆕 项目风格ID（对应 STORYBOARD_STYLES 中的 id，或 'custom'） */
+  projectStyleId?: string;
+
+  /** 🆕 自定义风格的中文描述（当 projectStyleId === 'custom' 时使用） */
+  projectStyleCustomPromptCn?: string;
+
+  /** 🆕 自定义风格的英文描述（当 projectStyleId === 'custom' 时使用） */
+  projectStyleCustomPromptEn?: string;
+
+  /** 🆕 分镜风格覆盖（null 表示使用项目默认风格，string 表示覆盖） */
+  storyboardStyleOverride?: string | null;
+
+  /** 🆕 后台任务状态（角色补全等异步任务的进度跟踪） */
+  backgroundJobs?: {
+    supplement?: {
+      status?: string;
+      startedAt?: string;
+      completedAt?: string;
+      error?: string;
+      perCharacter?: Record<string, {
+        status?: string;
+        startTime?: string;
+      }>;
+    };
+  };
 }
 
 /**

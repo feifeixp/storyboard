@@ -6,7 +6,9 @@
 import React, { useState } from 'react';
 import type { CharacterRef, CharacterForm } from '../types';
 import type { ScriptFile } from '../types/project';
-import { extractCharacterStates, generateStatesAppearance } from '../services/characterSupplement';
+// 注意：从子目录导入，避免与同名文件 services/characterSupplement.ts 冲突
+import { extractCharacterStates } from '../services/characterSupplement/extractCharacterStates';
+import { generateStatesAppearance } from '../services/characterSupplement/generateStateAppearance';
 import { normalizeStateName } from '../services/utils/stateNameUtils';  // 🆕 导入统一工具
 
 interface StateManagementModalProps {
@@ -77,7 +79,7 @@ export const StateManagementModal: React.FC<StateManagementModalProps> = ({
           ageGroup: character.ageGroup
         },
         'balanced', // 美型等级（可以从项目设置中获取）
-        'google/gemini-2.5-flash',
+        'gemini-2.5-flash',
         (stateIndex, stage, step) => {
           setGenerationProgress(prev => ({
             ...prev,

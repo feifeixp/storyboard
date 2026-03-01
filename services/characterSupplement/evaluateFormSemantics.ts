@@ -8,6 +8,7 @@
  */
 
 import { CharacterForm } from '../../types';
+import { getLLMChatCompletionsURL } from '../openrouter';
 
 /**
  * 形态语义评估选项
@@ -163,7 +164,7 @@ export async function evaluateFormSemantics(
 
   // 🔧 修复：原 fallback 'google/gemini-2.0-flash-exp:free' 已在 OpenRouter 下线（404）
   // 改为与主思维链相同的稳定模型，确保语义评估层不会静默失效
-  const model = options.model || 'google/gemini-2.5-flash';
+  const model = options.model || 'gemini-2.5-flash';
 
   try {
     // 1. 构建 Prompt
@@ -172,12 +173,12 @@ export async function evaluateFormSemantics(
     // 2. 调用 LLM
     console.log(`[形态语义评估] 调用 LLM 进行评估（模型: ${model}）`);
 
-    const apiKey = (import.meta as any).env.VITE_OPENROUTER1_API_KEY;
+    const apiKey = import.meta.env.VITE_OPENROUTER1_API_KEY;
     if (!apiKey) {
       throw new Error('未设置OpenRouter API密钥 (VITE_OPENROUTER1_API_KEY)');
     }
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

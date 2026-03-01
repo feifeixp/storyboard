@@ -5,6 +5,7 @@
 
 import type { CharacterRef, CharacterForm } from '../../types';
 import type { ScriptFile } from '../../types/project';
+import { getLLMChatCompletionsURL } from '../openrouter';
 
 /**
  * 清理文本中的重复【当前状态】标记
@@ -37,7 +38,7 @@ export async function generateStateAppearance(
   state: CharacterForm,
   characterInfo: { name: string; gender?: string; ageGroup?: string },
   beautyLevel: 'realistic' | 'balanced' | 'idealized' = 'balanced',
-  model: string = 'google/gemini-2.5-flash',
+  model: string = 'gemini-2.5-flash',
   onProgress?: (stage: string, step: string) => void
 ): Promise<CharacterForm> {
 
@@ -57,14 +58,14 @@ export async function generateStateAppearance(
   );
 
   // 调用LLM
-  const apiKey = (import.meta as any).env.VITE_OPENROUTER1_API_KEY;
+  const apiKey = import.meta.env.VITE_OPENROUTER1_API_KEY;
   if (!apiKey) {
     throw new Error('未设置OpenRouter API密钥 (VITE_OPENROUTER1_API_KEY)');
   }
 
   onProgress?.('状态生成', `生成"${state.name}"外观描述`);
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetch(getLLMChatCompletionsURL(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -333,7 +334,7 @@ export async function generateStatesAppearance(
   states: CharacterForm[],
   characterInfo: { name: string; gender?: string; ageGroup?: string },
   beautyLevel: 'realistic' | 'balanced' | 'idealized' = 'balanced',
-  model: string = 'google/gemini-2.5-flash',
+  model: string = 'gemini-2.5-flash',
   onProgress?: (stateIndex: number, stage: string, step: string) => void,
   maxConcurrency: number = 3
 ): Promise<CharacterForm[]> {

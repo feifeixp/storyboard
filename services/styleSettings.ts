@@ -79,9 +79,9 @@ export function resolveStyle(styleConfig: {
 export function getEffectiveStoryboardStyle(project: Project): StoryboardStyle | null {
   const settings = project.settings;
 
-  // 优先使用九宫格覆盖风格
+  // 优先使用九宫格覆盖风格（storyboardStyleOverride 是风格ID字符串，用 resolveProjectStyle 解析）
   if (settings.storyboardStyleOverride) {
-    const overrideStyle = resolveStyle(settings.storyboardStyleOverride);
+    const overrideStyle = resolveProjectStyle(settings.storyboardStyleOverride);
     if (overrideStyle) {
       return overrideStyle;
     }

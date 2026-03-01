@@ -272,7 +272,7 @@ export function getArtStyleConstraints(artStyle: ArtStyleType): string {
 }
 
 // 获取 AI API Key（固定使用 gemini-2.5-flash）
-const getApiKey = () => {
+export const getApiKey = () => {
   // Vite 环境
   if (typeof import.meta !== 'undefined' && import.meta.env) {
     return import.meta.env.VITE_OPENROUTER1_API_KEY;
@@ -338,7 +338,7 @@ const getOpenRouterDirectClient = () => {
       throw new Error('未找到 VITE_OPENROUTER1_API_KEY 环境变量');
     }
     openRouterDirectClient = new OpenAI({
-      baseURL: 'http://47.237.171.88:3000/v1',
+      baseURL: 'https://ai-api.neodomain.cn/v1',
       apiKey,
       dangerouslyAllowBrowser: true,
       defaultHeaders: {
@@ -372,7 +372,7 @@ function logApiError(context: string, error: unknown): void {
  * 可用的模型配置（仅保留自建 API 支持的 Gemini 模型）
  *
  * ╔════════════════════════════════════════════════════════════════════════════════╗
- * ║               自建 API Gemini 模型（http://47.237.171.88:3000）                 ║
+ * ║               自建 API Gemini 模型（https://ai-api.neodomain.cn）                ║
  * ╠══════════════════════════════╦═══════════════╦═══════════════╦════════════════╣
  * ║ 模型                         ║ 上下文        ║ 说明          ║ 备注           ║
  * ╠══════════════════════════════╬═══════════════╬═══════════════╬════════════════╣
@@ -442,6 +442,12 @@ export const DEFAULT_IMAGE_MODEL = 'gemini-3-pro-image-preview';
 
 // Neodomain 生图默认模型（modelName）
 export const DEFAULT_NEODOMAIN_IMAGE_MODEL = 'nanobanana-pro';
+
+/**
+ * 返回 LLM Chat Completions 接口地址（HTTPS，避免 Mixed Content 问题）
+ */
+export const getLLMChatCompletionsURL = (): string =>
+  'https://ai-api.neodomain.cn/v1/chat/completions';
 
 /**
  * 生成分镜脚本（传统模式）
@@ -2843,7 +2849,7 @@ ${scriptContent.slice(0, 20000)}`;
 
   // 直连 LLM 服务，不走 Cloudflare Worker 代理（代理依赖部署，本地开发可直连）
   const apiKey = getApiKey();
-  const apiResp = await fetch('http://47.237.171.88:3000/v1/chat/completions', {
+  const apiResp = await fetch('https://ai-api.neodomain.cn/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

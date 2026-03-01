@@ -14,6 +14,7 @@ import { getAllTerminologyOptions } from './terminologyConstants';
 import { getCachedResult, setCachedResult } from './aiCache';
 import { hasQuota, useQuota, getRemainingQuota } from './aiQuota';
 import { recordCall } from './aiMonitor';
+import { getLLMChatCompletionsURL } from './openrouter';
 
 /**
  * AI解析结果
@@ -113,11 +114,11 @@ async function parseWithOpenAI(text: string): Promise<AIParseResult> {
   const systemPrompt = buildSystemPrompt();
   
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(getLLMChatCompletionsURL(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER1_API_KEY}`,
         'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://visionary-storyboard-studio.app',
         'X-Title': 'Visionary Storyboard Studio',
       },
