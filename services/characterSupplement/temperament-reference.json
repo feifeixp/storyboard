@@ -1,0 +1,160 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "description": "气质/美型模板库：为 Stage2 视觉策略和 Stage3 外貌描述提供气质参考引导词。设计原则：引导 LLM 专业判断，而非硬编码规则。",
+    "lastUpdated": "2026-02-27",
+    "totalTemplates": 8
+  },
+
+  "冷系": [
+    {
+      "id": "cold_beauty",
+      "name": "冷感美人",
+      "gender": ["女性"],
+      "description": "疏离高冷，美得让人不敢靠近；五官精致但不主动示好，眼神清冷有距离感",
+      "keyFeatures": ["冷艳", "疏离感", "精致锋利", "高冷气场", "不易亲近"],
+      "eyeGuidance": {
+        "女性": ["凤眼", "细长眼型", "眼神清冷", "眼尾微微上挑", "眼波不流转"]
+      },
+      "colorDirection": "低饱和冷色调（冰蓝、烟灰、月白），少量深色点缀",
+      "stageGuidance": {
+        "appearance": "思考：这个角色的眼神应该传达什么？冷感美人的眼神往往是清冷而有深度的，而非空洞。五官的'锋利感'体现在哪里——是下颌轮廓、还是眼眶形状？",
+        "costume": "思考：冷感美人的服装应该有克制的美感，而非过度装饰。如何在简洁中体现高级感？材质的质感比花纹更重要。"
+      },
+      "suitableCharacterTypes": ["腹黑女主", "反派大小姐", "复仇女主", "世家嫡女", "冰山总裁"],
+      "compatibleWith": ["intellectual_elegance", "mysterious_charm"]
+    },
+    {
+      "id": "mysterious_charm",
+      "name": "神秘妖娆",
+      "gender": ["女性", "男性"],
+      "description": "带着说不清道不明的魅惑气息，美得不像人间正常物种；眼神深邃，举止有种不经意的妖冶感",
+      "keyFeatures": ["神秘感", "妖冶", "魅惑", "不可捉摸", "危险美感"],
+      "eyeGuidance": {
+        "女性": ["桃花眼", "眼神慵懒而带勾", "眼尾长而微垂", "瞳色深邃"],
+        "男性": ["深邃眼眸", "眼神含笑带刀", "眼尾微勾"]
+      },
+      "colorDirection": "深沉浓郁色（暗红、墨紫、深金），可有少量对比色点睛",
+      "stageGuidance": {
+        "appearance": "思考：'妖冶'不是夸张，而是一种不经意流露的性感。如何通过五官细节（如嘴角弧度、眼神角度）表达这种气质？",
+        "costume": "思考：服装的妖冶感来自面料的流动感和裁剪的精准度，而非暴露程度。如何让服装有'危险的优雅'？"
+      },
+      "suitableCharacterTypes": ["狐族妖王", "妖后", "魅惑型反派", "歌妓舞姬", "神秘侠客"],
+      "compatibleWith": ["cold_beauty"]
+    }
+  ],
+
+  "暖系": [
+    {
+      "id": "sweet_neighbor",
+      "name": "甜系邻家",
+      "gender": ["女性"],
+      "description": "亲切自然，笑起来让人心软；不刻意美，却有一种真实的吸引力，让人想要靠近",
+      "keyFeatures": ["亲和力", "真实感", "自然美", "邻家感", "治愈系"],
+      "eyeGuidance": {
+        "女性": ["圆眼", "眼神清亮", "双眼皮自然", "笑起来弯弯的", "眼白干净"]
+      },
+      "colorDirection": "暖色调（奶白、米杏、嫩粉），清新明亮，不沉闷",
+      "stageGuidance": {
+        "appearance": "思考：邻家感的美不是完美无瑕，而是真实可信。如何让五官设计有'烟火气'而不失美型？",
+        "costume": "思考：甜系邻家的服装应该让人感觉'这个人真实存在于我身边'。如何在普通中见精致？"
+      },
+      "suitableCharacterTypes": ["平凡女主", "青梅竹马", "校园女生", "平民少女", "阳光助理"],
+      "compatibleWith": ["gentle_graceful"]
+    },
+    {
+      "id": "gentle_graceful",
+      "name": "温婉气质",
+      "gender": ["女性"],
+      "description": "如水般温柔，有一种包容万物的温润感；不张扬，但举手投足间自有韵味",
+      "keyFeatures": ["温润", "柔和", "内敛", "包容感", "如水温柔"],
+      "eyeGuidance": {
+        "女性": ["杏眼", "眼神温柔含情", "眼皮略厚有柔和感", "眼神如月光般柔和"]
+      },
+      "colorDirection": "柔和中性色（水粉、浅绿、浅蓝），不强烈，有温度感",
+      "stageGuidance": {
+        "appearance": "思考：温婉气质的五官往往有一种'圆融感'——没有过于锋利的线条。如何在五官设计中体现这种柔和而不失神韵？",
+        "costume": "思考：温婉气质的服装如何在柔美中体现角色的力量感？（过度柔弱会让角色缺乏存在感）"
+      },
+      "suitableCharacterTypes": ["贤妻良母型", "温柔女配", "大家闺秀", "医者仁心", "教书先生"],
+      "compatibleWith": ["sweet_neighbor", "intellectual_elegance"]
+    }
+  ],
+
+  "中性系": [
+    {
+      "id": "intellectual_elegance",
+      "name": "知性优雅",
+      "gender": ["女性", "男性"],
+      "description": "智慧与美貌并存，有书卷气；不是冷漠，而是一种有内涵的距离感，让人敬重又想靠近",
+      "keyFeatures": ["书卷气", "智慧感", "内敛优雅", "有品位", "精神内核丰富"],
+      "eyeGuidance": {
+        "女性": ["丹凤眼", "眼神清明有神", "透过眼神感受到思考的力量"],
+        "男性": ["眼神深邃而专注", "透过镜片（如有）感受到智识的魅力"]
+      },
+      "colorDirection": "低调中性色（深蓝、墨绿、深灰、白），有质感而不张扬",
+      "stageGuidance": {
+        "appearance": "思考：知性优雅的气质如何通过面部特征传达？是五官的精致还是眼神的深度？如何让角色'看起来聪明'？",
+        "costume": "思考：知性优雅的服装讲究版型和材质，而非装饰。如何通过裁剪和面料选择体现有品位的克制美学？"
+      },
+      "suitableCharacterTypes": ["女学者", "职场精英", "智慧型谋士", "老师/导师", "世家公子"],
+      "compatibleWith": ["cold_beauty", "gentle_graceful"]
+    },
+    {
+      "id": "heroic_spirit",
+      "name": "英气飒爽",
+      "gender": ["女性", "男性"],
+      "description": "干练利落，有一股子飒劲；美在骨子里，不需要刻意装饰，举手投足自有一股英气",
+      "keyFeatures": ["干练", "飒", "英气", "利落感", "骨气"],
+      "eyeGuidance": {
+        "女性": ["眼神坚定有神", "不带过多柔媚感", "眉眼配合有英气"],
+        "男性": ["目光锐利", "眼神有力量感", "不软不弱"]
+      },
+      "colorDirection": "干净利落色（白、黑、深蓝、军绿），少量强调色",
+      "stageGuidance": {
+        "appearance": "思考：英气不是男性化，而是一种超越性别的力量美。如何在女性角色中体现英气而不失女性魅力？",
+        "costume": "思考：英气角色的服装如何兼顾功能性与美感？版型的利落感比装饰更重要。"
+      },
+      "suitableCharacterTypes": ["女将领", "侠女", "现代女警/女兵", "运动员", "独立创业者"],
+      "compatibleWith": ["intellectual_elegance"]
+    }
+  ],
+
+  "特殊系": [
+    {
+      "id": "youthful_boyish",
+      "name": "少年感",
+      "gender": ["女性", "男性", "通用"],
+      "description": "不论实际年龄，有一种青春未脱的清透感；眼神干净，有对世界的好奇和热情",
+      "keyFeatures": ["青春感", "清透", "干净", "活力", "眼神纯粹"],
+      "eyeGuidance": {
+        "通用": ["眼睛有神而明亮", "眼白干净", "眼神带好奇和热情", "不世故"]
+      },
+      "colorDirection": "清爽明亮色（天蓝、草绿、米白），有活力感",
+      "stageGuidance": {
+        "appearance": "思考：少年感的核心是'眼神的纯净度'——如何在五官设计中保留这种不世故的清透感？对于年长角色，如何让少年感与成熟感并存？",
+        "costume": "思考：少年感的服装应有运动感或青春感，但不能显得幼稚。如何在成熟的款式中保留青春活力？"
+      },
+      "suitableCharacterTypes": ["热血少年主角", "天才少年", "返老还童者", "永远长不大的人", "少年天才"],
+      "compatibleWith": ["sweet_neighbor", "heroic_spirit"]
+    },
+    {
+      "id": "noble_authority",
+      "name": "御姐气质",
+      "gender": ["女性"],
+      "description": "成熟、强大、有压迫感的女性魅力；不是冷漠，而是一种俯视众生的从容和掌控感",
+      "keyFeatures": ["成熟魅力", "强势", "掌控感", "气场强大", "女王气质"],
+      "eyeGuidance": {
+        "女性": ["眼神有压迫感但不失优雅", "眼尾微扬", "眼神中有俯视一切的从容"]
+      },
+      "colorDirection": "高级沉稳色（酒红、深紫、黑金），有气场和权力感",
+      "stageGuidance": {
+        "appearance": "思考：御姐气质的核心是'成熟的力量感'。如何通过五官（特别是眉眼和嘴角线条）传达这种成熟而有气场的魅力？",
+        "costume": "思考：御姐的服装需要体现权威感和品位。如何通过版型和面料的选择让角色'hold住全场'？"
+      },
+      "suitableCharacterTypes": ["女总裁", "女帝/女王", "宫斗赢家", "职场女强人", "黑道女老大"],
+      "compatibleWith": ["cold_beauty", "intellectual_elegance", "mysterious_charm"]
+    }
+  ]
+}
+

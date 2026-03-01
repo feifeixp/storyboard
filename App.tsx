@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AppStep, Shot, ReviewSuggestion, CharacterRef, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight, EpisodeSplit } from './types';
+import { AppStep, Shot, ReviewSuggestion, CharacterRef, CharacterForm, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight, EpisodeSplit } from './types';
 import { StepTracker } from './components/StepTracker';
 import Login from './components/Login';
 import { isLoggedIn, logout, getUserInfo, getUserPoints, type PointsInfo } from './services/auth';
@@ -71,7 +71,7 @@ import type { ScriptAnalysis, VisualStrategy, ShotPlanning, ShotDesign, QualityC
 import type { ShotListItem } from './prompts/chain-of-thought/stage4-shot-design';
 
 // 🆕 项目管理
-import { Project, Episode, ScriptFile, ProjectAnalysisResult } from './types/project';
+import { Project, Episode, ScriptFile, ProjectAnalysisResult, PROJECT_MEDIA_TYPES } from './types/project';
 import { ProjectList } from './components/ProjectList';
 import { ProjectWizard } from './components/ProjectWizard';
 import { ProjectDashboard } from './components/ProjectDashboard';
@@ -83,6 +83,7 @@ import {
   saveProject,
   saveEpisode,
   patchEpisode,
+  patchProject,  // 🆕 用于后台任务状态更新
   deleteProject,
   getCurrentProjectId,
   setCurrentProjectId,
@@ -95,6 +96,15 @@ import { BatchAnalysisProgress } from './types/project';
 // 🆕 本集概述生成
 import { generateEpisodeSummary } from './services/episodeSummaryGenerator';
 import { EpisodeSummaryPanel } from './components/EpisodeSummaryPanel';
+// 🆕 角色外观补充管线
+import { hasProjectStyle, getEffectiveStoryboardStyle } from './services/styleSettings';
+// 🆕 状态名工具函数
+import { isBaselineStateName, normalizeStateName } from './services/utils/stateNameUtils';
+// 🆕 角色补充服务
+import { autoSupplementMainCharacters } from './services/characterSupplement/autoSupplement';
+import { identifyMainCharacters } from './services/characterSupplement/identifyMainCharacters';
+import type { BeautyLevel, FormSummary } from './services/characterSupplement/types';
+import { getBeautyLevelByGenre } from './services/characterSupplement/getBeautyLevelByGenre';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -240,6 +250,8 @@ const App: React.FC = () => {
   // ═══════════════════════════════════════════════════════════════
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  // 🆕 projectRef：用于在异步闭包中访问最新的 project 状态（避免闭包旧值）
+  const projectRef = useRef<Project | null>(null);
   const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState<number | null>(() =>
     loadFromStorage(STORAGE_KEYS.CURRENT_EPISODE_NUMBER, null)  // 🔧 从 localStorage 恢复
   );
@@ -688,7 +700,30 @@ const App: React.FC = () => {
       }
 
       console.log(`[handleSelectProject] 加载项目: ${fullProject.name}`);
+
+      // 🆕 旧项目自动迁移：检测并补齐 projectStyleId
+      if (!fullProject.settings.projectStyleId && fullProject.settings.visualStyle) {
+        console.log('[旧项目迁移] 检测到旧项目，开始自动迁移...');
+        // 获取媒体类型对应的英文渲染后缀
+        const mediaType = fullProject.settings.mediaType || 'ai-2d';
+        const aiPromptHint = PROJECT_MEDIA_TYPES[mediaType].aiPromptHint;
+        // 自动迁移：projectStyleId='custom'，使用旧 visualStyle 作为中文描述，aiPromptHint 作为英文后缀
+        fullProject.settings.projectStyleId = 'custom';
+        fullProject.settings.projectStyleCustomPromptCn = fullProject.settings.visualStyle;
+        fullProject.settings.projectStyleCustomPromptEn = aiPromptHint;
+        fullProject.settings.storyboardStyleOverride = null;
+        console.log('[旧项目迁移] 迁移完成，持久化中...');
+        try {
+          await patchProject(fullProject.id, { settings: fullProject.settings });
+          console.log('[旧项目迁移] 迁移结果已持久化');
+        } catch (error) {
+          console.error('[旧项目迁移] 持久化失败:', error);
+          // 不阻断加载流程，仅记录错误
+        }
+      }
+
       setCurrentProject(fullProject);
+      projectRef.current = fullProject;
       setCurrentProjectId(fullProject.id);
 
       // 加载项目的角色库
@@ -726,6 +761,7 @@ const App: React.FC = () => {
       const allProjects = await getAllProjects();
       setProjects(allProjects);
       setCurrentProject(project);
+      projectRef.current = project;
       setCurrentProjectId(project.id);
       // 加载项目角色（安全检查）
       if (project.characters && project.characters.length > 0) {
@@ -733,6 +769,18 @@ const App: React.FC = () => {
       }
       // 🆕 进入项目主界面
       setCurrentStep(AppStep.PROJECT_DASHBOARD);
+
+      // 🆕 启动后台角色补全（不阻塞 UI）
+      // 同时检查顶层 status（ProjectWizard 初始化时设置）和 perCharacter（恢复场景）
+      const supplement = project.settings?.backgroundJobs?.supplement;
+      const hasQueuedSupplements =
+        supplement?.status === 'queued' ||
+        Object.values(supplement?.perCharacter || {}).some(c => c.status === 'queued');
+      if (hasQueuedSupplements) {
+        runBackgroundSupplement(project).catch(err => {
+          console.error('[后台补全启动失败]', err);
+        });
+      }
     } catch (error) {
       console.error('[项目保存失败]', error);
 
@@ -751,6 +799,359 @@ const App: React.FC = () => {
 
   const handleProjectCancel = () => {
     setCurrentStep(AppStep.PROJECT_LIST);
+  };
+
+  /**
+   * 🆕 后台角色补全流水线
+   * 在项目创建后自动运行，不阻塞 UI
+   */
+  const runBackgroundSupplement = async (project: Project) => {
+    console.log('[后台补全] 🚀 开始后台角色补充...');
+
+    // 前置校验：确保已登录
+    if (!isLoggedIn()) {
+      console.error('[后台补全] 未登录，中止后台补全');
+      alert('❌ 登录已失效\n\n后台补全需要登录，请重新登录');
+      setLoggedIn(false);
+      return;
+    }
+
+    // 生成本次补全任务的 runId（用于隔离不同任务的进度更新）
+    const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    console.log(`[后台补全] 本次任务 runId: ${runId}`);
+    const startedAt = new Date().toISOString();
+    let lastProgressUpdate = 0;
+
+    // 写库串行队列（解决 AbortError）
+    const writeQueue: Array<() => Promise<void>> = [];
+    let isWriting = false;
+
+    const processWriteQueue = async () => {
+      if (isWriting || writeQueue.length === 0) return;
+      isWriting = true;
+      while (writeQueue.length > 0) {
+        const task = writeQueue.shift();
+        if (task) {
+          try { await task(); } catch (err) { console.error('[写库队列] 任务执行失败:', err); }
+        }
+      }
+      isWriting = false;
+    };
+
+    const queuedPatchProject = (projectId: string, patch: any): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        writeQueue.push(async () => {
+          try { await patchProject(projectId, patch); resolve(); }
+          catch (err) { reject(err); }
+        });
+        processWriteQueue();
+      });
+    };
+
+    // 5秒节流写库（非终态合并写，终态立即 flush）
+    let pendingPatch: any = null;
+    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const throttledPatchProject = async (projectId: string, patch: any, isTerminal: boolean = false) => {
+      if (isTerminal) {
+        if (throttleTimer) { clearTimeout(throttleTimer); throttleTimer = null; }
+        if (pendingPatch) { await queuedPatchProject(projectId, pendingPatch); pendingPatch = null; }
+        await queuedPatchProject(projectId, patch);
+      } else {
+        pendingPatch = pendingPatch ? { ...pendingPatch, ...patch } : patch;
+        if (!throttleTimer) {
+          throttleTimer = setTimeout(async () => {
+            if (pendingPatch) { await queuedPatchProject(projectId, pendingPatch); pendingPatch = null; }
+            throttleTimer = null;
+          }, 5000);
+        }
+      }
+    };
+
+    // 进度更新互斥队列（防止并发覆盖）
+    let progressUpdateQueue = Promise.resolve();
+
+    const updateCharacterProgress = async (
+      characterId: string,
+      update: {
+        status: 'queued' | 'running' | 'complete' | 'error';
+        message?: string;
+        stage?: string;
+        progress?: number;
+        errorMessage?: string;
+      }
+    ) => {
+      progressUpdateQueue = progressUpdateQueue.then(async () => {
+        try {
+          const now = Date.now();
+          const latestProject = projectRef.current || project;
+          const currentProgress = (latestProject.settings?.backgroundJobs?.supplement?.perCharacter as any)?.[characterId];
+
+          // runId 隔离：只接受当前 runId 的更新
+          if (currentProgress?.runId && currentProgress.runId !== runId) return;
+
+          const statusRank: Record<string, number> = { 'queued': 0, 'running': 1, 'complete': 2, 'error': 2 };
+          const stageRank: Record<string, number> = {
+            'start': 0, 'stage1': 1, 'stage2': 2, 'stage3': 3, 'stage4': 4,
+            'stage5': 5, 'stage5.5': 5.5, 'merge': 6, 'complete': 7, 'error': 7
+          };
+
+          if (currentProgress) {
+            const currentStatusRank = statusRank[currentProgress.status] || 0;
+            const newStatusRank = statusRank[update.status] || 0;
+            const currentStage = currentProgress.stage || '';
+            const newStage = update.stage || currentStage;
+            const currentStageRank = stageRank[currentStage] || 0;
+            let newStageRank = stageRank[newStage];
+            if (newStageRank === undefined) newStageRank = currentStageRank;
+
+            if (currentStatusRank >= 2 && newStatusRank < 2) return;
+            if (currentStageRank > newStageRank) return;
+          }
+
+          const newSettings = {
+            ...latestProject.settings,
+            backgroundJobs: {
+              ...(latestProject.settings?.backgroundJobs || {}),
+              supplement: {
+                perCharacter: {
+                  ...(latestProject.settings?.backgroundJobs?.supplement?.perCharacter || {}),
+                  [characterId]: {
+                    ...update,
+                    runId,
+                    startTime: (latestProject.settings?.backgroundJobs?.supplement?.perCharacter as any)?.[characterId]?.startTime || now,
+                    endTime: update.status === 'complete' || update.status === 'error' ? now : undefined
+                  }
+                }
+              }
+            }
+          };
+
+          const isTerminal = update.status === 'complete' || update.status === 'error';
+          try {
+            await throttledPatchProject(project.id, { settings: newSettings }, isTerminal);
+          } catch (err) {
+            console.warn('[后台补全] DB 更新失败:', err);
+            const isAuthError = err instanceof Error &&
+              ((err as any).code === 'AUTH_REQUIRED' || err.message.includes('Unauthorized'));
+            if (isAuthError) { setLoggedIn(false); throw err; }
+          }
+
+          setCurrentProject(prev =>
+            prev?.id === project.id ? { ...prev, settings: newSettings } : prev
+          );
+          if (projectRef.current?.id === project.id) {
+            projectRef.current = { ...projectRef.current, settings: newSettings };
+          }
+        } catch (err) {
+          console.error('[后台补全] 进度更新失败:', err);
+        }
+      }).catch(err => { console.error('[后台补全] 进度更新队列异常:', err); });
+
+      await progressUpdateQueue;
+    };
+
+    try {
+      // 检查 genre 是否为空
+      const genre = project.settings?.genre || '';
+      if (!genre) {
+        console.error('[后台补全] ❌ 剧本类型为空，无法确定美型等级');
+        alert('⚠️ 剧本类型未设置\n\n请先在项目设置中选择题材类型，或运行项目分析自动识别题材。');
+        await patchProject(project.id, {
+          settings: {
+            ...project.settings,
+            backgroundJobs: {
+              ...(project.settings?.backgroundJobs || {}),
+              supplement: { status: 'error', startedAt, completedAt: new Date().toISOString(), error: '剧本类型未设置' }
+            }
+          }
+        });
+        return;
+      }
+
+      // 1. 准备剧本数据
+      const scripts: ScriptFile[] = project.episodes.map(ep => ({
+        episodeNumber: ep.episodeNumber,
+        content: ep.script || '',
+        fileName: `第${ep.episodeNumber}集`
+      }));
+
+      // 2. 智能选择美型等级
+      const beautyLevel = getBeautyLevelByGenre(genre);
+      console.log(`[后台补全] 剧本类型: ${genre} → 美型等级: ${beautyLevel}`);
+
+      // 3. 使用用户在向导中勾选的主角
+      const mainChars = (project.characters || []).filter(c =>
+        c.description?.includes('【主角】') || c.role === '主角'
+      );
+      const mainIds = new Set(mainChars.map(c => c.id));
+      console.log(`[后台补全] 主角列表（${mainChars.length} 个）:`, mainChars.map(c => c.name));
+
+      // 初始化所有主要角色的进度为 queued
+      for (const char of mainChars) {
+        await updateCharacterProgress(char.id, { status: 'queued', stage: 'start', message: '等待补全...' });
+      }
+
+      // 清空主要角色 appearance（内存 + DB），强制走 CoT 生成
+      const charactersForSupplement = (project.characters || []).map(c =>
+        mainIds.has(c.id) ? { ...c, appearance: '' } : c
+      );
+      try {
+        await patchProject(project.id, { characters: charactersForSupplement });
+        console.log(`[后台补全] 🔧 已清空 ${mainIds.size} 个主要角色的 appearance`);
+      } catch (err) {
+        console.warn('[后台补全] 清空 appearance 写 DB 失败:', err);
+      }
+      setCurrentProject(prev =>
+        prev?.id === project.id ? { ...prev, characters: charactersForSupplement } : prev
+      );
+      if (currentProject?.id === project.id) {
+        setCharacterRefs(charactersForSupplement);
+      }
+
+      const updatedCharacters = await autoSupplementMainCharacters(
+        charactersForSupplement,
+        scripts,
+        {
+          projectId: project.id,
+          maxCharacters: 5,
+          minAppearances: 0,
+          mode: 'detailed',
+          beautyLevel,
+          fixedMainCharacterIds: Array.from(mainIds),
+          onProgress: async (progress: { current: number; total: number; characterName: string; stage: string; message?: string }) => {
+            const isTerminalStatus = ['merge', 'complete', 'error'].includes(progress.stage);
+            const now = Date.now();
+            if (!isTerminalStatus && now - lastProgressUpdate < 500) return;
+            lastProgressUpdate = now;
+
+            const currentChar = mainChars.find(c => c.name === progress.characterName);
+            if (currentChar) {
+              const status = progress.stage === 'complete' ? 'complete' : 'running';
+              const progressPercent = progress.stage === 'complete' ? 100
+                : Math.round((progress.current / progress.total) * 100);
+              await updateCharacterProgress(currentChar.id, {
+                status,
+                message: progress.message || progress.stage,
+                stage: progress.stage,
+                progress: progressPercent
+              });
+            }
+          },
+          onStageComplete: async (charId: string, charName: string, stage: string, result: any) => {
+            console.log(`[后台补全] 🎯 角色"${charName}"完成 ${stage}`);
+            const currentChar = charactersForSupplement.find(c => c.id === charId);
+            if (!currentChar) return;
+
+            const updatedChar = { ...currentChar };
+            if ((stage === 'stage3' || stage === 'stage4') && result.appearance) {
+              updatedChar.appearance = result.appearance;
+            } else if (stage === 'stage5.5' && result.formSummaries && result.formSummaries.length > 0) {
+              const latestChar = (projectRef.current?.characters || []).find(c => c.id === charId);
+              const existingSummaries = (latestChar?.formSummaries || []) as FormSummary[];
+              const existingNames = new Set(existingSummaries.map(f => f.name));
+              const newUnique = (result.formSummaries as FormSummary[]).filter(f => !existingNames.has(f.name));
+              updatedChar.formSummaries = [...existingSummaries, ...newUnique];
+            }
+
+            const latestProject = projectRef.current || project;
+            const latestChars = (latestProject.characters || []).map(c => c.id === charId ? updatedChar : c);
+            try {
+              await throttledPatchProject(project.id, { characters: latestChars }, true);
+              setCurrentProject(prev =>
+                prev?.id === project.id ? { ...prev, characters: latestChars } : prev
+              );
+              setCharacterRefs(latestChars);
+              if (projectRef.current?.id === project.id) {
+                projectRef.current = { ...projectRef.current, characters: latestChars };
+              }
+            } catch (err) {
+              console.error(`[后台补全] ❌ 角色"${charName}" ${stage} 写库失败:`, err);
+            }
+          }
+        }
+      );
+
+      // Phase 1 轻量形态摘要扫描
+      console.log('[后台补全] 🔍 开始 Phase 1 轻量形态摘要扫描...');
+      const { extractFormSummaries: extractFormSummariesFn } = await import('./services/characterSupplement/extractCharacterStates');
+      const charactersWithStates = await Promise.all(
+        updatedCharacters.map(async (character: CharacterRef) => {
+          if (!mainIds.has(character.id)) return character;
+          try {
+            const summaries = await extractFormSummariesFn(character, scripts, 'gemini-2.5-flash');
+            if (summaries.length === 0) return character;
+            const existingSummaries = (character.formSummaries || []) as FormSummary[];
+            const existingNames = new Set(existingSummaries.map(f => f.name));
+            const newUnique = summaries.filter(f => !existingNames.has(f.name));
+            return { ...character, formSummaries: [...existingSummaries, ...newUnique] };
+          } catch (error) {
+            console.error(`[后台补全] ❌ 角色"${character.name}"形态摘要扫描失败:`, error);
+            return character;
+          }
+        })
+      );
+      console.log('[后台补全] 🔍 Phase 1 扫描完成');
+
+      // 强制 upsert「常规状态（完好）」基底
+      const charactersWithBaseline = charactersWithStates.map((character: CharacterRef) => {
+        if (!mainIds.has(character.id)) return character;
+        let recoveredAppearance = character.appearance;
+        if (!recoveredAppearance || recoveredAppearance.trim().length === 0) {
+          const latestChar = (projectRef.current?.characters || []).find(c => c.id === character.id);
+          if (latestChar?.appearance && latestChar.appearance.trim().length > 0) {
+            recoveredAppearance = latestChar.appearance;
+          }
+        }
+        if (!recoveredAppearance || recoveredAppearance.trim().length === 0) return character;
+
+        const otherForms = (character.forms || []).filter(f => !isBaselineStateName(f.name));
+        const normalForm: CharacterForm = {
+          id: `${character.id}-normal-baseline`,
+          name: '常规状态（完好）',
+          episodeRange: '',
+          description: recoveredAppearance,
+          note: '',
+          visualPromptCn: '',
+          visualPromptEn: '',
+          imageSheetUrl: '',
+          imageGenerationMeta: { modelName: '', styleName: '', generatedAt: new Date().toISOString() },
+          changeType: 'costume' as any,
+          priority: 100 as any
+        };
+        return { ...character, appearance: recoveredAppearance, forms: [normalForm, ...otherForms] };
+      });
+
+      // 标记所有主要角色为完成
+      for (const char of mainChars) {
+        await updateCharacterProgress(char.id, { status: 'complete', stage: 'complete', message: '补全完成', progress: 100 });
+      }
+
+      // 写回数据库
+      await patchProject(project.id, { characters: charactersWithBaseline });
+      console.log('[后台补全] ✅ 补充完成');
+
+      setCurrentProject(prev =>
+        prev?.id === project.id ? { ...prev, characters: charactersWithBaseline } : prev
+      );
+      if (currentProject?.id === project.id) {
+        setCharacterRefs(charactersWithBaseline);
+      }
+
+    } catch (error) {
+      console.error('[后台补全] ❌ 补充失败:', error);
+      const fallbackMainChars = identifyMainCharacters(
+        project.characters || [],
+        { minAppearances: 0, maxCount: 5 }
+      );
+      for (const char of fallbackMainChars) {
+        await updateCharacterProgress(char.id, {
+          status: 'error',
+          stage: 'error',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        });
+      }
+    }
   };
 
   const handleAnalyzeProject = async (
@@ -832,7 +1233,9 @@ const App: React.FC = () => {
 	        }
 
 	        if (quick.status === TaskStatus.FAILED) {
+	          const reason = quick.failure_reason || '任务已失败（服务端未返回原因）';
 	          console.warn(`[NineGrid恢复] ❌ grid#${gridIndex + 1} 任务失败：${meta.taskCode}`);
+	          setProgressMsg(`⚠️ 第 ${gridIndex + 1} 张九宫格生成任务失败：${reason}`);
 	          continue;
 	        }
 
@@ -850,7 +1253,9 @@ const App: React.FC = () => {
 	          });
 	          console.log(`[NineGrid恢复] ✅ grid#${gridIndex + 1} 恢复成功`);
 	        } else if (result.status === TaskStatus.FAILED) {
+	          const reason = result.failure_reason || '任务已失败（服务端未返回原因）';
 	          console.warn(`[NineGrid恢复] ❌ grid#${gridIndex + 1} 任务失败：${meta.taskCode}`);
+	          setProgressMsg(`⚠️ 第 ${gridIndex + 1} 张九宫格生成任务失败：${reason}`);
 	        }
 	      } catch (error) {
 	        // 不阻断用户；保留 meta，下一次进入剧集时仍可再次恢复
@@ -1400,52 +1805,35 @@ const App: React.FC = () => {
           // 1. 移除markdown代码块
           jsonStr = jsonStr.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
 
-          // 2. 尝试找到JSON对象的起止位置
+          // 2. 从原始文本中提取 JSON 内容（去掉 markdown 标记后找第一个 {）
           const jsonStart = jsonStr.indexOf('{');
-          const jsonEnd = jsonStr.lastIndexOf('}');
-
-          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-            jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+          if (jsonStart !== -1) {
+            jsonStr = jsonStr.substring(jsonStart);
           }
 
-          // 3. 尝试修复被截断的JSON（常见问题）
-          // 统计括号平衡
-          const openBraces = (jsonStr.match(/{/g) || []).length;
-          const closeBraces = (jsonStr.match(/}/g) || []).length;
-          const openBrackets = (jsonStr.match(/\[/g) || []).length;
-          const closeBrackets = (jsonStr.match(/\]/g) || []).length;
-
-          // 如果括号不平衡，尝试补全
-          if (openBraces > closeBraces || openBrackets > closeBrackets) {
-            console.log('[剧本清洗] JSON可能被截断，尝试修复...');
-            console.log(`[剧本清洗] 括号平衡: {${openBraces} vs ${closeBraces}} [${openBrackets} vs ${closeBrackets}]`);
-
-            // 补全缺少的右括号
-            const missingBraces = openBraces - closeBraces;
-            const missingBrackets = openBrackets - closeBrackets;
-
-            for (let i = 0; i < missingBraces; i++) {
-              jsonStr += '}';
+          // 3. 使用栈正确修复被截断的JSON
+          // 注意：简单计数括号会被字符串内的括号（如 originalText 中的文字）误导
+          // 必须逐字符解析，正确跟踪字符串状态，再用 LIFO 顺序关闭未闭合的括号
+          {
+            let inStr = false;
+            let esc = false;
+            const bracketStack: string[] = [];
+            for (let i = 0; i < jsonStr.length; i++) {
+              const c = jsonStr[i];
+              if (esc) { esc = false; continue; }
+              if (c === '\\' && inStr) { esc = true; continue; }
+              if (c === '"') { inStr = !inStr; continue; }
+              if (inStr) continue;
+              if (c === '{') bracketStack.push('}');
+              else if (c === '[') bracketStack.push(']');
+              else if ((c === '}' || c === ']') && bracketStack.length > 0) bracketStack.pop();
             }
-            for (let i = 0; i < missingBrackets; i++) {
-              jsonStr += ']';
-            }
-          }
-
-          // 4. 尝试在截断的字段后补全空数组
-          // 查找可能的截断点，如 "uiElements": 或 "moodTags":
-          const truncatedPatterns = [
-            /"uiElements":\s*$/,
-            /"moodTags":\s*$/,
-            /"dialogues":\s*$/,
-            /"audioEffects":\s*$/,
-            /"musicCues":\s*$/,
-          ];
-
-          for (const pattern of truncatedPatterns) {
-            if (pattern.test(jsonStr)) {
-              console.log('[剧本清洗] 检测到截断的字段，补全空数组');
-              jsonStr = jsonStr.replace(pattern, '$&[]');
+            if (bracketStack.length > 0 || inStr) {
+              console.log('[剧本清洗] JSON被截断，启动修复 (未闭合层级:', bracketStack.length, ', 在字符串中:', inStr, ')');
+              jsonStr = jsonStr.trimEnd();
+              if (inStr) jsonStr += '"';           // 关闭未闭合的字符串
+              jsonStr = jsonStr.replace(/,\s*$/, ''); // 移除末尾多余逗号
+              while (bracketStack.length > 0) jsonStr += bracketStack.pop()!; // LIFO 关闭
             }
           }
 
@@ -2330,12 +2718,58 @@ const App: React.FC = () => {
         setExtractProgress(`⚡ 优化中... (${Math.min(Math.round(fullText.length / 100), 99)}%)`);
       }
 
-      // 解析JSON结果
-      const jsonMatch = fullText.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        throw new Error('AI 返回格式异常，请重试');
+      // 解析JSON结果（兼容 ```json 包裹 / 截断修复）
+      let optimized: Array<{ shotNumber: number; imagePromptCn: string }> = [];
+      {
+        // 去掉 markdown 代码块包裹
+        let parseText = fullText.trim()
+          .replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        // 找到第一个 [ 作为起点
+        const arrStart = parseText.indexOf('[');
+        if (arrStart === -1) throw new Error('AI 返回格式异常，请重试');
+        parseText = parseText.slice(arrStart);
+
+        // 第一次：直接解析（完整输出时走此路径）
+        let parsed: any[] | null = null;
+        try {
+          const arrEnd = parseText.lastIndexOf(']');
+          if (arrEnd !== -1) {
+            parsed = JSON.parse(parseText.slice(0, arrEnd + 1));
+          }
+        } catch { /* 继续截断修复 */ }
+
+        // 截断修复：找到最后一个完整 JSON 对象
+        if (!parsed) {
+          let depth = 0, inString = false, escapeNext = false, lastEnd = -1;
+          for (let i = 0; i < parseText.length; i++) {
+            const c = parseText[i];
+            if (escapeNext) { escapeNext = false; continue; }
+            if (c === '\\') { escapeNext = true; continue; }
+            if (c === '"') { inString = !inString; continue; }
+            if (!inString) {
+              if (c === '{') depth++;
+              else if (c === '}') {
+                depth--;
+                if (depth === 0 && /^\s*[,\]\s]/.test(parseText.slice(i + 1))) {
+                  lastEnd = i;
+                }
+              }
+            }
+          }
+          if (lastEnd > 0) {
+            let repaired = parseText.slice(0, lastEnd + 1).trimEnd();
+            if (repaired.endsWith(',')) repaired = repaired.slice(0, -1);
+            repaired += ']';
+            try { parsed = JSON.parse(repaired); } catch { /* 失败则 parsed 仍为 null */ }
+          }
+        }
+
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          throw new Error('AI 返回格式异常，请重试');
+        }
+        optimized = parsed;
       }
-      const optimized: Array<{ shotNumber: number; imagePromptCn: string }> = JSON.parse(jsonMatch[0]);
 
       // 计算变更记录（前后对比）
       const changes: Array<{ shotNumber: number | string; oldPrompt: string; newPrompt: string }> = [];
@@ -2985,7 +3419,11 @@ const App: React.FC = () => {
         currentProject.scenes || [],        // 🆕 传入场景库
         artStyle,                           // 🆕 传入美术风格类型
         projectId,                          // 🔧 传入项目 ID（已验证），用于上传到 OSS
-        controller.signal                   // 🆕 传入取消信号
+        controller.signal,                  // 🆕 传入取消信号
+        // 🆕 单张失败时通过 setProgressMsg 给用户明确提示（而非静默丢失）
+        (gridIndex, reason) => {
+          setProgressMsg(`❌ 第 ${gridIndex + 1} 张九宫格生成失败：${reason}`);
+        }
       );
 
       // 🆕 检查是否被用户停止

@@ -286,7 +286,7 @@ const getAIProxyBaseURL = () => {
   const apiBase =
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
     process.env.VITE_API_URL ||
-    'https://storyboard-api.feifeixp.workers.dev';
+    'https://storyboard-api.neodomain.ai';
   // 移除末尾斜杠，拼接代理路径
   return `${apiBase.replace(/\/$/, '')}/api/ai-proxy`;
 };
@@ -338,7 +338,7 @@ const getOpenRouterDirectClient = () => {
       throw new Error('未找到 VITE_OPENROUTER1_API_KEY 环境变量');
     }
     openRouterDirectClient = new OpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
+      baseURL: 'http://47.237.171.88:3000/v1',
       apiKey,
       dangerouslyAllowBrowser: true,
       defaultHeaders: {
@@ -369,67 +369,33 @@ function logApiError(context: string, error: unknown): void {
 }
 
 /**
- * 可用的模型配置
+ * 可用的模型配置（仅保留自建 API 支持的 Gemini 模型）
  *
  * ╔════════════════════════════════════════════════════════════════════════════════╗
- * ║                   OpenRouter 模型价格表 (2026年2月)                              ║
+ * ║               自建 API Gemini 模型（http://47.237.171.88:3000）                 ║
  * ╠══════════════════════════════╦═══════════════╦═══════════════╦════════════════╣
- * ║ 模型                         ║ 上下文        ║ 输入/输出     ║ 备注           ║
+ * ║ 模型                         ║ 上下文        ║ 说明          ║ 备注           ║
  * ╠══════════════════════════════╬═══════════════╬═══════════════╬════════════════╣
- * ║ GPT-5 Mini                   ║ 400K          ║ $0.25/$2      ║ OpenAI最新      ║
- * ║ Gemini 2.5 Flash             ║ 1.05M         ║ $0.30/$2.50   ║ ✅ 默认推荐     ║
- * ║ MiniMax M2.5                 ║ 196K          ║ $0.30/$1.10   ║ 高性价比        ║
- * ║ Kimi k2.5                    ║ 262K          ║ $0.45/$2.20   ║ Moonshot高性价比║
- * ║ Gemini 3 Flash Preview       ║ 1.05M         ║ $0.50/$3      ║ Google新版      ║
- * ║ Claude Haiku 4.5             ║ 200K          ║ $1/$5         ║ Anthropic快速型 ║
+ * ║ gemini-2.5-flash             ║ 1.05M         ║ 快速/均衡     ║ ✅ 默认推荐     ║
+ * ║ gemini-3-flash-preview       ║ 1.05M         ║ 快速/新版     ║ Google新版      ║
+ * ║ gemini-3-pro-preview         ║ -             ║ 思维链/高质量 ║ 复杂任务推荐   ║
  * ╚══════════════════════════════╩═══════════════╩═══════════════╩════════════════╝
- *
- * 数据来源: https://openrouter.ai/models (2026-02-25)
- *
- * 注：以下模型常量保留供内部使用，但不在UI中展示：
- * - DeepSeek Chat, GPT-4o Mini, Gemini 2.5 Pro, Gemini 3 Pro Preview, Claude Sonnet 4.5
  */
-// 按价格从便宜到贵排序
+// 按能力从快到强排序
 export const MODELS = {
-  // === UI 可选的 6 个主力模型（按价格排序）===
+  // 1. Gemini 2.5 Flash（1.05M context）✅ 默认推荐
+  GEMINI_2_5_FLASH: 'gemini-2.5-flash',
 
-  // 1. GPT-5 Mini - $0.25/$2 (400K context)
-  GPT_5_MINI: 'openai/gpt-5-mini',
+  // 2. Gemini 3 Flash Preview（1.05M context）
+  GEMINI_3_FLASH_PREVIEW: 'gemini-3-flash-preview',
 
-  // 2. Gemini 2.5 Flash - $0.30/$2.50 (1.05M context) ✅ 默认推荐
-  GEMINI_2_5_FLASH: 'google/gemini-2.5-flash',
-
-  // 3. MiniMax M2.5 - $0.30/$1.10 (196K context)
-  MINIMAX_M2_5: 'minimax/minimax-m2.5',
-
-  // 4. Kimi k2.5 - $0.45/$2.20 (262K context)
-  KIMI_K_2_5: 'moonshotai/kimi-k2.5',
-
-  // 5. Gemini 3 Flash Preview - $0.50/$3.00 (1.05M context)
-  GEMINI_3_FLASH_PREVIEW: 'google/gemini-3-flash-preview',
-
-  // 6. Claude Haiku 4.5 - $1.00/$5.00 (200K context)
-  CLAUDE_HAIKU_4_5: 'anthropic/claude-haiku-4.5',
-
-  // === 保留模型（内部备用，不在UI展示）===
-
-  // DeepSeek Chat - ¥1/¥2 (约$0.14/$0.28)
-  DEEPSEEK_CHAT: 'deepseek-chat',
-
-  // GPT-4o Mini - $0.15/$0.60
-  GPT_4O_MINI: 'openai/gpt-4o-mini',
-
-  // Gemini 2.5 Pro - $1.25/$10.00
-  GEMINI_2_5_PRO: 'google/gemini-2.5-pro',
-
-  // Gemini 3 Pro Preview - $1.25/$10.00 (思维链)
-  GEMINI_3_PRO_PREVIEW: 'google/gemini-3-pro-preview',
-
-  // Claude Sonnet 4.5 - $3.00/$15.00
-  CLAUDE_SONNET_4_5: 'anthropic/claude-sonnet-4.5',
+  // 3. Gemini 3 Pro Preview（思维链，复杂任务）
+  // 注：GEMINI_2_5_PRO 已映射为同一模型（服务器无 gemini-2.5-pro）
+  GEMINI_2_5_PRO: 'gemini-3-pro-preview',
+  GEMINI_3_PRO_PREVIEW: 'gemini-3-pro-preview',
 
   // 图像生成专用（不在文本列表中）
-  GEMINI_3_PRO_IMAGE_PREVIEW: 'google/gemini-3-pro-image-preview',
+  GEMINI_3_PRO_IMAGE_PREVIEW: 'gemini-3-pro-image-preview',
 } as const;
 
 // 判断是否为 DeepSeek 模型
@@ -438,26 +404,15 @@ export const isDeepSeekModel = (model: string): boolean => {
 };
 
 /**
- * 模型分类（按价格从便宜到贵排序）
- * 注：THINKING 和 FAST 主要包含 UI 可选的 6 个主力模型
+ * 模型分类（仅 Gemini 模型）
  */
 export const MODEL_CATEGORIES = {
   THINKING: [
-    MODELS.KIMI_K_2_5,              // $0.45/$2.20 (适合长文本思考)
-    MODELS.CLAUDE_HAIKU_4_5,        // $1/$5
-    // 保留模型（内部备用）
-    MODELS.GEMINI_3_PRO_PREVIEW,    // $1.25/$10
-    MODELS.GEMINI_2_5_PRO,          // $1.25/$10
-    MODELS.CLAUDE_SONNET_4_5,       // $3/$15
+    MODELS.GEMINI_3_PRO_PREVIEW,    // 思维链，复杂任务
   ],
   FAST: [
-    MODELS.GPT_5_MINI,              // $0.25/$2 ✅ UI可选
-    MODELS.GEMINI_2_5_FLASH,        // $0.30/$2.50 ✅ 默认推荐
-    MODELS.MINIMAX_M2_5,            // $0.30/$1.10 ✅ UI可选
-    MODELS.GEMINI_3_FLASH_PREVIEW,  // $0.50/$3 ✅ UI可选
-    // 保留模型（内部备用）
-    MODELS.DEEPSEEK_CHAT,           // ¥1/¥2
-    MODELS.GPT_4O_MINI,             // $0.15/$0.60
+    MODELS.GEMINI_2_5_FLASH,        // ✅ 默认推荐
+    MODELS.GEMINI_3_FLASH_PREVIEW,  // 新版快速
   ],
   IMAGE: [
     MODELS.GEMINI_3_PRO_IMAGE_PREVIEW,
@@ -465,23 +420,13 @@ export const MODEL_CATEGORIES = {
 } as const;
 
 /**
- * 模型显示名称（含价格信息，按价格从便宜到贵排序）
+ * 模型显示名称（仅 Gemini 模型）
  */
 export const MODEL_NAMES: Record<string, string> = {
-  // === UI 可选的 6 个主力模型 ===
-  [MODELS.GPT_5_MINI]: 'GPT-5 Mini (400K ctx, $0.25/$2)',
-  [MODELS.GEMINI_2_5_FLASH]: 'Gemini 2.5 Flash (1.05M ctx, $0.30/$2.50, $1/M audio) ⭐推荐',
-  [MODELS.MINIMAX_M2_5]: 'MiniMax M2.5 (196K ctx, $0.30/$1.10，速度较慢，建议耐心等待结果)',
-  [MODELS.KIMI_K_2_5]: 'Kimi k2.5 (262K ctx, $0.45/$2.20，速度非常慢，仅在需要深度思考时使用)',
-  [MODELS.GEMINI_3_FLASH_PREVIEW]: 'Gemini 3 Flash Preview (1.05M ctx, $0.50/$3, $1/M audio)',
-  [MODELS.CLAUDE_HAIKU_4_5]: 'Claude Haiku 4.5 (200K ctx, $1/$5)',
-
-  // === 保留模型（内部备用）===
-  [MODELS.DEEPSEEK_CHAT]: 'DeepSeek V3 (¥1) 🔥最便宜',
-  [MODELS.GPT_4O_MINI]: 'GPT-4o Mini ($0.15)',
-  [MODELS.GEMINI_2_5_PRO]: 'Gemini 2.5 Pro ($1.25)',
-  [MODELS.GEMINI_3_PRO_PREVIEW]: 'Gemini 3 Pro Preview ($1.25) 思维链',
-  [MODELS.CLAUDE_SONNET_4_5]: 'Claude Sonnet 4.5 ($3.00) 最强',
+  [MODELS.GEMINI_2_5_FLASH]: 'Gemini 2.5 Flash (1.05M ctx) ⭐推荐',
+  [MODELS.GEMINI_3_FLASH_PREVIEW]: 'Gemini 3 Flash Preview (1.05M ctx)',
+  // GEMINI_2_5_PRO 已映射为 gemini-3-pro-preview（服务器无 gemini-2.5-pro）
+  [MODELS.GEMINI_3_PRO_PREVIEW]: 'Gemini 3 Pro Preview 💎思维链',
   [MODELS.GEMINI_3_PRO_IMAGE_PREVIEW]: 'Gemini 3 Pro Image (图像理解)',
 };
 
@@ -490,10 +435,10 @@ export const MODEL_NAMES: Record<string, string> = {
  * Gemini 2.5 Flash 是高性价比模型，速度快且价格低
  */
 // 固定使用自建 API 的 gemini-2.5-flash
-export const DEFAULT_MODEL = 'google/gemini-2.5-flash';
-export const DEFAULT_THINKING_MODEL = 'google/gemini-2.5-flash';
-// 注意：DEFAULT_IMAGE_MODEL 是 OpenRouter 的 modelId（用于多模态/图像理解等），不是 Neodomain 生图的 modelName。
-export const DEFAULT_IMAGE_MODEL = 'google/gemini-3-pro-image-preview';
+export const DEFAULT_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_THINKING_MODEL = 'gemini-2.5-flash';
+// 注意：DEFAULT_IMAGE_MODEL 是自建 API 的 modelId（用于多模态/图像理解等），不是 Neodomain 生图的 modelName。
+export const DEFAULT_IMAGE_MODEL = 'gemini-3-pro-image-preview';
 
 // Neodomain 生图默认模型（modelName）
 export const DEFAULT_NEODOMAIN_IMAGE_MODEL = 'nanobanana-pro';
@@ -507,7 +452,7 @@ export async function* generateStoryboard(
   model: string = DEFAULT_MODEL
 ) {
   try {
-    const client = getClient(model);
+    const client = getOpenRouterDirectClient();
     const stream = await client.chat.completions.create({
       model,
       messages: [
@@ -552,7 +497,7 @@ export async function* generateStage1Analysis(
     console.log('[DEBUG] 模型:', model);
     console.log('[DEBUG] 提示词长度:', prompt.length, '字符');
 
-    const client = getClient(model);
+    const client = getOpenRouterDirectClient();
     const stream = await client.chat.completions.create({
       model,
       messages: [
@@ -562,7 +507,7 @@ export async function* generateStage1Analysis(
         },
       ],
       temperature: 0.7,
-      max_tokens: 16000,
+      max_tokens: model.includes('gemini') ? 32000 : 16000,
       stream: true,
       // 启用思维链推理（仅 Gemini 3 Pro Preview 支持）
       // 注意：extra_body 可能不被 openai 客户端支持，暂时禁用
@@ -653,7 +598,7 @@ export function parseStage1Output(fullText: string): ScriptAnalysis {
 
       // 为所有缺失字段补充默认值，保证流程继续
       if (missingFields.includes('basicInfo')) {
-        result.basicInfo = { genre: '待分析', tone: '待分析', theme: '待分析' };
+        result.basicInfo = { genre: '待分析', tone: '待分析', theme: '待分析', location: '待分析', characters: [], timespan: '待分析', keyEvents: [] };
         missingFields.splice(missingFields.indexOf('basicInfo'), 1);
         console.warn('已为 basicInfo 使用默认值');
       }
@@ -663,7 +608,7 @@ export function parseStage1Output(fullText: string): ScriptAnalysis {
         console.warn('已为 emotionArc 使用默认值');
       }
       if (missingFields.includes('climax')) {
-        result.climax = { shotNumber: 1, intensity: '高', description: '待分析' };
+        result.climax = '待分析'; // climax 类型为 string，不能用对象（否则 React 渲染时报错）
         missingFields.splice(missingFields.indexOf('climax'), 1);
         console.warn('已为 climax 使用默认值');
       }
@@ -718,7 +663,7 @@ export async function* generateStage2Analysis(
   console.log('[DEBUG] 提示词长度:', prompt.length, '字符');
 
   try {
-    const client = getClient(model);
+    const client = getOpenRouterDirectClient();
     const stream = await client.chat.completions.create({
       model,
       messages: [
@@ -792,7 +737,7 @@ export async function* generateStage3Analysis(
   console.log('[DEBUG] 提示词长度:', prompt.length, '字符');
 
   try {
-    const client = getClient(model);
+    const client = getOpenRouterDirectClient();
     const stream = await client.chat.completions.create({
       model,
       messages: [
@@ -802,7 +747,8 @@ export async function* generateStage3Analysis(
         },
       ],
       temperature: 0.7,
-      max_tokens: 12000,
+      // Gemini 模型支持最大 32000 输出 token；stage3 需要生成 25-32 个镜头的完整 JSON，12000 不够
+      max_tokens: model.includes('gemini') ? 32000 : 12000,
       stream: true,
     });
 
@@ -872,7 +818,7 @@ export async function* generateStage4Analysis(
   console.log('[DEBUG] 处理镜头数:', shotBatch.length);
 
   try {
-    const client = getClient(model);
+    const client = getOpenRouterDirectClient();
     const stream = await client.chat.completions.create({
       model,
       messages: [
@@ -1446,7 +1392,7 @@ export async function* generateStage5Review(
   console.log('[DEBUG] 审核镜头数:', allShots.length);
 
   try {
-    const client = getClient(model);
+    const client = getOpenRouterDirectClient();
     const stream = await client.chat.completions.create({
       model,
       messages: [
@@ -1576,7 +1522,7 @@ export async function extractCharactersFromScript(
   const prompt = buildExtractCharactersPrompt(script);
 
   try {
-    const client = getClient(model);
+    const client = getOpenRouterDirectClient();
     const response = await client.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
@@ -1611,12 +1557,15 @@ export async function* cleanScriptStream(
   const prompt = buildCleanScriptPrompt(script);
 
   try {
-    const client = getClient(model);
+    // 直连 LLM 服务，不走 Cloudflare Worker 代理（Worker 不允许向裸 IP 发请求，报 error code: 1003）
+    const client = getOpenRouterDirectClient();
+    // Gemini 模型支持最大 32000 输出 token；其他模型限 8192
+    const maxTokens = model.includes('gemini') ? 32000 : 8192;
     const stream = await client.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
       stream: true,
-      max_tokens: 8000, // 增加输出长度，避免JSON被截断
+      max_tokens: maxTokens,
     });
 
     let fullText = '';
@@ -1652,7 +1601,7 @@ export async function* generateShotListStream(
 
   const contentInput = buildGenerateShotListPrompt(script, customPrompt, characterDescriptions);
 
-  const client = getClient(model);
+  const client = getOpenRouterDirectClient();
   const stream = await client.chat.completions.create({
     model,
     messages: [{ role: 'user', content: contentInput }],
@@ -1691,7 +1640,7 @@ export async function reviewStoryboardOpenRouter(
 
   const contentInput = buildReviewStoryboardPrompt(shots, customCriteria, currentShotCount, shotCountWarning);
 
-  const client = getClient(model);
+  const client = getOpenRouterDirectClient();
   const response = await client.chat.completions.create({
     model,
     messages: [{ role: 'user', content: contentInput }],
@@ -1779,7 +1728,7 @@ export async function* chatWithDirectorStream(
 
   User Input: "${userInstruction}"`;
 
-  const client = getClient(model);
+  const client = getOpenRouterDirectClient();
   const stream = await client.chat.completions.create({
     model,
     messages: [{ role: 'user', content: prompt }],
@@ -1813,9 +1762,9 @@ export async function* extractImagePromptsStream(
     model,
     messages: [{ role: 'user', content: prompt }],
     stream: true,
-    // 每个镜头最多 3 个字段 × ~150 tokens = ~4500 tokens/10镜头
-    // 30 镜头上限约 13500 tokens，设 14000 留有余量
-    max_tokens: 14000,
+    // Gemini 模型有 thinking tokens 消耗预算，14000 对30+镜头不够；调高到 32000
+    // 每个镜头最多 3 个字段 × ~150 tokens = ~4500 tokens/10镜头，30镜头约 13500 tokens
+    max_tokens: model.includes('gemini') ? 32000 : 14000,
   });
 
   let fullText = '';
@@ -1878,8 +1827,9 @@ ${JSON.stringify(problematicShots, null, 2)}
     model,
     messages: [{ role: 'user', content: prompt }],
     stream: true,
-    // 每个镜头约200字 × 30镜头上限 ≈ 6000 tokens，设8000留余量
-    max_tokens: 8000,
+    // Gemini 模型有 thinking tokens 消耗预算，8000 不够；调高到 32000
+    // 每个镜头约200字 × 30镜头上限 ≈ 6000 tokens
+    max_tokens: model.includes('gemini') ? 32000 : 8000,
   });
 
   let fullText = '';
@@ -1900,7 +1850,7 @@ export async function* chatEditShotListStream(
 ) {
   const prompt = buildChatEditShotListPrompt(shots, userInstruction);
 
-  const client = getClient(model);
+  const client = getOpenRouterDirectClient();
   const stream = await client.chat.completions.create({
     model,
     messages: [{ role: 'user', content: prompt }],
@@ -2161,7 +2111,8 @@ export async function generateMergedStoryboardSheet(
   scenes?: SceneRef[],     // 🆕 场景库，用于匹配场景描述
   artStyleType?: ArtStyleType,  // 🆕 美术风格类型，用于调整提示词
   projectId?: string,  // 🆕 项目 ID，用于上传到 OSS
-  abortSignal?: AbortSignal  // 🆕 取消信号，用于停止生成
+  abortSignal?: AbortSignal,  // 🆕 取消信号，用于停止生成
+  onGridFailed?: (gridIndex: number, reason: string) => void  // 🆕 单张生成失败回调
 ): Promise<string[]> {
   const styleName = style?.name || '粗略线稿';
   const styleSuffix = style?.promptSuffix || 'rough sketch, black and white, storyboard style';
@@ -2382,12 +2333,22 @@ export async function generateMergedStoryboardSheet(
             onGridComplete(gridIndex, imageUrl);
           }
         } else {
-          console.warn(`[OpenRouter] ❌ 第 ${gridIndex + 1} 张九宫格生成失败: ${result.failure_reason}`);
+          const failReason = result.failure_reason || '生成失败（服务端未返回具体原因）';
+          console.warn(`[OpenRouter] ❌ 第 ${gridIndex + 1} 张九宫格生成失败: ${failReason}`);
           results[gridIndex] = '';
+          // 🆕 失败时回调通知调用方，由 UI 层显示具体错误信息
+          if (onGridFailed) {
+            try { onGridFailed(gridIndex, failReason); } catch (_) { /* 回调异常不影响主流程 */ }
+          }
         }
       } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
         console.error(`[OpenRouter] ❌ 第 ${gridIndex + 1} 张九宫格生成异常:`, error);
         results[gridIndex] = '';
+        // 🆕 异常时也回调通知调用方
+        if (onGridFailed) {
+          try { onGridFailed(gridIndex, errMsg); } catch (_) { /* 回调异常不影响主流程 */ }
+        }
       }
     })();
   });
@@ -2845,61 +2806,97 @@ export interface EpisodeSplitResult {
 /**
  * 用AI将单个剧本文件拆分为多集
  *
+ * 策略：AI 只识别分集标记位置（不复现剧本内容），再由代码按标记切分原文。
+ * 这样避免了 AI 输出过长被截断，同时绕过 Cloudflare Worker 代理直连 LLM 服务。
+ *
  * @param scriptContent 剧本全文
  * @param model 使用的模型ID
- * @returns 拆分结果，episodes 数组；若未检测到多集则返回空数组或单集
+ * @returns 拆分结果，episodes 数组；若未检测到多集则返回空数组
  */
 export async function splitEpisodesWithAI(
   scriptContent: string,
   model: string = DEFAULT_MODEL
 ): Promise<EpisodeSplitResult> {
-  const prompt = `你是专业剧本编辑。请分析以下剧本内容，判断它是否包含多集内容（如"第一集"、"第二集"、"EP1"、"Episode 1"等分集标记）。
+  // AI 只返回分集标记，不复现内容，避免 max_tokens 截断
+  const prompt = `你是专业剧本编辑。请分析以下剧本内容，判断是否包含多集（如"第一集"、"第二集"、"EP1"等分集标记）。
 
-如果包含多集，请将各集内容分开，以JSON格式输出：
+如果包含多集，输出每集在原文中实际出现的起始标记行（必须与原文完全一致）：
 {
   "episodes": [
-    { "episodeNumber": 1, "title": "集标题（如有）", "script": "本集完整剧本内容" },
-    { "episodeNumber": 2, "title": "集标题（如有）", "script": "本集完整剧本内容" }
+    { "episodeNumber": 1, "title": "集标题（如有）", "startMarker": "原文中完整的分集标题行" },
+    { "episodeNumber": 2, "title": "集标题（如有）", "startMarker": "原文中完整的分集标题行" }
   ]
 }
 
-如果只有一集或无法识别分集，输出：
+如果只有单集或无法识别，输出：
 {
   "episodes": []
 }
 
 注意：
-- 每集的 script 字段必须包含该集的完整剧本文字，不要省略。
-- title 字段可选，没有标题时省略该字段。
-- 只输出JSON，不要任何解释文字。
+- startMarker 必须是原文中实际存在的完整行，不要修改、不要省略
+- 不要复现剧本内容
+- 只输出 JSON，不要任何解释文字
 
 剧本内容：
 ${scriptContent.slice(0, 20000)}`;
 
-  const client = getClient(model);
-  const response = await client.chat.completions.create({
-    model,
-    messages: [{ role: 'user', content: prompt }],
-    stream: false,
-    max_tokens: 16000,
+  // 直连 LLM 服务，不走 Cloudflare Worker 代理（代理依赖部署，本地开发可直连）
+  const apiKey = getApiKey();
+  const apiResp = await fetch('http://47.237.171.88:3000/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: false,
+      max_tokens: 2000, // 只需要标记文字，无需大量 token
+    }),
   });
 
-  const text = response.choices[0]?.message?.content || '';
+  if (!apiResp.ok) {
+    throw new Error(`splitEpisodesWithAI API请求失败: ${apiResp.status}`);
+  }
+
+  const data = await apiResp.json();
+  const text: string = data.choices?.[0]?.message?.content || '';
 
   try {
-    // 1. 剥离 markdown 代码块标记（```json ... ``` 或 ``` ... ```）
+    // 剥离 markdown 代码块
     const stripped = text
       .replace(/^```(?:json)?\s*/m, '')
       .replace(/\s*```\s*$/m, '')
       .trim();
 
-    // 2. 提取 JSON 对象（模型可能在前后附加解释文字）
     const jsonMatch = stripped.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { episodes: [] };
 
-    const parsed = JSON.parse(jsonMatch[0]) as EpisodeSplitResult;
-    if (!Array.isArray(parsed.episodes)) return { episodes: [] };
-    return parsed;
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      episodes: Array<{ episodeNumber: number; title?: string; startMarker: string }>;
+    };
+    if (!Array.isArray(parsed.episodes) || parsed.episodes.length === 0) {
+      return { episodes: [] };
+    }
+
+    // 按 startMarker 切分原始脚本（AI 不复现内容，由此处切分）
+    const result: EpisodeSplitResult['episodes'] = [];
+    for (let i = 0; i < parsed.episodes.length; i++) {
+      const { episodeNumber, title, startMarker } = parsed.episodes[i];
+      const startIdx = scriptContent.indexOf(startMarker);
+      if (startIdx === -1) {
+        console.warn(`[splitEpisodesWithAI] 找不到标记: "${startMarker}"，跳过第${episodeNumber}集`);
+        continue;
+      }
+      const nextMarker = parsed.episodes[i + 1]?.startMarker;
+      const endIdx = nextMarker ? scriptContent.indexOf(nextMarker) : scriptContent.length;
+      const script = scriptContent.slice(startIdx, endIdx === -1 ? scriptContent.length : endIdx);
+      result.push({ episodeNumber, title, script });
+    }
+
+    return { episodes: result };
   } catch (err) {
     console.error('[splitEpisodesWithAI] JSON解析失败:', text.slice(0, 300));
     return { episodes: [] };

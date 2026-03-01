@@ -10,7 +10,7 @@
  * 3. {...}
  * 4. 混合文本中的JSON
  */
-export function extractJSON(text: string): string {
+export function extractJSON(text: string, preferredFields?: string[]): string {
   // 方法0: 优先提取【最终输出】后的JSON
   const finalOutputMatch = text.match(/【最终输出】[\s\S]*?```json\s*([\s\S]*?)\s*```/);
   if (finalOutputMatch) {
@@ -32,11 +32,27 @@ export function extractJSON(text: string): string {
     }
   }
 
-  // 方法1: 提取所有 ```json ... ``` 块，取最后一个
+  // 方法1: 提取所有 ```json ... ``` 块
+  // 如果指定了优先字段，先在包含该字段的块中取最大块；否则取全局最大块
   const allJsonBlocks = text.match(/```json\s*([\s\S]*?)\s*```/g);
   if (allJsonBlocks && allJsonBlocks.length > 0) {
-    const lastBlock = allJsonBlocks[allJsonBlocks.length - 1];
-    const content = lastBlock.match(/```json\s*([\s\S]*?)\s*```/);
+    if (preferredFields && preferredFields.length > 0) {
+      // 找到所有包含任意优先字段的块
+      const blocksWithField = allJsonBlocks.filter(block =>
+        preferredFields.some(field => block.includes(`"${field}"`))
+      );
+      if (blocksWithField.length > 0) {
+        const largest = blocksWithField.reduce((a, b) => a.length >= b.length ? a : b);
+        const content = largest.match(/```json\s*([\s\S]*?)\s*```/);
+        if (content) {
+          console.log(`[extractJSON] 优先字段匹配成功 [${preferredFields.join(',')}]，选择包含目标字段的最大块`);
+          return content[1].trim();
+        }
+      }
+    }
+    // 无优先字段命中时，取全局最大块（兜底）
+    const largestBlock = allJsonBlocks.reduce((a, b) => a.length >= b.length ? a : b);
+    const content = largestBlock.match(/```json\s*([\s\S]*?)\s*```/);
     if (content) {
       return content[1].trim();
     }
@@ -98,8 +114,8 @@ function cleanJSON(jsonStr: string): string {
  * 策略：找到最后一个完整的数组元素，截断后续内容
  */
 function tryFixIncompleteJSON(jsonStr: string): string {
-  // 如果是对象格式 {"shots": [...]}
-  const shotsMatch = jsonStr.match(/"shots"\s*:\s*\[/);
+  // 如果是对象格式 {"shots": [...]} 或 {"shotList": [...]}（Stage3 使用 shotList）
+  const shotsMatch = jsonStr.match(/"shots(?:List)?"\s*:\s*\[/);
   if (shotsMatch) {
     const shotsStartIndex = shotsMatch.index! + shotsMatch[0].length;
     const shotsContent = jsonStr.slice(shotsStartIndex);
@@ -434,7 +450,8 @@ export function mergeThinkingAndResult<T>(
   text: string,
   requiredFields: string[]
 ): T & { thinking?: Record<string, string> } {
-  const jsonStr = extractJSON(text);
+  // 将 requiredFields 作为优先字段传给 extractJSON，确保选中包含目标字段的 JSON 块
+  const jsonStr = extractJSON(text, requiredFields.length > 0 ? requiredFields : undefined);
   const result = validateJSON<T>(jsonStr, requiredFields);
   const thinking = extractThinkingProcess(text);
   

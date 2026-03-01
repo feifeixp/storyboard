@@ -8,7 +8,9 @@ import { Project, Episode, StoryVolume, Antagonist, EpisodeSummary, SceneRef, PR
 import { CharacterRef, CharacterForm, STORYBOARD_STYLES, type StoryboardStyle } from '../types';
 import { EditModal } from './EditModal';
 import { calculateAllCharactersCompleteness, getCompletenessLevel } from '../services/characterCompleteness';
-import { supplementCharacterDetails } from '../services/characterSupplement';
+import { supplementCharacterDetails } from '../services/characterSupplement/index';
+import { hasProjectStyle, getEffectiveCharacterSceneStyle, getStylePromptSuffix } from '../services/styleSettings';
+import type { FormSummary } from '../services/characterSupplement/types';
 import { supplementSceneDetails } from '../services/sceneSupplement';
 import { extractNewScenes } from '../services/sceneExtraction';
 import AIImageModelSelector from './AIImageModelSelector';
@@ -42,6 +44,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   useEffect(() => {
     projectRef.current = project;
   }, [project]);
+
+  // 🔧 串行化写入锁：防止并发生成时多个任务互相覆盖 imageSheetUrl
+  // 原理：每次写入追加到链末尾，链中的写入在执行时才读取 projectRef.current（最新状态）
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
 
   // =============================
   // 🆕 角色/场景设定图生成（模型 + 风格）
@@ -359,34 +365,42 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         generatedAt: new Date().toISOString(), taskCode: createdTaskCode || undefined, taskCreatedAt: createdTaskAt || undefined,
       };
 
-      // 🔧 修复：使用 projectRef.current 获取最新的 project 状态（避免并发时覆盖其他形态的数据）
-      const latestProject = projectRef.current;
-      const updatedProject: Project = {
-        ...latestProject, updatedAt: new Date().toISOString(),
-        characters: (latestProject.characters || []).map(c => {
-          if (c.id !== characterId) return c;
-          if (targetForm) {
-            // 保存到形态的 imageSheetUrl
-            const updatedChar = { ...c, forms: (c.forms || []).map(f => f.id === formId ? { ...f, imageSheetUrl: sheetUrl, imageGenerationMeta: finalMeta } : f) };
-            console.log(`[ProjectDashboard] 🔍 更新形态设定图: ${targetLabel}, URL: ${sheetUrl.substring(0, 80)}...`);
-            console.log(`[ProjectDashboard] 🔍 更新后的forms:`, updatedChar.forms);
-            return updatedChar;
-          }
-          // 保存到角色主体的 imageSheetUrl
-          return { ...c, imageSheetUrl: sheetUrl, imageGenerationMeta: { ...finalMeta, taskCode: createdTaskCode || c.imageGenerationMeta?.taskCode, taskCreatedAt: createdTaskAt || c.imageGenerationMeta?.taskCreatedAt } };
-        }),
+      // 🔧 串行化写入：防止多角色并发生成时互相覆盖对方的 imageSheetUrl
+      //    doWrite 在写入链中执行时才读取 projectRef.current，此时前一个任务已写完 ref，
+      //    因此拿到的是包含所有已完成角色图片的最新状态。
+      const doWrite = async () => {
+        // 在写入链内重新读取，确保拿到上一次写入后的最新状态
+        const latestProject = projectRef.current;
+        const updatedProject: Project = {
+          ...latestProject, updatedAt: new Date().toISOString(),
+          characters: (latestProject.characters || []).map(c => {
+            if (c.id !== characterId) return c;
+            if (targetForm) {
+              const updatedChar = { ...c, forms: (c.forms || []).map(f => f.id === formId ? { ...f, imageSheetUrl: sheetUrl, imageGenerationMeta: finalMeta } : f) };
+              console.log(`[ProjectDashboard] 🔍 更新形态设定图: ${targetLabel}, URL: ${sheetUrl.substring(0, 80)}...`);
+              console.log(`[ProjectDashboard] 🔍 更新后的forms:`, updatedChar.forms);
+              return updatedChar;
+            }
+            return { ...c, imageSheetUrl: sheetUrl, imageGenerationMeta: { ...finalMeta, taskCode: createdTaskCode || c.imageGenerationMeta?.taskCode, taskCreatedAt: createdTaskAt || c.imageGenerationMeta?.taskCreatedAt } };
+          }),
+        };
+        // 立即同步更新 ref，使链中下一个写入能立刻看到本次结果（无需等待 React 重渲）
+        projectRef.current = updatedProject;
+        // 先持久化到数据库，再更新前端状态
+        try {
+          await patchProject(latestProject.id, { characters: updatedProject.characters });
+          console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已保存到数据库: ${targetLabel}`);
+        } catch (err) {
+          console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
+          await saveProject(updatedProject);
+        }
+        await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+        console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已更新到前端状态: ${targetLabel}`);
       };
-
-      // 🔧 先持久化到数据库，再更新前端状态
-      try {
-        await patchProject(latestProject.id, { characters: updatedProject.characters });
-        console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已保存到数据库: ${targetLabel}`);
-      } catch (err) {
-        console.warn('[ProjectDashboard] patchProject(characters) 失败，回退到全量保存:', err);
-        await saveProject(updatedProject);
-      }
-      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
-      console.log(`[ProjectDashboard] ✅ ${targetForm ? '形态' : '角色'}设定图已更新到前端状态: ${targetLabel}`);
+      // 将写入追加到串行链末尾；即使链中某个写入失败，后续写入仍继续执行
+      const myWrite = writeChainRef.current.then(doWrite);
+      writeChainRef.current = myWrite.catch(() => {});
+      await myWrite;
     } catch (error: any) {
       console.error('生成角色设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
@@ -1152,7 +1166,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       const newScenes = await extractNewScenes(
         scripts,
         project.scenes || [],
-        'google/gemini-2.0-flash-001',
+        'gemini-2.5-flash',
         (current, total) => setExtractionProgress({ current, total })
       );
 

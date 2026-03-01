@@ -17,18 +17,72 @@ const safeParsePromptExtractionResult = (raw: string): any[] => {
 
   // 截取第一个 [ 到最后一个 ] 之间的内容，尽量锁定数组主体
   const start = text.indexOf('[');
+  if (start === -1) return [];
+  // 优先找最后一个 ]，但如果解析失败再做截断修复
   const end = text.lastIndexOf(']');
-  if (start !== -1 && end !== -1 && end > start) {
+  if (end !== -1 && end > start) {
     text = text.slice(start, end + 1);
+  } else {
+    text = text.slice(start);
   }
 
+  // 第一次尝试：直接解析（完整输出时走此路径）
   try {
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
-    console.error('[PromptExtraction] JSON解析失败，原始内容片段:', text.slice(0, 200), error);
-    return [];
+    console.warn('[PromptExtraction] JSON直接解析失败，尝试截断修复...', (error as Error).message);
   }
+
+  // 截断修复：找到最后一个完整的 JSON 对象（以 } 结尾，后跟 , 或 ] 或空白）
+  // 这处理 LLM 输出被截断到字符串中间的情况
+  try {
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
+    let lastCompleteObjEnd = -1;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+
+      if (escapeNext) { escapeNext = false; continue; }
+      if (char === '\\') { escapeNext = true; continue; }
+      if (char === '"') { inString = !inString; continue; }
+
+      if (!inString) {
+        if (char === '{') {
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            // 找到一个完整的顶层对象，检查后面跟的是 , ] 或空白
+            const after = text.slice(i + 1).match(/^\s*([,\]\s])/);
+            if (after) {
+              lastCompleteObjEnd = i;
+            }
+          }
+        }
+      }
+    }
+
+    if (lastCompleteObjEnd > 0) {
+      // 截断到最后一个完整对象，闭合数组
+      let repaired = text.slice(0, lastCompleteObjEnd + 1).trimEnd();
+      // 移除尾随逗号
+      if (repaired.endsWith(',')) repaired = repaired.slice(0, -1);
+      repaired += ']';
+      const parsed = JSON.parse(repaired);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        console.warn(`[PromptExtraction] 截断修复成功，保留 ${parsed.length} 个完整对象`);
+        return parsed;
+      }
+    }
+  } catch (repairError) {
+    console.error('[PromptExtraction] 截断修复也失败:', repairError);
+  }
+
+  console.error('[PromptExtraction] JSON解析彻底失败，原始内容片段:', text.slice(0, 300));
+  return [];
 };
 
 interface PromptExtractionPageProps {

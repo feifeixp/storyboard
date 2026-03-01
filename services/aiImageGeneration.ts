@@ -220,7 +220,19 @@ export async function getGenerationResult(
   const result: ApiResponse<ImageGenerationResult> = await response.json();
 
   if (!result.success || !result.data) {
+    console.error('[Neodomain] getGenerationResult 接口返回失败:', JSON.stringify(result));
     throw new Error(result.errMessage || '查询生成结果失败');
+  }
+
+  // 🔍 任务失败时，用 API 外层字段补充 failure_reason（服务端有时不填 failure_reason 但会填 errMessage/errCode）
+  if (result.data.status === TaskStatus.FAILED) {
+    if (!result.data.failure_reason) {
+      result.data.failure_reason =
+        result.errMessage ||
+        (result.errCode ? `错误代码: ${result.errCode}` : null) ||
+        '服务端未返回失败原因（可能是积分不足、内容审核拒绝或服务异常）';
+    }
+    console.warn('[Neodomain] ⚠️ 任务已失败，完整响应:', JSON.stringify(result));
   }
 
   return result.data;
