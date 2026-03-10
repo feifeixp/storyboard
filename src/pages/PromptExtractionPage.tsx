@@ -395,7 +395,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {optimizedChanges.map((change) => (
                 <div key={String(change.shotNumber)} className="rounded-lg border border-gray-700 overflow-hidden text-xs">
-                  <div className="bg-gray-800 px-3 py-1.5 font-bold text-blue-300">
+                  <div className="bg-black/40 px-3 py-2 font-bold text-blue-300 border-b border-white/5">
                     镜头 {change.shotNumber}
                   </div>
                   <div className="grid grid-cols-2 divide-x divide-gray-700">
@@ -420,7 +420,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
         <div className="glass-card p-4 rounded-xl mb-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold text-white flex items-center gap-2">
-              🎭 参与生成登场角色 <span className="text-xs font-normal text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full">{usedCharacters.length}</span>
+              🎭 参与生成登场角色 <span className="text-xs font-normal text-gray-400 bg-black/40 border border-white/10 px-2 py-0.5 rounded-full">{usedCharacters.length}</span>
             </h3>
             <span className="text-xs text-gray-400">以下角色的参考组合将作为上下文传给AI生图模型</span>
           </div>
@@ -431,7 +431,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
               const hasNoImage = !url;
               return (
                 <div key={c.id} className="flex flex-col items-center w-16">
-                  <div className={`w-14 h-14 rounded-full mb-2 overflow-hidden border-2 shadow-sm ${hasNoImage ? 'border-red-500/50 border-dashed bg-red-900/20' : 'border-gray-600 bg-gray-800'}`}>
+                  <div className={`w-14 h-14 rounded-full mb-2 overflow-hidden border-2 shadow-sm ${hasNoImage ? 'border-red-500/50 border-dashed bg-red-900/20' : 'border-white/10 bg-black/50'}`}>
                     {url ? (
                       <img src={url} alt={c.name} className="w-full h-full object-cover" />
                     ) : (

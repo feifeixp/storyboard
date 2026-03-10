@@ -102,10 +102,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const autoResumeProjectIdRef = useRef<string | null>(null);
 
   // UI-only style tokens（仅排版/视觉优化：不改变任何功能逻辑）
-  const containerClass = 'max-w-7xl mx-auto px-3 sm:px-4 lg:px-6';
-  const cardClass = 'bg-gray-800 rounded-lg border border-gray-700/60';
-  const cardPad = 'p-3';
-  const primaryBtnClass = 'bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded text-xs font-medium';
+  const containerClass = 'max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 relative z-10';
+  const cardClass = 'bg-[#1a1d2d]/80 backdrop-blur-md rounded-xl border border-white/10 shadow-lg transition-all hover:border-purple-500/50 hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)]';
+  const cardPad = 'p-4 md:p-5';
+  const primaryBtnClass = 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5';
 
   // 统一负向提示词：抑制水印/文字/Logo 等（避免设定图出现标注）
   const NEGATIVE_PROMPT = 'watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay';
@@ -1688,7 +1688,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {(project.characters || []).map((char) => {
           const charCompleteness = charactersCompleteness.find(c => c.character.id === char.id);
           return (
@@ -1994,10 +1994,24 @@ const CharacterCard: React.FC<{
     return (
       <div className="glass-card rounded-xl overflow-hidden">
         {/* 角色头部信息 */}
-        <div className="p-3 cursor-pointer hover:bg-[var(--color-surface-hover)] flex items-center gap-3 transition-colors" onClick={onToggle}>
+        <div className="p-4 cursor-pointer hover:bg-[var(--color-surface-hover)] flex flex-col items-center gap-3 transition-colors relative text-center" onClick={onToggle}>
+          {/* 展开箭头 */}
+          <div className="absolute top-3 right-3 text-[var(--color-text-tertiary)] text-[12px]">
+            {isExpanded ? '▼' : '▶'}
+          </div>
+
+          {/* 编辑按钮 */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            className="absolute top-3 left-3 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[14px] p-1 transition-colors"
+            title="编辑角色"
+          >
+            ✏️
+          </button>
+
           {/* 头像 (点击可直达上传/生成面板) */}
           <div
-            className="w-[240px] h-[240px] bg-[var(--color-surface)] rounded-full flex items-center justify-center text-[100px] shrink-0 border-2 border-[var(--color-primary)]/30 relative group cursor-pointer overflow-hidden transition-transform hover:scale-105"
+            className="w-28 h-28 bg-[var(--color-surface)] rounded-full flex items-center justify-center text-4xl shrink-0 border-2 border-[var(--color-primary)]/30 relative group cursor-pointer overflow-hidden transition-transform hover:scale-105 mt-2"
             onClick={(e) => {
               if (onUploadImage) {
                 e.stopPropagation();
@@ -2007,83 +2021,85 @@ const CharacterCard: React.FC<{
             title="点击更换或生成头像"
           >
             {character.data ? (
-              <img src={character.data} alt={character.name} className="w-full h-full rounded-full object-cover transition-opacity group-hover:opacity-60" />
+              <img src={character.data} alt={character.name} className="w-full h-full object-cover transition-opacity group-hover:opacity-60" />
             ) : (character.gender === '女' ? '👩' : '👨')}
 
             {/* 悬浮提示层 */}
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <span className="text-[10px] text-white font-medium">更换</span>
+              <span className="text-[12px] text-white font-medium">更换头像</span>
             </div>
           </div>
 
           {/* 信息 */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[var(--color-text)] font-medium text-[14px]">{character.name}</span>
-              <span className="text-[var(--color-text-tertiary)] text-[12px]">{character.gender}</span>
+          <div className="w-full flex flex-col items-center min-w-0">
+            <div className="flex flex-wrap justify-center items-center gap-1.5 mb-1">
+              <span className="text-[var(--color-text)] font-semibold text-[16px] truncate max-w-[120px]" title={character.name}>{character.name}</span>
+              <span className="text-[var(--color-text-tertiary)] text-[11px] px-1.5 py-0.5 bg-[var(--color-surface)] rounded-md">{character.gender}</span>
               {character.forms && character.forms.length > 0 && (
-                <span className="text-[var(--color-primary-light)] text-[12px]">({character.forms.length}形态)</span>
-              )}
-              {/* 完整度指示器 */}
-              {completenessInfo && (
-                <span className={`text-[12px] ${completenessInfo.color}`} title={`完整度: ${completeness}%`}>
-                  {completenessInfo.emoji} {completeness}%
+                <span className="text-[var(--color-primary-light)] text-[11px] px-1.5 py-0.5 bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 rounded-md">
+                  {character.forms.length}形态
                 </span>
               )}
             </div>
+
+            {completenessInfo && (
+              <div className={`text-[11px] ${completenessInfo.color} mb-1.5`} title={`完整度: ${completeness}%`}>
+                {completenessInfo.emoji} 完整度 {completeness}%
+              </div>
+            )}
+
             {character.identityEvolution && (
-              <p className="text-[var(--color-text-tertiary)] text-[12px] truncate mt-0.5">{character.identityEvolution}</p>
+              <p className="text-[var(--color-text-tertiary)] text-[12px] line-clamp-2 w-full px-2" title={character.identityEvolution}>
+                {character.identityEvolution}
+              </p>
             )}
           </div>
 
-          {/* 能力标签 - 全部显示 */}
+          {/* 能力标签 - 最多显示前3个 */}
           {character.abilities && character.abilities.length > 0 && (
-            <div className="flex flex-wrap gap-1 shrink-0 max-w-[200px]">
-              {character.abilities.map((a, i) => (
-                <span key={i} className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">{a}</span>
+            <div className="flex flex-wrap justify-center gap-1.5 w-full px-2">
+              {character.abilities.slice(0, 3).map((a, i) => (
+                <span key={i} className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">
+                  {a}
+                </span>
               ))}
+              {character.abilities.length > 3 && (
+                <span className="text-[10px] text-[var(--color-text-tertiary)] flex items-center px-1">+{character.abilities.length - 3}</span>
+              )}
             </div>
           )}
 
-          {/* 编辑按钮 */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(); }}
-            className="text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[12px] px-1 transition-colors"
-            title="编辑角色"
-          >
-            ✏️
-          </button>
+          {/* 操作按钮区 */}
+          <div className="flex flex-wrap justify-center gap-2 mt-2 w-full px-2">
+            {/* 上传角色图片按钮 */}
+            {onUploadImage && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUploadImage();
+                }}
+                className="flex-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-2 py-1.5 rounded-lg text-[12px] font-medium transition-colors whitespace-nowrap"
+                title="上传角色图片并AI分析"
+              >
+                📤 上传图片
+              </button>
+            )}
 
-          {/* 上传角色图片按钮 */}
-          {onUploadImage && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onUploadImage();
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors"
-              title="上传角色图片并AI分析"
-            >
-              📤 上传图片
-            </button>
-          )}
-
-          {/* 生成角色设定图 - 有形态时隐藏主体按钮，只在形态上显示 */}
-          {onGenerateImage && !(character.forms && character.forms.length > 0) && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onGenerateImage();
-              }}
-              disabled={!!isGenerating}
-              className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-[13px] font-medium disabled:cursor-not-allowed transition-colors"
-              title={character.imageSheetUrl ? '重新生成角色设定图' : '生成角色设定图'}
-            >
-              {isGenerating ? '⏳ 生成中...' : (character.imageSheetUrl ? '🔄 重新生成' : '🎨 生成设定图')}
-            </button>
-          )}
-
-          <span className="text-[var(--color-text-tertiary)] text-[12px]">{isExpanded ? '▼' : '▶'}</span>
+            {/* 生成角色设定图 - 有形态时隐藏主体按钮，只在形态上显示 */}
+            {onGenerateImage && !(character.forms && character.forms.length > 0) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onGenerateImage();
+                }}
+                disabled={!!isGenerating}
+                className="flex-1 bg-emerald-600/20 hover:bg-emerald-600/40 disabled:bg-gray-800 disabled:text-gray-500 disabled:border-gray-700 text-emerald-400 border border-emerald-500/30 px-2 py-1.5 rounded-lg text-[12px] font-medium disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                title={character.imageSheetUrl ? '重新生成角色设定图' : '自动生成'}
+              >
+                {isGenerating ? '⏳ 生成中...' : (character.imageSheetUrl ? '🔄 重新生成' : '🎨 自动生成')}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 生成进度 - 有形态时主体进度隐藏（进度在形态卡片上显示） */}

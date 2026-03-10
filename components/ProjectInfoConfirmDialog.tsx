@@ -106,7 +106,7 @@ export const ProjectInfoConfirmDialog: React.FC<ProjectInfoConfirmDialogProps> =
 
   return (
     <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center z-50">
-      <div className="bg-gray-800 text-gray-50 border border-gray-700 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+      <div className="bg-[#1a1d2d]/90 backdrop-blur-xl text-gray-50 border border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
         {/* 标题 */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold text-gray-100">📋 信息确认</h2>
@@ -124,9 +124,9 @@ export const ProjectInfoConfirmDialog: React.FC<ProjectInfoConfirmDialogProps> =
         </p>
 
         {/* 剧本类型 */}
-        <div className="mb-6 pb-6 border-b border-gray-700">
+        <div className="mb-6 pb-6 border-b border-white/10">
           <h3 className="text-lg font-semibold text-gray-100 mb-2">🎬 剧本类型（影响整体美学风格）</h3>
-          <div className="bg-gray-700/50 rounded p-3 mb-3">
+          <div className="bg-black/40 rounded p-3 mb-3 border border-white/5">
             <p className="text-sm text-gray-300">
               <span className="font-medium text-blue-400">AI 猜测：</span>
               {suggestedGenres.length > 0 ? suggestedGenres.join(' / ') : '未识别'}
@@ -135,12 +135,12 @@ export const ProjectInfoConfirmDialog: React.FC<ProjectInfoConfirmDialogProps> =
           <p className="text-sm text-gray-300 mb-3">请确认或修改（可多选）：</p>
           <div className="grid grid-cols-3 gap-2">
             {GENRE_OPTIONS.map(option => (
-              <label key={option.value} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/30 p-2 rounded">
+              <label key={option.value} className="flex items-center space-x-2 cursor-pointer hover:bg-white/5 p-2 rounded transition-colors border border-transparent hover:border-white/10">
                 <input
                   type="checkbox"
                   checked={selectedGenres.includes(option.value)}
                   onChange={() => toggleGenre(option.value)}
-                  className="rounded bg-gray-700 border-gray-600"
+                  className="rounded bg-black/40 border-gray-600"
                 />
                 <span className="text-sm text-gray-200">{option.label}</span>
               </label>
@@ -159,13 +159,13 @@ export const ProjectInfoConfirmDialog: React.FC<ProjectInfoConfirmDialogProps> =
             {characters.map(char => (
               <label
                 key={char.name}
-                className="flex items-start space-x-3 p-3 rounded bg-gray-700/30 hover:bg-gray-700/50 cursor-pointer transition-colors"
+                className="flex items-start space-x-3 p-3 rounded-lg bg-black/20 hover:bg-white/5 border border-white/5 hover:border-white/10 cursor-pointer transition-all"
               >
                 <input
                   type="checkbox"
                   checked={selectedMainCharacters.includes(char.name)}
                   onChange={() => toggleMainCharacter(char.name)}
-                  className="mt-1 rounded bg-gray-700 border-gray-600"
+                  className="mt-1 rounded bg-black/40 border-gray-600"
                 />
                 <div className="flex-1">
                   <div className="font-medium text-gray-100">{char.name}</div>
@@ -183,18 +183,18 @@ export const ProjectInfoConfirmDialog: React.FC<ProjectInfoConfirmDialogProps> =
         </div>
 
         {/* 按钮 */}
-        <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
+        <div className="flex justify-end space-x-3 pt-4 border-t border-white/10">
           <button
             type="button"
             onClick={onUseDefaults}
-            className="px-4 py-2 text-gray-300 bg-gray-700 rounded hover:bg-gray-600 transition-colors"
+            className="px-4 py-2 text-gray-300 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors shadow-sm"
           >
             全部使用 AI 默认值
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all shadow-md hover:-translate-y-0.5"
           >
             确认并保存
           </button>

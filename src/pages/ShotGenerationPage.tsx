@@ -52,6 +52,12 @@ interface ShotGenerationPageProps {
   handleConsultDirector: () => void;
   handleExecuteChanges: () => void;
 
+  // 模型相关 states (for review and manual edit)
+  reviewModel: string;
+  setReviewModel: (model: string) => void;
+  editModel: string;
+  setEditModel: (model: string) => void;
+
   // 导出相关
   exportToJSON: () => void;
   exportToExcel: () => void;
@@ -138,14 +144,13 @@ export const ShotGenerationPage: React.FC<ShotGenerationPageProps> = (props) => 
       )}
 
       {/* Tab切换栏 */}
-      <div className="flex gap-2 bg-gray-800 p-2 rounded-lg border border-gray-700">
+      <div className="flex gap-2 bg-[#1a1d2d]/80 backdrop-blur-md p-2 rounded-lg border border-white/10 shadow-lg">
         <button
           onClick={() => handleTabChange('generate')}
-          className={`relative px-4 py-2 rounded-md font-medium text-sm transition-all duration-300 ${
-            currentTab === 'generate'
-              ? 'bg-green-600 text-white shadow-lg scale-105'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-102'
-          }`}
+          className={`relative px-4 py-2 rounded-md font-medium text-sm transition-all duration-300 ${currentTab === 'generate'
+            ? 'bg-green-600 text-white shadow-lg scale-105'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-102'
+            }`}
         >
           🎬 生成
           {shots.length > 0 && (
@@ -154,11 +159,10 @@ export const ShotGenerationPage: React.FC<ShotGenerationPageProps> = (props) => 
         </button>
         <button
           onClick={() => handleTabChange('review')}
-          className={`relative px-4 py-2 rounded-md font-medium text-sm transition-all duration-300 ${
-            currentTab === 'review'
-              ? 'bg-orange-600 text-white shadow-lg scale-105'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-102'
-          }`}
+          className={`relative px-4 py-2 rounded-md font-medium text-sm transition-all duration-300 ${currentTab === 'review'
+            ? 'bg-orange-600 text-white shadow-lg scale-105'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-102'
+            }`}
         >
           🔍 自检
           {suggestions.length > 0 && (
@@ -167,11 +171,10 @@ export const ShotGenerationPage: React.FC<ShotGenerationPageProps> = (props) => 
         </button>
         <button
           onClick={() => handleTabChange('manual')}
-          className={`relative px-4 py-2 rounded-md font-medium text-sm transition-all duration-300 ${
-            currentTab === 'manual'
-              ? 'bg-purple-600 text-white shadow-lg scale-105'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-102'
-          }`}
+          className={`relative px-4 py-2 rounded-md font-medium text-sm transition-all duration-300 ${currentTab === 'manual'
+            ? 'bg-purple-600 text-white shadow-lg scale-105'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-102'
+            }`}
         >
           ✨ 精修
           {chatHistory.length > 0 && (
@@ -208,7 +211,7 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
   startReview,
 }) => {
   return (
-    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 animate-fadeIn">
+    <div className="bg-[#1a1d2d]/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-lg animate-fadeIn flex flex-col gap-4">
       <div className="flex justify-between items-center mb-4">
         <div>
           <h2 className="text-lg font-bold text-white">
@@ -227,9 +230,8 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
           <button
             onClick={startReview}
             disabled={isLoading}
-            className={`px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm transition-all ${
-              isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'
-            }`}
+            className={`px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'
+              }`}
           >
             专家自检
           </button>
@@ -252,13 +254,12 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
             {[1, 2, 3, 4, 5].map((stage) => (
               <div
                 key={stage}
-                className={`flex-1 h-2 rounded-full transition-all ${
-                  (cotCurrentStage && stage < cotCurrentStage) || (!cotCurrentStage && cotStage4)
-                    ? 'bg-green-500'
-                    : stage === cotCurrentStage
+                className={`flex-1 h-2 rounded-full transition-all ${(cotCurrentStage && stage < cotCurrentStage) || (!cotCurrentStage && cotStage4)
+                  ? 'bg-green-500'
+                  : stage === cotCurrentStage
                     ? 'bg-green-400 animate-pulse'
                     : 'bg-gray-200'
-                }`}
+                  }`}
               />
             ))}
           </div>
@@ -274,7 +275,7 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* 阶段1结果：剧本分析 */}
             {cotStage1 && (
-              <div className="bg-gray-800 p-3 rounded-lg border border-green-700">
+              <div className="bg-[#1a1d2d]/80 backdrop-blur-md p-3 rounded-lg border border-green-500/30">
                 <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
                   <span className="w-5 h-5 bg-green-600 text-white rounded-full flex items-center justify-center text-xs">
                     1
@@ -305,13 +306,12 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
                         {cotStage1.emotionArc.map((e, i) => (
                           <span
                             key={i}
-                            className={`px-1.5 py-0.5 rounded text-xs ${
-                              e.intensity >= 8
-                                ? 'bg-red-900/50 text-red-300'
-                                : e.intensity >= 5
+                            className={`px-1.5 py-0.5 rounded text-xs ${e.intensity >= 8
+                              ? 'bg-red-900/50 text-red-300'
+                              : e.intensity >= 5
                                 ? 'bg-yellow-900/50 text-yellow-300'
                                 : 'bg-blue-900/50 text-blue-300'
-                            }`}
+                              }`}
                           >
                             {e.emotion}({e.intensity})
                           </span>
@@ -325,7 +325,7 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
 
             {/* 阶段2结果：视觉策略 */}
             {cotStage2 && (
-              <div className="bg-gray-800 p-3 rounded-lg border border-green-700">
+              <div className="bg-[#1a1d2d]/80 backdrop-blur-md p-3 rounded-lg border border-green-500/30">
                 <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
                   <span className="w-5 h-5 bg-green-600 text-white rounded-full flex items-center justify-center text-xs">
                     2
@@ -347,7 +347,7 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
 
             {/* 阶段3结果：镜头分配 */}
             {cotStage3 && (
-              <div className="bg-gray-800 p-3 rounded-lg border border-green-700">
+              <div className="bg-[#1a1d2d]/80 backdrop-blur-md p-3 rounded-lg border border-green-500/30">
                 <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
                   <span className="w-5 h-5 bg-green-600 text-white rounded-full flex items-center justify-center text-xs">
                     3
@@ -386,7 +386,7 @@ const GenerateTab: React.FC<ShotGenerationPageProps> = ({
               <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300">
                 📜 查看当前阶段原始输出
               </summary>
-              <pre className="mt-2 p-2 bg-gray-900 text-gray-200 rounded text-xs overflow-auto max-h-48 whitespace-pre-wrap border border-gray-700">
+              <pre className="mt-2 p-2 bg-black/40 text-gray-200 rounded text-xs overflow-auto max-h-48 whitespace-pre-wrap border border-white/10">
                 {cotRawOutput.slice(-2000)}
               </pre>
             </details>
@@ -422,7 +422,7 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
   return (
     <div className="space-y-4 animate-fadeIn">
       {/* 顶部操作栏 */}
-      <div className="flex justify-between items-center bg-gray-800 p-3 rounded-lg border border-gray-700">
+      <div className="flex justify-between items-center bg-[#1a1d2d]/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-lg">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-bold text-white">自检报告</h2>
           <span className="text-xs text-gray-400">
@@ -492,9 +492,8 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
             {suggestions.map((s, i) => (
               <div
                 key={i}
-                className={`bg-gray-800 p-3 rounded-lg border-2 cursor-pointer transition-all hover:bg-gray-750 ${
-                  s.selected ? 'border-amber-500 bg-amber-900/30' : 'border-gray-700'
-                }`}
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${s.selected ? 'border-amber-500 bg-amber-900/40' : 'bg-[#1a1d2d]/80 backdrop-blur-md border-white/10 hover:border-amber-500/50'
+                  }`}
                 onClick={() => setSelectedSuggestion(s)}
               >
                 <div className="flex items-start gap-2">
@@ -537,7 +536,7 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
       )}
 
       {/* 完整分镜表 */}
-      <div className="bg-gray-800 p-3 rounded-lg border border-gray-700">
+      <div className="bg-[#1a1d2d]/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-lg">
         <h3 className="text-sm font-bold text-gray-200 mb-2">
           📊 当前分镜表（{shots.length} 个镜头）
         </h3>
@@ -551,7 +550,7 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
           onClick={() => setSelectedSuggestion(null)}
         >
           <div
-            className="bg-gray-800 p-6 rounded-lg max-w-2xl w-full mx-4 border border-gray-700"
+            className="bg-[#1a1d2d]/90 backdrop-blur-xl p-6 rounded-2xl max-w-2xl w-full mx-4 border border-white/10 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-bold text-white mb-4">建议详情</h3>
@@ -610,8 +609,8 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">
       {/* TOP: Chat Agent - 增加高度到280px */}
-      <div className="h-[280px] flex flex-col bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shrink-0">
-        <div className="py-2 px-4 bg-gray-900 text-white flex justify-between items-center">
+      <div className="h-[320px] flex flex-col bg-[#1a1d2d]/80 backdrop-blur-md rounded-xl border border-white/10 shadow-lg overflow-hidden shrink-0">
+        <div className="py-3 px-5 bg-black/40 text-white flex justify-between items-center border-b border-white/5">
           <div>
             <h2 className="text-sm font-bold flex items-center gap-2">🤖 AI 导演助理</h2>
             <p className="text-[10px] text-gray-400">讨论剧情/镜头，确认后执行修改</p>
@@ -633,7 +632,7 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
 
         <div className="flex flex-1 overflow-hidden">
           <div
-            className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-900"
+            className="flex-1 overflow-y-auto p-4 space-y-3 bg-transparent"
             ref={chatScrollRef}
           >
             {chatHistory.map((msg, idx) => (
@@ -642,11 +641,10 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] px-3 py-2 rounded-lg text-xs ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-800 border border-gray-700 text-gray-200'
-                  }`}
+                  className={`max-w-[85%] px-3.5 py-2.5 rounded-xl text-sm ${msg.role === 'user'
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                    : 'bg-black/40 backdrop-blur-md border border-white/10 text-gray-200'
+                    }`}
                 >
                   {/* 优化显示：支持换行和代码块 */}
                   <div className="whitespace-pre-wrap break-words font-mono leading-relaxed">
@@ -657,7 +655,7 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
             ))}
             {isLoading && !progressMsg.includes('修改') && (
               <div className="flex justify-start">
-                <div className="bg-gray-800 border border-gray-700 px-3 py-2 rounded-lg">
+                <div className="bg-black/40 backdrop-blur-md border border-white/10 px-4 py-3 rounded-xl">
                   <div className="flex gap-1">
                     <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></div>
                     <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce delay-75"></div>
@@ -669,10 +667,10 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
           </div>
         </div>
 
-        <div className="px-3 py-2 bg-gray-800 border-t border-gray-700">
+        <div className="px-4 py-3 bg-black/40 border-t border-white/5">
           <div className="relative">
             <textarea
-              className="w-full p-2 pr-10 bg-gray-700 text-gray-200 rounded-md text-xs focus:ring-1 focus:ring-blue-500 outline-none resize-none h-10"
+              className="w-full p-3 pr-12 bg-black/40 text-white border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none h-12 placeholder-gray-500"
               placeholder="输入想法，如：把第3镜改成俯视..."
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}

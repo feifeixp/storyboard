@@ -4145,543 +4145,551 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-3 bg-gray-900 text-gray-100 font-inter">
-      <header className="max-w-7xl mx-auto mb-4 flex justify-between items-center">
-        {/* 用户信息 */}
-        <div className="flex items-center gap-2">
-          {(() => {
-            const userInfo = getUserInfo();
-            return userInfo ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-md">
-                {userInfo.avatar && (
-                  <img src={userInfo.avatar} alt="avatar" className="w-6 h-6 rounded-full" />
-                )}
-                <span className="text-xs text-gray-300">{userInfo.nickname || userInfo.mobile || userInfo.email}</span>
-                {/* 🆕 积分余额显示 */}
-                {userPoints && (
-                  <span className="text-yellow-400 font-medium text-xs ml-2 flex items-center gap-1">
-                    💰 {userPoints.totalAvailablePoints.toLocaleString()}
-                  </span>
-                )}
-              </div>
-            ) : null;
-          })()}
-        </div>
-        <h1 className="text-xl font-bold tracking-tight text-white">Director Studio</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={goToProjectList}
-            className="px-3 py-1.5 bg-gray-800 text-blue-400 border border-gray-700 rounded-md text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
-            title="返回项目列表"
-          >
-            📁 项目
-          </button>
-          {/* 🆕 重新分析按钮 - 仅在项目主界面显示 */}
-          {currentStep === AppStep.PROJECT_DASHBOARD && currentProject && (
+    <div className="min-h-screen p-3 md:p-6 bg-[#0f111a] text-gray-200 font-inter relative overflow-x-hidden">
+      {/* 全局动态背景装饰 */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 blur-[120px] rounded-full"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-900/10 blur-[120px] rounded-full"></div>
+      </div>
+
+      <div className="relative z-10">
+        <header className="max-w-7xl mx-auto mb-6 p-4 flex justify-between items-center bg-[#1a1b26]/70 backdrop-blur-xl border border-white/10 rounded-2xl shadow-lg transition-all hover:bg-[#1a1b26]/80">
+          {/* 用户信息 */}
+          <div className="flex items-center gap-2">
+            {(() => {
+              const userInfo = getUserInfo();
+              return userInfo ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-md">
+                  {userInfo.avatar && (
+                    <img src={userInfo.avatar} alt="avatar" className="w-6 h-6 rounded-full" />
+                  )}
+                  <span className="text-xs text-gray-300">{userInfo.nickname || userInfo.mobile || userInfo.email}</span>
+                  {/* 🆕 积分余额显示 */}
+                  {userPoints && (
+                    <span className="text-yellow-400 font-medium text-xs ml-2 flex items-center gap-1">
+                      💰 {userPoints.totalAvailablePoints.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              ) : null;
+            })()}
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-white">Director Studio</h1>
+          <div className="flex items-center gap-2">
             <button
-              onClick={startReanalyzeProject}
-              disabled={isReanalyzing}
-              className={`px-3 py-1.5 border rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${isReanalyzing
-                ? 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed'
-                : 'bg-gray-800 text-purple-400 border border-gray-700 hover:bg-gray-700'
-                }`}
-              title="重新分析所有剧集，提取角色、场景、类型等信息"
+              onClick={goToProjectList}
+              className="px-3 py-1.5 bg-gray-800 text-blue-400 border border-gray-700 rounded-md text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
+              title="返回项目列表"
             >
-              {isReanalyzing ? '🔄 分析中...' : '🔍 重新分析'}
+              📁 项目
             </button>
-          )}
-          <button
-            onClick={logout}
-            className="px-3 py-1.5 bg-gray-800 text-yellow-400 border border-gray-700 rounded-md text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
-            title="退出登录"
-          >
-            🚪 退出
-          </button>
-        </div>
-      </header>
-
-      {/* 🆕 项目列表页面 */}
-      {currentStep === AppStep.PROJECT_LIST && (
-        <div className="max-w-7xl mx-auto">
-          {/* 项目列表 */}
-          <ProjectList
-            projects={projects}
-            onSelectProject={handleSelectProject}
-            onCreateProject={handleCreateProject}
-            onDeleteProject={handleDeleteProject}
-          />
-        </div>
-      )}
-
-      {/* 🆕 新建项目向导 */}
-      {currentStep === AppStep.PROJECT_WIZARD && (
-        <ProjectWizard
-          onComplete={handleProjectComplete}
-          onCancel={handleProjectCancel}
-          onAnalyze={handleAnalyzeProject}
-        />
-      )}
-
-      {/* 🆕 项目主界面 */}
-      {currentStep === AppStep.PROJECT_DASHBOARD && currentProject && (
-        <ProjectDashboard
-          project={currentProject}
-          onSelectEpisode={handleSelectEpisode}
-          onUpdateProject={handleUpdateProject}
-          onBack={goToProjectList}
-        />
-      )}
-
-      {/* 🆕 重新分析界面 */}
-      {currentStep === AppStep.REANALYZE_PROJECT && currentProject && (
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">
-                🔍 重新分析项目: {currentProject.name}
-              </h2>
+            {/* 🆕 重新分析按钮 - 仅在项目主界面显示 */}
+            {currentStep === AppStep.PROJECT_DASHBOARD && currentProject && (
               <button
-                onClick={cancelReanalyze}
+                onClick={startReanalyzeProject}
                 disabled={isReanalyzing}
-                className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-md text-sm hover:bg-gray-600 transition-all disabled:opacity-50"
+                className={`px-3 py-1.5 border rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${isReanalyzing
+                  ? 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed'
+                  : 'bg-gray-800 text-purple-400 border border-gray-700 hover:bg-gray-700'
+                  }`}
+                title="重新分析所有剧集，提取角色、场景、类型等信息"
               >
-                取消
+                {isReanalyzing ? '🔄 分析中...' : '🔍 重新分析'}
               </button>
-            </div>
+            )}
+            <button
+              onClick={logout}
+              className="px-3 py-1.5 bg-gray-800 text-yellow-400 border border-gray-700 rounded-md text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
+              title="退出登录"
+            >
+              🚪 退出
+            </button>
+          </div>
+        </header>
 
-            {/* 配置区域 - 只在未开始分析时显示 */}
-            {!isReanalyzing && !reanalyzeResult && (
-              <div className="space-y-4 mb-6">
-                <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
-                  <h3 className="text-sm font-medium text-gray-300 mb-3">📊 分析配置</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">分析模型</label>
-                      <div className="bg-gray-800 rounded px-3 py-2 text-sm text-white flex items-center gap-2">
-                        Gemini 2.5 Flash
+        {/* 🆕 项目列表页面 */}
+        {currentStep === AppStep.PROJECT_LIST && (
+          <div className="max-w-7xl mx-auto">
+            {/* 项目列表 */}
+            <ProjectList
+              projects={projects}
+              onSelectProject={handleSelectProject}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+            />
+          </div>
+        )}
+
+        {/* 🆕 新建项目向导 */}
+        {currentStep === AppStep.PROJECT_WIZARD && (
+          <ProjectWizard
+            onComplete={handleProjectComplete}
+            onCancel={handleProjectCancel}
+            onAnalyze={handleAnalyzeProject}
+          />
+        )}
+
+        {/* 🆕 项目主界面 */}
+        {currentStep === AppStep.PROJECT_DASHBOARD && currentProject && (
+          <ProjectDashboard
+            project={currentProject}
+            onSelectEpisode={handleSelectEpisode}
+            onUpdateProject={handleUpdateProject}
+            onBack={goToProjectList}
+          />
+        )}
+
+        {/* 🆕 重新分析界面 */}
+        {currentStep === AppStep.REANALYZE_PROJECT && currentProject && (
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">
+                  🔍 重新分析项目: {currentProject.name}
+                </h2>
+                <button
+                  onClick={cancelReanalyze}
+                  disabled={isReanalyzing}
+                  className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-md text-sm hover:bg-gray-600 transition-all disabled:opacity-50"
+                >
+                  取消
+                </button>
+              </div>
+
+              {/* 配置区域 - 只在未开始分析时显示 */}
+              {!isReanalyzing && !reanalyzeResult && (
+                <div className="space-y-4 mb-6">
+                  <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
+                    <h3 className="text-sm font-medium text-gray-300 mb-3">📊 分析配置</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">分析模型</label>
+                        <div className="bg-gray-800 rounded px-3 py-2 text-sm text-white flex items-center gap-2">
+                          Gemini 2.5 Flash
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">剧集数量</label>
+                        <div className="bg-gray-800 rounded px-3 py-2 text-sm text-white">
+                          {currentProject?.episodes?.length || 0} 集
+                        </div>
                       </div>
                     </div>
+                    <p className="text-xs text-gray-500 mt-3">
+                      💡 分析将从剧本中提取：类型/题材、角色信息及形态、场景库、剧情大纲
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <button
+                      onClick={confirmAndStartReanalyze}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-500 flex items-center gap-2"
+                    >
+                      🔍 开始分析
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 进度显示 */}
+              {isReanalyzing && reanalyzeProgress && (
+                <div className="mb-6 bg-blue-900/30 p-4 rounded-lg border border-blue-700">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">剧集数量</label>
-                      <div className="bg-gray-800 rounded px-3 py-2 text-sm text-white">
-                        {currentProject?.episodes?.length || 0} 集
-                      </div>
+                      <p className="text-sm font-bold text-blue-300">
+                        正在分析第 {reanalyzeProgress.currentBatch}/{reanalyzeProgress.totalBatches} 批
+                      </p>
+                      <p className="text-xs text-blue-400">
+                        {reanalyzeProgress.status === 'analyzing' && '分析中...'}
+                        {reanalyzeProgress.status === 'merging' && '合并结果...'}
+                        {reanalyzeProgress.status === 'complete' && '完成！'}
+                      </p>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-3">
-                    💡 分析将从剧本中提取：类型/题材、角色信息及形态、场景库、剧情大纲
-                  </p>
+                  <div className="bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-blue-500 h-full transition-all duration-300"
+                      style={{ width: `${(reanalyzeProgress.currentBatch / reanalyzeProgress.totalBatches) * 100}%` }}
+                    />
+                  </div>
                 </div>
+              )}
 
-                <div className="flex justify-center">
+              {/* 实时结果显示 */}
+              {reanalyzeResult && (
+                <div className="space-y-4">
+                  {/* 基础信息 */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-900 p-3 rounded">
+                      <h4 className="text-xs text-gray-500 mb-1">类型</h4>
+                      <p className="text-sm text-white">{reanalyzeResult.genre || '未识别'}</p>
+                    </div>
+                    <div className="bg-gray-900 p-3 rounded">
+                      <h4 className="text-xs text-gray-500 mb-1">统计</h4>
+                      <p className="text-sm text-white">
+                        {reanalyzeResult.characters.length}角色 / {reanalyzeResult.scenes.length}场景 / {reanalyzeResult.episodeSummaries.length}集
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 角色列表 */}
+                  {reanalyzeResult.characters.length > 0 && (
+                    <div className="bg-gray-900 p-3 rounded">
+                      <h4 className="text-xs text-gray-500 mb-2">👥 角色 ({reanalyzeResult.characters.length})</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {reanalyzeResult.characters.map((c, i) => (
+                          <span key={i} className="px-2 py-1 bg-gray-700 text-gray-200 rounded text-xs">
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 场景列表 */}
+                  {reanalyzeResult.scenes.length > 0 && (
+                    <div className="bg-gray-900 p-3 rounded">
+                      <h4 className="text-xs text-gray-500 mb-2">🏛️ 场景 ({reanalyzeResult.scenes.length})</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {reanalyzeResult.scenes.map((s, i) => (
+                          <span key={i} className="px-2 py-1 bg-gray-700 text-gray-200 rounded text-xs">
+                            {s.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 剧集概要 */}
+                  {reanalyzeResult.episodeSummaries.length > 0 && (
+                    <div className="bg-gray-900 p-3 rounded max-h-64 overflow-y-auto">
+                      <h4 className="text-xs text-gray-500 mb-2">📺 剧集概要 ({reanalyzeResult.episodeSummaries.length})</h4>
+                      <div className="space-y-1">
+                        {reanalyzeResult.episodeSummaries.slice(0, 20).map((ep, i) => (
+                          <div key={i} className="text-xs text-gray-300">
+                            <span className="text-blue-400 font-mono">Ep{ep.episodeNumber}</span>
+                            <span className="text-gray-500 mx-1">|</span>
+                            <span>{ep.title}</span>
+                            <span className="text-gray-500 ml-2">{ep.summary?.slice(0, 50)}...</span>
+                          </div>
+                        ))}
+                        {reanalyzeResult.episodeSummaries.length > 20 && (
+                          <p className="text-xs text-gray-500">... 还有 {reanalyzeResult.episodeSummaries.length - 20} 集</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 确认按钮 */}
+                  {!isReanalyzing && (
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+                      <button
+                        onClick={cancelReanalyze}
+                        className="px-4 py-2 bg-gray-700 text-gray-300 rounded-md text-sm hover:bg-gray-600"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={confirmReanalyzeResult}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-500"
+                      >
+                        ✅ 应用分析结果
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 分析中但还没有结果 */}
+              {isReanalyzing && !reanalyzeResult && (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-gray-400">正在分析 {currentProject?.episodes?.length || 0} 集剧本...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 原有流程 - 只在非项目管理页面显示 */}
+        {currentStep !== AppStep.PROJECT_LIST && currentStep !== AppStep.PROJECT_WIZARD && currentStep !== AppStep.PROJECT_DASHBOARD && currentStep !== AppStep.REANALYZE_PROJECT && (
+          <>
+            <StepTracker currentStep={currentStep} />
+
+            <main className="max-w-[1600px] mx-auto mt-4">
+              {/* 项目信息栏 */}
+              {currentProject && (
+                <div className="mb-3 glass-card rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">📁</span>
+                    <div>
+                      <span className="font-bold text-[var(--color-text)] text-sm">{currentProject.name}</span>
+                      {currentEpisodeNumber && (
+                        <span className="ml-2 px-2 py-0.5 bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] text-xs rounded-full border border-[var(--color-accent-blue)]/30">
+                          第{currentEpisodeNumber}集
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[var(--color-text-tertiary)] text-xs">
+                      {currentProject.settings.genre || '未设置类型'}
+                    </span>
+                  </div>
                   <button
-                    onClick={confirmAndStartReanalyze}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-500 flex items-center gap-2"
+                    onClick={goToProjectList}
+                    className="px-2 py-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] hover:bg-[var(--color-surface-hover)] rounded transition-all"
                   >
-                    🔍 开始分析
+                    ← 返回项目
                   </button>
                 </div>
+              )}
+
+              {currentStep === AppStep.INPUT_SCRIPT && (
+                <ScriptInputPage
+                  script={script}
+                  currentScript={currentScript}
+                  setScript={setScript}
+                  handleScriptUpload={handleScriptUpload}
+                  startScriptCleaning={startScriptCleaning}
+                  // 🆕 剧集拆分相关
+                  episodes={episodes}
+                  currentEpisodeIndex={currentEpisodeIndex}
+                  selectEpisode={selectEpisode}
+                  cancelEpisodeSplit={cancelEpisodeSplit}
+                  characterRefs={characterRefs}
+                  setCharacterRefs={setCharacterRefs}
+                  newCharName={newCharName}
+                  setNewCharName={setNewCharName}
+                  newCharAppearance={newCharAppearance}
+                  setNewCharAppearance={setNewCharAppearance}
+                  newCharGender={newCharGender}
+                  setNewCharGender={setNewCharGender}
+                  editingCharId={editingCharId}
+                  setEditingCharId={setEditingCharId}
+                  isExtractingChars={isExtractingChars}
+                  handleCharUpload={handleCharUpload}
+                  removeChar={removeChar}
+                  extractCharactersFromScriptHandler={extractCharactersFromScriptHandler}
+                />
+              )}
+
+              {/* 🆕 剧本清洗页面 */}
+              {currentStep === AppStep.SCRIPT_CLEANING && (
+                <ScriptCleaningPage
+                  isCleaning={isCleaning}
+                  cleaningProgress={cleaningProgress}
+                  cleaningResult={cleaningResult}
+                  generationMode={generationMode}
+                  setGenerationMode={setGenerationMode}
+                  characterRefs={characterRefs}
+                  startShotListGeneration={startShotListGeneration}
+                />
+              )}
+
+              {/* 🆕 统一的分镜编辑页面（Tab布局） */}
+              {(currentStep === AppStep.GENERATE_LIST || currentStep === AppStep.REVIEW_OPTIMIZE || currentStep === AppStep.MANUAL_EDIT) && (
+                <ShotGenerationPage
+                  currentTab={currentTab}
+                  handleTabChange={handleTabChange}
+                  shots={shots}
+                  isLoading={isLoading}
+                  progressMsg={progressMsg}
+                  generationMode={generationMode}
+                  cotCurrentStage={cotCurrentStage}
+                  cotStage1={cotStage1}
+                  cotStage2={cotStage2}
+                  cotStage3={cotStage3}
+                  cotStage4={cotStage4}
+                  cotStage5={cotStage5}
+                  cotRawOutput={cotRawOutput}
+                  suggestions={suggestions}
+                  selectedSuggestion={selectedSuggestion}
+                  setSelectedSuggestion={setSelectedSuggestion}
+                  startReview={startReview}
+                  applyOptimizations={applyOptimizations}
+                  oneClickOptimize={oneClickOptimize}
+                  getSelectedSuggestionsCount={getSelectedSuggestionsCount}
+                  selectAllSuggestions={selectAllSuggestions}
+                  deselectAllSuggestions={deselectAllSuggestions}
+                  toggleSuggestionSelection={toggleSuggestionSelection}
+                  chatHistory={chatHistory}
+                  chatInput={chatInput}
+                  setChatInput={setChatInput}
+                  chatScrollRef={chatScrollRef}
+                  handleConsultDirector={handleConsultDirector}
+                  handleExecuteChanges={handleExecuteChanges}
+                  exportToJSON={exportToJSON}
+                  exportToExcel={exportToExcel}
+                  downloadScript={downloadScript}
+                  setCurrentStep={setCurrentStep}
+                  renderShotTable={renderShotTable}
+                  episodeSummary={episodeSummary}
+                />
+              )}
+
+              {/* 🆕 提取AI提示词页面 */}
+              {currentStep === AppStep.EXTRACT_PROMPTS && (
+                <PromptExtractionPage
+                  shots={shots}
+                  setShots={setShots}
+                  isExtracting={isExtracting}
+                  setIsExtracting={setIsExtracting}
+                  extractProgress={extractProgress}
+                  setExtractProgress={setExtractProgress}
+                  isValidatingPrompts={isValidatingPrompts}
+                  promptValidationResults={promptValidationResults}
+                  setPromptValidationResults={setPromptValidationResults}
+                  extractImagePromptsStream={extractImagePromptsStream}
+                  validatePrompts={validatePrompts}
+                  oneClickOptimizePrompts={oneClickOptimizePrompts}
+                  optimizedChanges={optimizedChanges}
+                  setOptimizedChanges={setOptimizedChanges}
+                  setCurrentStep={setCurrentStep}
+                  currentProject={currentProject}
+                  currentEpisodeNumber={currentEpisodeNumber}
+                  script={script}
+                  saveEpisode={saveEpisode}
+                  characterRefs={characterRefs}
+                />
+              )}
+
+              {currentStep === AppStep.GENERATE_IMAGES && (
+                <ImageGenerationPage
+                  shots={shots}
+                  characterRefs={characterRefs}
+                  hqUrls={hqUrls}
+                  setHqUrls={setHqUrls}
+                  selectedStyle={selectedStyle}
+                  setSelectedStyle={setSelectedStyle}
+                  showStyleCards={showStyleCards}
+                  setShowStyleCards={setShowStyleCards}
+                  customStylePrompt={customStylePrompt}
+                  setCustomStylePrompt={setCustomStylePrompt}
+                  imageModel={imageModel}
+                  setImageModel={setImageModel}
+                  availableImageModels={availableImageModels}
+                  isLoadingModels={isLoadingModels}
+                  uploadGridIndex={uploadGridIndex}
+                  setUploadGridIndex={setUploadGridIndex}
+                  uploadDialogOpen={uploadDialogOpen}
+                  setUploadDialogOpen={setUploadDialogOpen}
+                  uploadUrl={uploadUrl}
+                  setUploadUrl={setUploadUrl}
+                  uploadFile={uploadFile}
+                  setUploadFile={setUploadFile}
+                  isLoading={isLoading}
+                  progressMsg={progressMsg}
+                  generateHQ={generateHQ}
+                  handleRegenerateGrid={regenerateSingleGrid}
+                  handleUploadGrid={handleUploadGrid}
+                  handleRefreshGrid={handleRefreshGrid}
+                  applyGridsToShots={applyGridsToShots}
+                  abortController={abortController}
+                  setAbortController={setAbortController}
+                  setCurrentStep={setCurrentStep}
+                  currentProject={currentProject}
+                  currentEpisodeNumber={currentEpisodeNumber}
+                />
+              )}
+
+              {/* 🆕 最终故事板预览 */}
+              {currentStep === AppStep.FINAL_STORYBOARD && (
+                <FinalStoryboard
+                  shots={shots}
+                  characterRefs={characterRefs}
+                  scenes={currentProject?.scenes || []}
+                  episodeNumber={currentEpisodeNumber}
+                  projectName={currentProject?.name}
+                  onBack={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
+                />
+              )}
+            </main>
+
+            {isLoading && (
+              <div className="fixed bottom-4 right-4 z-[100]">
+                <div className="bg-gray-800 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 border border-gray-700">
+                  <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-sm font-medium text-gray-200">{progressMsg}</p>
+                </div>
               </div>
             )}
 
-            {/* 进度显示 */}
-            {isReanalyzing && reanalyzeProgress && (
-              <div className="mb-6 bg-blue-900/30 p-4 rounded-lg border border-blue-700">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <div>
-                    <p className="text-sm font-bold text-blue-300">
-                      正在分析第 {reanalyzeProgress.currentBatch}/{reanalyzeProgress.totalBatches} 批
-                    </p>
-                    <p className="text-xs text-blue-400">
-                      {reanalyzeProgress.status === 'analyzing' && '分析中...'}
-                      {reanalyzeProgress.status === 'merging' && '合并结果...'}
-                      {reanalyzeProgress.status === 'complete' && '完成！'}
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-gray-700 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-blue-500 h-full transition-all duration-300"
-                    style={{ width: `${(reanalyzeProgress.currentBatch / reanalyzeProgress.totalBatches) * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
+            {/* 🆕 上传九宫格对话框 */}
+            {uploadDialogOpen && (
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
+                <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4 shadow-2xl">
+                  <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
+                    📤 上传第 {uploadGridIndex !== null ? uploadGridIndex + 1 : ''} 张九宫格
+                  </h3>
 
-            {/* 实时结果显示 */}
-            {reanalyzeResult && (
-              <div className="space-y-4">
-                {/* 基础信息 */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-900 p-3 rounded">
-                    <h4 className="text-xs text-gray-500 mb-1">类型</h4>
-                    <p className="text-sm text-white">{reanalyzeResult.genre || '未识别'}</p>
-                  </div>
-                  <div className="bg-gray-900 p-3 rounded">
-                    <h4 className="text-xs text-gray-500 mb-1">统计</h4>
-                    <p className="text-sm text-white">
-                      {reanalyzeResult.characters.length}角色 / {reanalyzeResult.scenes.length}场景 / {reanalyzeResult.episodeSummaries.length}集
-                    </p>
-                  </div>
-                </div>
-
-                {/* 角色列表 */}
-                {reanalyzeResult.characters.length > 0 && (
-                  <div className="bg-gray-900 p-3 rounded">
-                    <h4 className="text-xs text-gray-500 mb-2">👥 角色 ({reanalyzeResult.characters.length})</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {reanalyzeResult.characters.map((c, i) => (
-                        <span key={i} className="px-2 py-1 bg-gray-700 text-gray-200 rounded text-xs">
-                          {c.name}
-                        </span>
-                      ))}
+                  <div className="space-y-4">
+                    {/* URL输入 */}
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                        图片URL
+                      </label>
+                      <input
+                        type="text"
+                        value={uploadUrl}
+                        onChange={(e) => setUploadUrl(e.target.value)}
+                        placeholder="https://example.com/image.png"
+                        className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
                     </div>
-                  </div>
-                )}
 
-                {/* 场景列表 */}
-                {reanalyzeResult.scenes.length > 0 && (
-                  <div className="bg-gray-900 p-3 rounded">
-                    <h4 className="text-xs text-gray-500 mb-2">🏛️ 场景 ({reanalyzeResult.scenes.length})</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {reanalyzeResult.scenes.map((s, i) => (
-                        <span key={i} className="px-2 py-1 bg-gray-700 text-gray-200 rounded text-xs">
-                          {s.name}
-                        </span>
-                      ))}
+                    {/* 分隔线 */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+                      <span className="text-xs text-[var(--color-text-tertiary)]">或</span>
+                      <div className="flex-1 h-px bg-[var(--color-border)]"></div>
                     </div>
-                  </div>
-                )}
 
-                {/* 剧集概要 */}
-                {reanalyzeResult.episodeSummaries.length > 0 && (
-                  <div className="bg-gray-900 p-3 rounded max-h-64 overflow-y-auto">
-                    <h4 className="text-xs text-gray-500 mb-2">📺 剧集概要 ({reanalyzeResult.episodeSummaries.length})</h4>
-                    <div className="space-y-1">
-                      {reanalyzeResult.episodeSummaries.slice(0, 20).map((ep, i) => (
-                        <div key={i} className="text-xs text-gray-300">
-                          <span className="text-blue-400 font-mono">Ep{ep.episodeNumber}</span>
-                          <span className="text-gray-500 mx-1">|</span>
-                          <span>{ep.title}</span>
-                          <span className="text-gray-500 ml-2">{ep.summary?.slice(0, 50)}...</span>
-                        </div>
-                      ))}
-                      {reanalyzeResult.episodeSummaries.length > 20 && (
-                        <p className="text-xs text-gray-500">... 还有 {reanalyzeResult.episodeSummaries.length - 20} 集</p>
+                    {/* 文件上传 */}
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                        上传本地图片
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                        className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                      />
+                      {uploadFile && (
+                        <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
+                          已选择: {uploadFile.name}
+                        </p>
                       )}
                     </div>
                   </div>
-                )}
 
-                {/* 确认按钮 */}
-                {!isReanalyzing && (
-                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+                  {/* 按钮 */}
+                  <div className="flex gap-3 mt-6">
                     <button
-                      onClick={cancelReanalyze}
-                      className="px-4 py-2 bg-gray-700 text-gray-300 rounded-md text-sm hover:bg-gray-600"
+                      onClick={() => {
+                        setUploadDialogOpen(false);
+                        setUploadGridIndex(null);
+                        setUploadUrl('');
+                        setUploadFile(null);
+                      }}
+                      className="flex-1 px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg font-medium hover:bg-[var(--color-surface-hover)] transition-all"
                     >
                       取消
                     </button>
                     <button
-                      onClick={confirmReanalyzeResult}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-500"
+                      onClick={handleUploadGrid}
+                      disabled={!uploadUrl.trim() && !uploadFile}
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      ✅ 应用分析结果
+                      确认上传
                     </button>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* 分析中但还没有结果 */}
-            {isReanalyzing && !reanalyzeResult && (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-gray-400">正在分析 {currentProject?.episodes?.length || 0} 集剧本...</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 原有流程 - 只在非项目管理页面显示 */}
-      {currentStep !== AppStep.PROJECT_LIST && currentStep !== AppStep.PROJECT_WIZARD && currentStep !== AppStep.PROJECT_DASHBOARD && currentStep !== AppStep.REANALYZE_PROJECT && (
-        <>
-          <StepTracker currentStep={currentStep} />
-
-          <main className="max-w-[1600px] mx-auto mt-4">
-            {/* 项目信息栏 */}
-            {currentProject && (
-              <div className="mb-3 glass-card rounded-lg p-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">📁</span>
-                  <div>
-                    <span className="font-bold text-[var(--color-text)] text-sm">{currentProject.name}</span>
-                    {currentEpisodeNumber && (
-                      <span className="ml-2 px-2 py-0.5 bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] text-xs rounded-full border border-[var(--color-accent-blue)]/30">
-                        第{currentEpisodeNumber}集
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[var(--color-text-tertiary)] text-xs">
-                    {currentProject.settings.genre || '未设置类型'}
-                  </span>
-                </div>
-                <button
-                  onClick={goToProjectList}
-                  className="px-2 py-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] hover:bg-[var(--color-surface-hover)] rounded transition-all"
-                >
-                  ← 返回项目
-                </button>
-              </div>
-            )}
-
-            {currentStep === AppStep.INPUT_SCRIPT && (
-              <ScriptInputPage
-                script={script}
-                currentScript={currentScript}
-                setScript={setScript}
-                handleScriptUpload={handleScriptUpload}
-                startScriptCleaning={startScriptCleaning}
-                // 🆕 剧集拆分相关
-                episodes={episodes}
-                currentEpisodeIndex={currentEpisodeIndex}
-                selectEpisode={selectEpisode}
-                cancelEpisodeSplit={cancelEpisodeSplit}
-                characterRefs={characterRefs}
-                setCharacterRefs={setCharacterRefs}
-                newCharName={newCharName}
-                setNewCharName={setNewCharName}
-                newCharAppearance={newCharAppearance}
-                setNewCharAppearance={setNewCharAppearance}
-                newCharGender={newCharGender}
-                setNewCharGender={setNewCharGender}
-                editingCharId={editingCharId}
-                setEditingCharId={setEditingCharId}
-                isExtractingChars={isExtractingChars}
-                handleCharUpload={handleCharUpload}
-                removeChar={removeChar}
-                extractCharactersFromScriptHandler={extractCharactersFromScriptHandler}
-              />
-            )}
-
-            {/* 🆕 剧本清洗页面 */}
-            {currentStep === AppStep.SCRIPT_CLEANING && (
-              <ScriptCleaningPage
-                isCleaning={isCleaning}
-                cleaningProgress={cleaningProgress}
-                cleaningResult={cleaningResult}
-                generationMode={generationMode}
-                setGenerationMode={setGenerationMode}
-                characterRefs={characterRefs}
-                startShotListGeneration={startShotListGeneration}
-              />
-            )}
-
-            {/* 🆕 统一的分镜编辑页面（Tab布局） */}
-            {(currentStep === AppStep.GENERATE_LIST || currentStep === AppStep.REVIEW_OPTIMIZE || currentStep === AppStep.MANUAL_EDIT) && (
-              <ShotGenerationPage
-                currentTab={currentTab}
-                handleTabChange={handleTabChange}
-                shots={shots}
-                isLoading={isLoading}
-                progressMsg={progressMsg}
-                generationMode={generationMode}
-                cotCurrentStage={cotCurrentStage}
-                cotStage1={cotStage1}
-                cotStage2={cotStage2}
-                cotStage3={cotStage3}
-                cotStage4={cotStage4}
-                cotStage5={cotStage5}
-                cotRawOutput={cotRawOutput}
-                suggestions={suggestions}
-                selectedSuggestion={selectedSuggestion}
-                setSelectedSuggestion={setSelectedSuggestion}
-                startReview={startReview}
-                applyOptimizations={applyOptimizations}
-                oneClickOptimize={oneClickOptimize}
-                getSelectedSuggestionsCount={getSelectedSuggestionsCount}
-                selectAllSuggestions={selectAllSuggestions}
-                deselectAllSuggestions={deselectAllSuggestions}
-                toggleSuggestionSelection={toggleSuggestionSelection}
-                chatHistory={chatHistory}
-                chatInput={chatInput}
-                setChatInput={setChatInput}
-                chatScrollRef={chatScrollRef}
-                handleConsultDirector={handleConsultDirector}
-                handleExecuteChanges={handleExecuteChanges}
-                exportToJSON={exportToJSON}
-                exportToExcel={exportToExcel}
-                downloadScript={downloadScript}
-                setCurrentStep={setCurrentStep}
-                renderShotTable={renderShotTable}
-                episodeSummary={episodeSummary}
-              />
-            )}
-
-            {/* 🆕 提取AI提示词页面 */}
-            {currentStep === AppStep.EXTRACT_PROMPTS && (
-              <PromptExtractionPage
-                shots={shots}
-                setShots={setShots}
-                isExtracting={isExtracting}
-                setIsExtracting={setIsExtracting}
-                extractProgress={extractProgress}
-                setExtractProgress={setExtractProgress}
-                isValidatingPrompts={isValidatingPrompts}
-                promptValidationResults={promptValidationResults}
-                setPromptValidationResults={setPromptValidationResults}
-                extractImagePromptsStream={extractImagePromptsStream}
-                validatePrompts={validatePrompts}
-                oneClickOptimizePrompts={oneClickOptimizePrompts}
-                optimizedChanges={optimizedChanges}
-                setOptimizedChanges={setOptimizedChanges}
-                setCurrentStep={setCurrentStep}
-                currentProject={currentProject}
-                currentEpisodeNumber={currentEpisodeNumber}
-                script={script}
-                saveEpisode={saveEpisode}
-                characterRefs={characterRefs}
-              />
-            )}
-
-            {currentStep === AppStep.GENERATE_IMAGES && (
-              <ImageGenerationPage
-                shots={shots}
-                characterRefs={characterRefs}
-                hqUrls={hqUrls}
-                setHqUrls={setHqUrls}
-                selectedStyle={selectedStyle}
-                setSelectedStyle={setSelectedStyle}
-                showStyleCards={showStyleCards}
-                setShowStyleCards={setShowStyleCards}
-                customStylePrompt={customStylePrompt}
-                setCustomStylePrompt={setCustomStylePrompt}
-                imageModel={imageModel}
-                setImageModel={setImageModel}
-                availableImageModels={availableImageModels}
-                isLoadingModels={isLoadingModels}
-                uploadGridIndex={uploadGridIndex}
-                setUploadGridIndex={setUploadGridIndex}
-                uploadDialogOpen={uploadDialogOpen}
-                setUploadDialogOpen={setUploadDialogOpen}
-                uploadUrl={uploadUrl}
-                setUploadUrl={setUploadUrl}
-                uploadFile={uploadFile}
-                setUploadFile={setUploadFile}
-                isLoading={isLoading}
-                progressMsg={progressMsg}
-                generateHQ={generateHQ}
-                handleRegenerateGrid={regenerateSingleGrid}
-                handleUploadGrid={handleUploadGrid}
-                handleRefreshGrid={handleRefreshGrid}
-                applyGridsToShots={applyGridsToShots}
-                abortController={abortController}
-                setAbortController={setAbortController}
-                setCurrentStep={setCurrentStep}
-                currentProject={currentProject}
-                currentEpisodeNumber={currentEpisodeNumber}
-              />
-            )}
-
-            {/* 🆕 最终故事板预览 */}
-            {currentStep === AppStep.FINAL_STORYBOARD && (
-              <FinalStoryboard
-                shots={shots}
-                characterRefs={characterRefs}
-                scenes={currentProject?.scenes || []}
-                episodeNumber={currentEpisodeNumber}
-                projectName={currentProject?.name}
-                onBack={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
-              />
-            )}
-          </main>
-
-          {isLoading && (
-            <div className="fixed bottom-4 right-4 z-[100]">
-              <div className="bg-gray-800 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 border border-gray-700">
-                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm font-medium text-gray-200">{progressMsg}</p>
-              </div>
-            </div>
-          )}
-
-          {/* 🆕 上传九宫格对话框 */}
-          {uploadDialogOpen && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
-              <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4 shadow-2xl">
-                <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
-                  📤 上传第 {uploadGridIndex !== null ? uploadGridIndex + 1 : ''} 张九宫格
-                </h3>
-
-                <div className="space-y-4">
-                  {/* URL输入 */}
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                      图片URL
-                    </label>
-                    <input
-                      type="text"
-                      value={uploadUrl}
-                      onChange={(e) => setUploadUrl(e.target.value)}
-                      placeholder="https://example.com/image.png"
-                      className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-
-                  {/* 分隔线 */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-                    <span className="text-xs text-[var(--color-text-tertiary)]">或</span>
-                    <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-                  </div>
-
-                  {/* 文件上传 */}
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                      上传本地图片
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                      className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
-                    />
-                    {uploadFile && (
-                      <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
-                        已选择: {uploadFile.name}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* 按钮 */}
-                <div className="flex gap-3 mt-6">
-                  <button
-                    onClick={() => {
-                      setUploadDialogOpen(false);
-                      setUploadGridIndex(null);
-                      setUploadUrl('');
-                      setUploadFile(null);
-                    }}
-                    className="flex-1 px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg font-medium hover:bg-[var(--color-surface-hover)] transition-all"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleUploadGrid}
-                    disabled={!uploadUrl.trim() && !uploadFile}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    确认上传
-                  </button>
                 </div>
               </div>
-            </div>
-          )}
-        </>
-      )}
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

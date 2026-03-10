@@ -211,7 +211,7 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
   return (
     <div className="space-y-4 pb-20">
       {/* 顶部栏 */}
-      <div className="flex justify-between items-center bg-gray-800 p-4 rounded-lg border border-gray-700">
+      <div className="flex justify-between items-center bg-[#1a1d2d]/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-lg">
         <div>
           <h2 className="text-xl font-bold text-white">🎨 九宫格分镜草图</h2>
           <p className="text-gray-400 text-xs mt-1">
@@ -229,7 +229,7 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
       </div>
 
       {/* 控制面板 */}
-      <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+      <div className="bg-[#1a1d2d]/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-lg">
         {/* 顶部操作栏 */}
         <div className="flex flex-wrap items-center gap-4 mb-4">
           {/* 当前风格显示 */}
@@ -292,9 +292,9 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
               <button
                 key={style.id}
                 onClick={() => setSelectedStyle(style)}
-                className={`p-3 rounded-lg border-2 transition-all text-left ${selectedStyle.id === style.id
-                  ? 'border-blue-500 bg-blue-900/30'
-                  : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                className={`p-3 rounded-xl border-2 transition-all text-left duration-300 hover:shadow-lg hover:-translate-y-1 ${selectedStyle.id === style.id
+                  ? 'border-purple-500 bg-purple-900/40'
+                  : 'border-white/10 bg-[#1a1d2d]/80 backdrop-blur-md hover:border-purple-500/50'
                   }`}
               >
                 <div className="flex items-center gap-2 mb-2">
@@ -395,8 +395,8 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
               const { gridShots, chars, usedScenes } = getGridContext(idx);
               const isExpanded = expandedGrids.has(idx);
               return (
-                <div key={idx} className="bg-gray-800 rounded-lg overflow-hidden border border-green-700">
-                  <div className="flex justify-between items-center px-3 py-2 bg-gray-900 border-b border-gray-700">
+                <div key={idx} className="bg-[#1a1d2d]/80 backdrop-blur-md rounded-xl overflow-hidden border border-white/10 shadow-lg">
+                  <div className="flex justify-between items-center px-4 py-3 bg-black/40 border-b border-white/5">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-gray-200">第 {idx + 1} 页</span>
                       <button
@@ -515,7 +515,7 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
                         <p className="text-gray-400 font-semibold mb-1">📝 镜头生图提示词（共 {gridShots.length} 个）</p>
                         <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
                           {gridShots.map((shot, sIdx) => (
-                            <div key={shot.id} className="flex gap-2 items-start bg-gray-800 rounded px-2 py-1">
+                            <div key={shot.id} className="flex gap-2 items-start bg-black/30 rounded px-2 py-1">
                               <span className="text-gray-500 shrink-0">#{shot.shotNumber || (idx * GRID_SIZE + sIdx + 1)}</span>
                               <span className="text-gray-300 leading-relaxed">
                                 {shot.imagePromptCn || <em className="text-gray-500">（未提取生图提示词）</em>}
@@ -535,7 +535,7 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
 
       {/* ── 生成前上下文预览（未生成时显示） ─────────────── */}
       {hqUrls.length === 0 && shots.length > 0 && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3">
+        <div className="bg-[#1a1d2d]/80 backdrop-blur-md border border-white/10 rounded-xl shadow-lg p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-200">📋 生成上下文预览（共 {totalGrids} 张九宫格）</h3>
             <span className="text-xs text-gray-500">点击可展开/折叠各页</span>
@@ -552,7 +552,7 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
                       next.has(idx + 1000) ? next.delete(idx + 1000) : next.add(idx + 1000);
                       return next;
                     })}
-                    className="w-full flex items-center justify-between px-3 py-2 bg-gray-900 hover:bg-gray-800 transition-all text-left"
+                    className="w-full flex items-center justify-between px-4 py-3 bg-black/40 hover:bg-black/60 transition-all text-left text-sm"
                   >
                     <span className="text-sm text-gray-300 font-medium">
                       第 {idx + 1} 页（镜头 {idx * GRID_SIZE + 1}–{Math.min((idx + 1) * GRID_SIZE, shots.length)}）

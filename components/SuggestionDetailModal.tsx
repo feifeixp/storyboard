@@ -24,11 +24,11 @@ export const SuggestionDetailModal: React.FC<SuggestionDetailModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden border border-gray-700"
+        className="bg-[#1a1d2d]/90 backdrop-blur-xl rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden border border-white/10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部 */}
-        <div className="bg-amber-600 text-white px-5 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-5 py-4 flex items-center justify-between shadow-md">
           <div className="flex items-center gap-3">
             <span className="bg-white text-amber-600 text-sm px-2.5 py-1 rounded-md font-bold">
               #{suggestion.shotNumber}
@@ -86,19 +86,19 @@ export const SuggestionDetailModal: React.FC<SuggestionDetailModalProps> = ({
         </div>
 
         {/* 底部操作 */}
-        <div className="bg-gray-900 px-5 py-4 flex items-center justify-between border-t border-gray-700">
+        <div className="bg-black/40 px-5 py-4 flex items-center justify-between border-t border-white/5">
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={suggestion.selected ?? true}
               onChange={() => onToggleSelect(suggestion.shotNumber)}
-              className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-amber-500 focus:ring-amber-500"
+              className="w-5 h-5 rounded border-gray-500 bg-black/40 text-amber-500 focus:ring-amber-500"
             />
             <span className="text-sm text-gray-300">采纳此建议</span>
           </label>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-700 text-gray-200 rounded-lg font-medium text-sm hover:bg-gray-600 transition-all"
+            className="px-4 py-2 bg-white/5 text-gray-300 border border-white/10 rounded-lg font-medium text-sm hover:bg-white/10 shadow-sm transition-all"
           >
             关闭
           </button>

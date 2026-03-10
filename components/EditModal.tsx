@@ -56,7 +56,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             type="text"
             value={formData.name || ''}
             onChange={(e) => handleChange('name', e.target.value)}
-            className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
           />
         </div>
         <div>
@@ -64,11 +64,11 @@ export const EditModal: React.FC<EditModalProps> = ({
           <select
             value={formData.gender || '未知'}
             onChange={(e) => handleChange('gender', e.target.value)}
-            className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors appearance-none"
           >
-            <option value="男">男</option>
-            <option value="女">女</option>
-            <option value="未知">未知</option>
+            <option value="男" className="bg-gray-900">男</option>
+            <option value="女" className="bg-gray-900">女</option>
+            <option value="未知" className="bg-gray-900">未知</option>
           </select>
         </div>
       </div>
@@ -78,7 +78,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           type="text"
           value={formData.quote || ''}
           onChange={(e) => handleChange('quote', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
           placeholder="角色的标志性台词"
         />
       </div>
@@ -88,7 +88,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           type="text"
           value={formData.identityEvolution || ''}
           onChange={(e) => handleChange('identityEvolution', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
           placeholder="如：高中生 ➔ 觉醒者 ➔ 救世主"
         />
       </div>
@@ -97,7 +97,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         <textarea
           value={formData.appearance || ''}
           onChange={(e) => handleChange('appearance', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm h-24"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm h-24 focus:border-purple-500 outline-none transition-colors resize-none"
           placeholder="【外貌特征】...&#10;【主体人物】...&#10;【服饰造型】..."
         />
       </div>
@@ -107,7 +107,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           type="text"
           value={(formData.abilities || []).join(', ')}
           onChange={(e) => handleChange('abilities', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
           placeholder="能力1, 能力2, 能力3"
         />
       </div>
@@ -124,7 +124,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             type="text"
             value={formData.name || ''}
             onChange={(e) => handleChange('name', e.target.value)}
-            className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
             placeholder="如：🎒 高中校服"
           />
         </div>
@@ -134,7 +134,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             type="text"
             value={formData.episodeRange || ''}
             onChange={(e) => handleChange('episodeRange', e.target.value)}
-            className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
             placeholder="如：Ep 1-20"
           />
         </div>
@@ -144,7 +144,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         <textarea
           value={formData.description || ''}
           onChange={(e) => handleChange('description', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm h-24"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm h-24 focus:border-purple-500 outline-none transition-colors resize-none"
           placeholder="【外貌特征】...&#10;【主体人物】...&#10;【服饰造型】..."
         />
       </div>
@@ -154,7 +154,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           type="text"
           value={formData.note || ''}
           onChange={(e) => handleChange('note', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
         />
       </div>
     </div>
@@ -169,7 +169,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           type="text"
           value={formData.name || ''}
           onChange={(e) => handleChange('name', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
         />
       </div>
       <div>
@@ -177,7 +177,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         <textarea
           value={formData.description || ''}
           onChange={(e) => handleChange('description', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm h-24"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm h-24 focus:border-purple-500 outline-none transition-colors resize-none"
           placeholder="【前景】...&#10;【中景】...&#10;【后景】..."
         />
       </div>
@@ -187,7 +187,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           type="text"
           value={formData.atmosphere || ''}
           onChange={(e) => handleChange('atmosphere', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
           placeholder="如：冷蓝+金色暖光"
         />
       </div>
@@ -197,7 +197,7 @@ export const EditModal: React.FC<EditModalProps> = ({
           type="text"
           value={(formData.appearsInEpisodes || []).join(', ')}
           onChange={(e) => handleChange('appearsInEpisodes', e.target.value.split(',').map((s: string) => parseInt(s.trim())).filter((n: number) => !isNaN(n)))}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
           placeholder="1, 2, 3"
         />
       </div>
@@ -206,7 +206,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         <textarea
           value={formData.visualPromptCn || ''}
           onChange={(e) => handleChange('visualPromptCn', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm h-16"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm h-16 focus:border-purple-500 outline-none transition-colors resize-none"
         />
       </div>
       <div>
@@ -214,7 +214,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         <textarea
           value={formData.visualPromptEn || ''}
           onChange={(e) => handleChange('visualPromptEn', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm h-16"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm h-16 focus:border-purple-500 outline-none transition-colors resize-none"
         />
       </div>
     </div>
@@ -230,7 +230,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             type="number"
             value={formData.episodeNumber || 1}
             onChange={(e) => handleChange('episodeNumber', parseInt(e.target.value))}
-            className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
           />
         </div>
         <div>
@@ -239,7 +239,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             type="text"
             value={formData.title || ''}
             onChange={(e) => handleChange('title', e.target.value)}
-            className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm"
+            className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none transition-colors"
           />
         </div>
       </div>
@@ -248,7 +248,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         <textarea
           value={formData.summary || ''}
           onChange={(e) => handleChange('summary', e.target.value)}
-          className="w-full bg-gray-700 text-white rounded px-2 py-1.5 text-sm h-24"
+          className="w-full bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm h-24 focus:border-purple-500 outline-none transition-colors resize-none"
           placeholder="50-100字的剧情概要"
         />
       </div>
@@ -266,28 +266,28 @@ export const EditModal: React.FC<EditModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-[#1a1d2d]/90 backdrop-blur-xl border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <h3 className="text-base font-bold text-white">{getTitle()}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">✕</button>
         </div>
-        <div className="p-4">
+        <div className="p-5">
           {type === 'character' && renderCharacterForm()}
           {type === 'form' && renderFormForm()}
           {type === 'scene' && renderSceneForm()}
           {type === 'episode' && renderEpisodeForm()}
         </div>
-        <div className="p-4 border-t border-gray-700 flex justify-end gap-2">
+        <div className="p-4 border-t border-white/10 flex justify-end gap-3 bg-black/20">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded text-sm hover:bg-gray-600"
+            className="px-4 py-2 bg-white/5 border border-white/10 text-gray-300 rounded-lg text-sm hover:bg-white/10 transition-colors"
           >
             取消
           </button>
           <button
             onClick={handleSave}
-            className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-500"
+            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-sm hover:from-blue-500 hover:to-purple-500 shadow-md hover:shadow-lg transition-all"
           >
             保存
           </button>

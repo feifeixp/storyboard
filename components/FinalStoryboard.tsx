@@ -385,111 +385,114 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
   };
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* 头部 */}
-        <div className="mb-8 flex justify-between items-center">
+    <div className="min-h-screen bg-[#0f111a] p-4 md:p-8">
+      {/* 动态背景装饰 */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 blur-[120px] rounded-full"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-900/10 blur-[120px] rounded-full"></div>
+      </div>
+
+      <div className="max-w-7xl mx-auto relative z-10">
+        {/* 悬浮控制栏 Header */}
+        <div className="sticky top-4 z-50 mb-8 p-4 md:p-6 bg-[#1a1b26]/70 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all hover:bg-[#1a1b26]/80">
           <div>
-            <button
-              onClick={onBack}
-              className="mb-4 px-4 py-2 bg-[var(--color-surface)] text-[var(--color-text)] rounded-lg hover:bg-[var(--color-surface-hover)] transition-all border border-[var(--color-border)]"
-            >
-              ← 返回
-            </button>
-            <h1 className="text-4xl font-bold text-[var(--color-text)] mb-2">
-              📋 最终故事板预览
-            </h1>
-            <p className="text-[var(--color-text-secondary)]">
-              {projectName || '未命名项目'} - 第{episodeNumber || '?'}集 - 共 {shots.length} 个镜头 · {videoGroups.length} 个视频分组
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                onClick={onBack}
+                className="px-3 py-1.5 bg-white/5 text-gray-300 rounded-lg hover:bg-white/10 hover:text-white transition-all border border-white/5 flex items-center gap-2 group"
+              >
+                <span className="group-hover:-translate-x-1 transition-transform">←</span> 返回
+              </button>
+              <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400">
+                📋 最终故事板预览
+              </h1>
+            </div>
+            <p className="text-sm md:text-base text-gray-400 mt-1">
+              {projectName || '未命名项目'} - 第{episodeNumber || '?'}集 - 共 <span className="text-white font-medium">{shots.length}</span> 个镜头 · <span className="text-white font-medium">{videoGroups.length}</span> 个视频分组
             </p>
           </div>
 
-          {/* 导出按钮组 */}
-          <div className="flex gap-3">
-            <button
-              onClick={exportJSON}
-              disabled={isExporting}
-              className="px-4 py-2 bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] rounded-lg hover:bg-[var(--color-accent-blue)]/20 transition-all disabled:opacity-50 border border-[var(--color-accent-blue)]/30"
-            >
-              📄 导出 JSON
-            </button>
-            <button
-              onClick={exportCSV}
-              disabled={isExporting}
-              className="px-4 py-2 bg-[var(--color-accent-green)]/10 text-[var(--color-accent-green)] rounded-lg hover:bg-[var(--color-accent-green)]/20 transition-all disabled:opacity-50 border border-[var(--color-accent-green)]/30"
-            >
-              📊 导出 CSV
-            </button>
-            <button
-              onClick={exportMarkdown}
-              disabled={isExporting}
-              className="px-4 py-2 bg-[var(--color-accent-violet)]/10 text-[var(--color-accent-violet)] rounded-lg hover:bg-[var(--color-accent-violet)]/20 transition-all disabled:opacity-50 border border-[var(--color-accent-violet)]/30"
-            >
-              📝 导出 MD
-            </button>
-            <button
-              onClick={exportPDF}
-              disabled={isExporting}
-              className="px-4 py-2 bg-[var(--color-accent-red)]/10 text-[var(--color-accent-red)] rounded-lg hover:bg-[var(--color-accent-red)]/20 transition-all disabled:opacity-50 border border-[var(--color-accent-red)]/30"
-            >
-              {isExporting ? '⏳ 生成中...' : '📕 导出 PDF'}
-            </button>
+          {/* 顶层右侧区：视图切换 + 导出按钮 */}
+          <div className="flex flex-col items-end gap-3 w-full md:w-auto">
+            {/* 视图模式切换 Pill */}
+            <div className="flex items-center bg-black/40 rounded-full p-1 border border-white/5">
+              <button
+                onClick={() => setViewMode('original')}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${viewMode === 'original'
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                  }`}
+              >
+                🎬 原始镜头
+              </button>
+              <button
+                onClick={() => setViewMode('grouped')}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${viewMode === 'grouped'
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                  }`}
+              >
+                📦 分组视频
+              </button>
+            </div>
+
+            {/* 导出按钮组 */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={exportJSON}
+                disabled={isExporting}
+                className="px-3 py-1.5 text-sm font-medium bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20 transition-all disabled:opacity-50 border border-blue-500/20 hover:border-blue-500/40"
+              >
+                📄 JSON
+              </button>
+              <button
+                onClick={exportCSV}
+                disabled={isExporting}
+                className="px-3 py-1.5 text-sm font-medium bg-green-500/10 text-green-400 rounded-lg hover:bg-green-500/20 transition-all disabled:opacity-50 border border-green-500/20 hover:border-green-500/40"
+              >
+                📊 CSV
+              </button>
+              <button
+                onClick={exportMarkdown}
+                disabled={isExporting}
+                className="px-3 py-1.5 text-sm font-medium bg-amber-500/10 text-amber-400 rounded-lg hover:bg-amber-500/20 transition-all disabled:opacity-50 border border-amber-500/20 hover:border-amber-500/40"
+              >
+                📝 MD
+              </button>
+              <button
+                onClick={exportPDF}
+                disabled={isExporting}
+                className="px-3 py-1.5 text-sm font-medium bg-rose-500/10 text-rose-400 rounded-lg hover:bg-rose-500/20 transition-all disabled:opacity-50 border border-rose-500/20 hover:border-rose-500/40 flex items-center gap-1"
+              >
+                {isExporting ? (
+                  <><div className="w-3 h-3 border-2 border-rose-400 border-t-transparent rounded-full animate-spin"></div> 导出中</>
+                ) : '📕 PDF'}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* 视图模式切换 */}
-        <div className="mb-6 flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-[var(--color-surface)] rounded-lg p-1 border border-[var(--color-border)]">
-            <button
-              onClick={() => setViewMode('original')}
-              className={`px-4 py-2 rounded-md transition-all ${
-                viewMode === 'original'
-                  ? 'bg-[var(--color-primary)] text-white'
-                  : 'text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]'
-              }`}
-            >
-              🎬 原始镜头视图
-            </button>
-            <button
-              onClick={() => setViewMode('grouped')}
-              className={`px-4 py-2 rounded-md transition-all ${
-                viewMode === 'grouped'
-                  ? 'bg-[var(--color-primary)] text-white'
-                  : 'text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]'
-              }`}
-            >
-              📦 分组视频视图
-            </button>
-          </div>
-          <span className="text-sm text-[var(--color-text-secondary)]">
-            {viewMode === 'grouped' ? '按场景+15秒限制分组，适合视频生成' : '按原始顺序展示所有镜头'}
-          </span>
-        </div>
-
-        {/* 故事板内容 */}
-        <div ref={storyboardRef} className="bg-white p-8 rounded-lg">
+        {/* 故事板内容主体 */}
+        <div ref={storyboardRef} className="bg-[#12141c] p-6 lg:p-8 rounded-2xl border border-white/5 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
           {viewMode === 'original' ? (
             /* 原始视图 */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8">
               {shots.map((shot, idx) => (
-                <React.Fragment key={shot.id}>
-                  <StoryboardCard shot={shot} index={idx} />
-                </React.Fragment>
+                <StoryboardCard key={shot.id} shot={shot} index={idx} />
               ))}
             </div>
           ) : (
             /* 分组视图 */
-            <div className="space-y-8">
+            <div className="space-y-12">
               {videoGroups.map((group, groupIdx) => {
                 const prompt = videoGroupPrompts.find(p => p.groupId === group.id);
                 return (
-                  <React.Fragment key={group.id}>
-                    <VideoGroupCard
-                      group={group}
-                      prompt={prompt}
-                      groupIndex={groupIdx}
-                    />
-                  </React.Fragment>
+                  <VideoGroupCard
+                    key={group.id}
+                    group={group}
+                    prompt={prompt}
+                    groupIndex={groupIdx}
+                  />
                 );
               })}
             </div>
@@ -501,63 +504,65 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
 }
 
 /**
- * 单个故事板卡片组件
+ * 单个故事板卡片组件 (Premium Style)
  */
 function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
   const storyBeat = getShotStoryBeat(shot);
 
   return (
-    <div className="rounded-lg overflow-hidden border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-all bg-[var(--color-surface-solid)]">
-      {/* 镜头编号 */}
-      <div className="bg-gradient-to-r from-[var(--color-primary-dark)] to-[var(--color-primary)] text-white px-4 py-2 font-bold text-lg">
-        镜头 {shot.shotNumber}
+    <div className="group relative rounded-xl overflow-hidden bg-[#1a1d2d]/80 backdrop-blur-md border border-white/10 hover:border-purple-500/50 shadow-lg hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)] transition-all duration-300 hover:-translate-y-1 flex flex-col h-full">
+      {/* 顶部指示条 */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-purple-600 opacity-50 group-hover:opacity-100 transition-opacity z-10"></div>
+
+      {/* 镜头编号 (角标风格) */}
+      <div className="absolute top-3 left-3 z-10 bg-black/60 backdrop-blur-md border border-white/10 text-white px-2 py-1 rounded text-xs font-mono font-bold shadow-lg">
+        SHOT {shot.shotNumber.toString().padStart(3, '0')}
       </div>
 
       {/* 图片 - 虚拟切割显示 */}
-      <div className="relative bg-black" style={{ paddingTop: '56.25%' }}>
+      <div className="relative bg-black w-full" style={{ paddingTop: '56.25%' }}>
         {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' ? (
-          <GridCellImage gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
+          <div className="absolute inset-0 group-hover:scale-[1.02] transition-transform duration-500">
+            <GridCellImage gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#1a1d2d]/90 via-transparent to-black/20 pointer-events-none"></div>
+          </div>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-            暂无图片
+          <div className="absolute inset-0 flex items-center justify-center text-gray-600 bg-gray-900 border-b border-white/5 text-sm">
+            暂无画面
           </div>
         )}
       </div>
 
       {/* 信息区域 */}
-      <div className="p-4 space-y-3">
-        {/* 剧情描述 */}
-        <div>
-          <div className="text-xs font-semibold text-[#a1a1aa] mb-1">剧情描述</div>
-          <div className="text-sm text-[#fafaf9] leading-relaxed">{storyBeat}</div>
+      <div className="p-5 flex flex-col flex-grow relative z-10 -mt-8 pt-6">
+        {/* 剧情与对话 */}
+        <div className="mb-4 flex-grow">
+          <div className="text-sm text-gray-200 leading-relaxed font-medium mb-3 relative z-10">
+            {storyBeat}
+          </div>
+          {shot.dialogue && (
+            <div className="text-sm text-amber-200/90 italic bg-amber-900/20 px-3 py-2 rounded-lg border border-amber-700/30">
+              "{shot.dialogue}"
+            </div>
+          )}
         </div>
 
-        {/* 对话 */}
-        {shot.dialogue && (
-          <div>
-            <div className="text-xs font-semibold text-[#a1a1aa] mb-1">对话</div>
-            <div className="text-sm text-[#e8c9a0] italic">"{shot.dialogue}"</div>
+        {/* 底部小 Badge 状态栏 */}
+        <div className="flex flex-wrap gap-2 mt-auto pt-4 border-t border-white/5">
+          <div className="flex items-center gap-1.5 justify-center bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium">
+            ⏱ {shot.duration}
           </div>
-        )}
-
-        {/* 镜头信息 */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <span className="font-semibold text-[#71717a]">景别:</span>
-            <span className="ml-1 text-[#fafaf9]">{shot.shotSize}</span>
+          <div className="flex items-center justify-center bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium">
+            🎥 {shot.shotSize}
           </div>
-          <div>
-            <span className="font-semibold text-[#71717a]">时长:</span>
-            <span className="ml-1 text-[#fafaf9]">{shot.duration}</span>
+          <div className="flex items-center justify-center bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium">
+            📐 {shot.angleDirection} {shot.angleHeight}
           </div>
-          <div className="col-span-2">
-            <span className="font-semibold text-[#71717a]">角度:</span>
-            <span className="ml-1 text-[#fafaf9]">{shot.angleDirection} {shot.angleHeight}</span>
-          </div>
-          <div className="col-span-2">
-            <span className="font-semibold text-[#71717a]">运镜:</span>
-            <span className="ml-1 text-[#fafaf9]">{shot.cameraMove}</span>
-          </div>
+          {shot.cameraMove !== '固定(Static)' && (
+            <div className="flex items-center justify-center bg-rose-500/10 text-rose-300 border border-rose-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium">
+              💨 {shot.cameraMove}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -565,7 +570,7 @@ function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
 }
 
 /**
- * 视频分组卡片组件
+ * 视频分组卡片组件 (Premium Style)
  */
 function VideoGroupCard({
   group,
@@ -579,59 +584,80 @@ function VideoGroupCard({
   const [showPrompt, setShowPrompt] = useState(false);
 
   return (
-    <div className="border-2 border-[var(--color-primary)]/30 rounded-lg overflow-hidden bg-gradient-to-br from-gray-50 to-white">
-      {/* 分组标题 */}
-      <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-dark)] text-white px-6 py-4">
-        <div className="flex items-center justify-between">
+    <div className="rounded-2xl overflow-hidden bg-[#161824] border border-white/5 shadow-xl relative ring-1 ring-purple-500/20">
+      {/* 装饰发光 */}
+      <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
+
+      {/* 分组标题栏 */}
+      <div className="bg-gradient-to-r from-[#1e1b4b] to-[#312e81] p-6 relative overflow-hidden">
+        {/* 背景光晕装饰 */}
+        <div className="absolute -right-20 -top-40 w-80 h-80 bg-purple-500/20 blur-[80px] rounded-full pointer-events-none"></div>
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h3 className="text-xl font-bold">📦 {group.groupName}</h3>
-            <p className="text-sm opacity-80 mt-1">
-              {group.sceneName && `场景: ${group.sceneName} · `}
-              时长: {group.totalDuration.toFixed(1)}秒 · {group.shots.length} 个镜头
-            </p>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white font-bold text-sm backdrop-blur-md border border-white/20">
+                {groupIndex + 1}
+              </span>
+              <h3 className="text-xl md:text-2xl font-bold tracking-tight text-white drop-shadow-md">
+                {group.groupName}
+              </h3>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-indigo-200/80">
+              {group.sceneName && (
+                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>{group.sceneName}</span>
+              )}
+              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>时长: <strong className="text-white font-medium">{group.totalDuration.toFixed(1)}s</strong></span>
+              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>包含 <strong className="text-white font-medium">{group.shots.length}</strong> 个镜头</span>
+            </div>
           </div>
-          <span className="text-4xl opacity-50">{groupIndex + 1}</span>
+
+          {prompt && (
+            <button
+              onClick={() => setShowPrompt(!showPrompt)}
+              className="px-4 py-2 bg-black/30 hover:bg-black/50 border border-white/10 rounded-lg text-indigo-300 hover:text-white transition-all text-sm font-medium flex items-center gap-2 group whitespace-nowrap"
+            >
+              📹 Seedance 2.0 提示词
+              <span className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] uppercase group-hover:bg-white/20 transition-colors">
+                {showPrompt ? 'HIDE' : 'SHOW'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 分组内容 */}
-      <div className="p-6">
-        {/* 视频生成提示词 */}
-        {prompt && (
-          <div className="mb-6">
-            <button
-              onClick={() => setShowPrompt(!showPrompt)}
-              className="flex items-center gap-2 text-[var(--color-primary)] font-semibold mb-3 hover:underline"
-            >
-              📹 视频生成提示词 (Seedance 2.0)
-              <span className="text-xs bg-[var(--color-primary)]/10 px-2 py-1 rounded">
-                {showPrompt ? '收起' : '展开'}
-              </span>
-            </button>
-            {showPrompt && (
-              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4">
-                <pre className="text-sm text-[var(--color-text)] whitespace-pre-wrap font-mono">
-                  {prompt.timelineScript}
-                </pre>
+      {/* 分组内容区 */}
+      <div className="p-6 md:p-8">
+        {/* 视频生成提示词展开区 (Code Editor 质感) */}
+        {prompt && showPrompt && (
+          <div className="mb-8 mt-[-1rem]">
+            <div className="bg-[#0b0d14] border border-white/5 rounded-xl shadow-inner overflow-hidden flex flex-col">
+              <div className="bg-white/5 border-b border-white/5 px-4 py-2 flex items-center justify-between">
+                <div className="flex gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
+                </div>
                 <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(prompt.fullPromptCn);
-                  }}
-                  className="mt-3 text-xs text-[var(--color-primary)] hover:underline"
+                  onClick={() => navigator.clipboard.writeText(prompt.fullPromptCn)}
+                  className="text-xs text-gray-400 hover:text-white transition-colors"
                 >
-                  📋 复制完整提示词
+                  📋 复制
                 </button>
               </div>
-            )}
+              <div className="p-4 overflow-x-auto">
+                <pre className="text-sm font-mono leading-relaxed text-[#c0caf5]">
+                  <code dangerouslySetInnerHTML={{ __html: prompt.timelineScript.replace(/\[镜头\s\d+\]/g, match => `<span class="text-purple-400 font-bold">${match}</span>`).replace(/动作:|场景:|描述:|灯光:|运镜:/g, match => `<span class="text-blue-400">${match}</span>`) }}></code>
+                </pre>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* 镜头网格 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {/* 分组内小镜头瀑布流布局优化版 */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
           {group.shots.map((shotRange, idx) => (
-            <React.Fragment key={shotRange.shot.id}>
-              <GroupedShotCard shotRange={shotRange} />
-            </React.Fragment>
+            <GroupedShotCard key={shotRange.shot.id} shotRange={shotRange} />
           ))}
         </div>
       </div>
@@ -640,38 +666,48 @@ function VideoGroupCard({
 }
 
 /**
- * 分组视图中的单个镜头卡片
+ * 分组视图中的单个镜头小卡片 (Premium Style)
  */
 function GroupedShotCard({ shotRange }: { shotRange: { shot: Shot; startSecond: number; endSecond: number; shotNumber: string } }) {
   const { shot } = shotRange;
   const storyBeat = getShotStoryBeat(shot);
 
   return (
-    <div className="rounded-lg overflow-hidden border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-all bg-[var(--color-surface-solid)]">
-      {/* 镜头编号 + 时间段 */}
-      <div className="bg-gradient-to-r from-[var(--color-primary-light)] to-[var(--color-primary)]/80 text-white px-3 py-2 flex justify-between items-center">
-        <span className="font-bold text-sm">镜头 {shot.shotNumber}</span>
-        <span className="text-xs bg-black/20 px-2 py-1 rounded">
+    <div className="group rounded-xl overflow-hidden border border-white/5 hover:border-indigo-500/50 bg-[#1d1f2b] transition-all hover:shadow-[0_4px_20px_rgba(99,102,241,0.15)] hover:-translate-y-1 flex flex-col h-full relative">
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none z-10"></div>
+
+      {/* 头部精简标签 */}
+      <div className="absolute top-2 left-2 right-2 flex justify-between items-center z-20">
+        <span className="font-mono text-[10px] bg-black/60 backdrop-blur-sm border border-white/10 px-1.5 py-0.5 rounded text-white font-bold drop-shadow-md">
+          #{shot.shotNumber}
+        </span>
+        <span className="text-[10px] bg-indigo-600/80 backdrop-blur-sm border border-white/10 px-1.5 py-0.5 rounded text-white font-medium drop-shadow-md">
           {shotRange.startSecond.toFixed(0)}-{shotRange.endSecond.toFixed(0)}s
         </span>
       </div>
 
-      {/* 图片 */}
-      <div className="relative bg-black" style={{ paddingTop: '56.25%' }}>
+      {/* 强制16:9比例缩略图 */}
+      <div className="relative bg-black w-full" style={{ paddingTop: '56.25%' }}>
         {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' ? (
-          <GridCellImage gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
+          <div className="absolute inset-0">
+            <GridCellImage gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
+          </div>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-xs">
-            暂无图片
+          <div className="absolute inset-0 flex items-center justify-center text-gray-700 bg-gray-900 border-b border-white/5 text-xs">
+            无画面
           </div>
         )}
       </div>
 
-      {/* 信息 */}
-      <div className="p-3">
-        <div className="text-xs text-[#fafaf9] line-clamp-2 mb-2">{storyBeat}</div>
+      {/* 内容信息 (叠在图片下半部分) */}
+      <div className="px-3 pb-3 pt-6 -mt-8 relative z-20 flex-grow flex flex-col justify-end">
+        <div className="text-xs text-gray-200 line-clamp-2 leading-snug drop-shadow-md font-medium">
+          {storyBeat}
+        </div>
         {shot.dialogue && (
-          <div className="text-xs text-[#e8c9a0] italic truncate">"{shot.dialogue}"</div>
+          <div className="mt-1 text-[10px] text-amber-200/90 italic truncate drop-shadow-md">
+            "{shot.dialogue}"
+          </div>
         )}
       </div>
     </div>
@@ -679,49 +715,37 @@ function GroupedShotCard({ shotRange }: { shotRange: { shot: Shot; startSecond: 
 }
 
 /**
- * 九宫格虚拟切割图片组件（用于最终预览）
- * - 放大 3 倍 + 位移裁切实现虚拟切割
- * - 添加 max-w-none / max-h-none 覆盖 Tailwind preflight 的 img { max-width:100% }
- * - CORS 加载失败时自动降级为不带 crossOrigin（保证预览可见，但 PDF 导出可能受限）
+ * 九宫格虚拟切割图片组件保持不变，只修缮下边缘状态
  */
 function GridCellImage({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: number }) {
   const row = Math.floor(cellIndex / 3);
   const col = cellIndex % 3;
-  // CORS 降级：首次用 anonymous，加载失败则去掉 crossOrigin 再试一次
   const [corsMode, setCorsMode] = useState<'anonymous' | 'none'>('anonymous');
   const [loadFailed, setLoadFailed] = useState(false);
 
   const handleError = () => {
     if (corsMode === 'anonymous') {
-      // 第一次失败：去掉 crossOrigin 再试
       setCorsMode('none');
     } else {
-      // 彻底失败
       setLoadFailed(true);
     }
   };
 
   if (loadFailed) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-gray-800 text-gray-400 text-xs">
-        图片加载失败
+      <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-rose-500/50 text-xs">
+        载入失败
       </div>
     );
   }
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      {/*
-        使用 <img> 而非 background-image：
-        - html2canvas 对 <img> 的跨域处理更可控（配合 crossOrigin + useCORS）
-        - 同时仍可通过放大 3 倍并位移来实现九宫格虚拟裁切
-        - max-w-none / max-h-none 覆盖 Tailwind preflight 的 max-width:100%
-      */}
       <img
         src={gridUrl}
         crossOrigin={corsMode === 'anonymous' ? 'anonymous' : undefined}
         alt=""
-        className="absolute top-0 left-0 select-none max-w-none max-h-none"
+        className="absolute top-0 left-0 select-none max-w-none max-h-none block"
         style={{
           width: '300%',
           height: '300%',

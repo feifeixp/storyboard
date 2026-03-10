@@ -114,13 +114,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 bg-gray-800 text-white border border-gray-700 rounded-lg text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer"
+        className="w-full px-3 py-2 bg-black/40 text-white border border-white/10 rounded-lg text-sm hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all cursor-pointer shadow-inner appearance-none"
       >
         {models.map((model) => (
           <option
             key={model}
             value={model}
-            className="bg-gray-800 text-white"
+            className="bg-gray-900 text-white"
           >
             {getModelIcon(model)} {getModelDisplayName(model)}
           </option>
@@ -159,13 +159,13 @@ export const ImageModelSelector: React.FC<ImageModelSelectorProps> = ({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 bg-gray-800 text-white border border-gray-700 rounded-lg text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer"
+        className="w-full px-3 py-2 bg-black/40 text-white border border-white/10 rounded-lg text-sm hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all cursor-pointer shadow-inner appearance-none"
       >
         {Object.entries(IMAGE_MODEL_NAMES).map(([model, name]) => (
           <option
             key={model}
             value={model}
-            className="bg-gray-800 text-white"
+            className="bg-gray-900 text-white"
           >
             {name}
           </option>
