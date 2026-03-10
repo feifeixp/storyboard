@@ -30,7 +30,7 @@ type ViewMode = 'original' | 'grouped';
  */
 export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, projectName, onBack }: FinalStoryboardProps) {
   const [isExporting, setIsExporting] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('original');
+  const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const storyboardRef = useRef<HTMLDivElement>(null);
 
   // 生成分组数据
@@ -423,7 +423,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
                   : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                   }`}
               >
-                🎬 原始镜头
+                🎬 分镜列表
               </button>
               <button
                 onClick={() => setViewMode('grouped')}
@@ -599,9 +599,11 @@ function VideoGroupCard({
               <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white font-bold text-sm backdrop-blur-md border border-white/20">
                 {groupIndex + 1}
               </span>
-              <h3 className="text-xl md:text-2xl font-bold tracking-tight text-white drop-shadow-md">
-                {group.groupName}
-              </h3>
+              {!group.groupName.startsWith('未分组') && (
+                <h3 className="text-xl md:text-2xl font-bold tracking-tight text-white drop-shadow-md">
+                  {group.groupName}
+                </h3>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-indigo-200/80">
               {group.sceneName && (
