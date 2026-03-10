@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { Project, Episode, StoryVolume, Antagonist, EpisodeSummary, SceneRef, PROJECT_MEDIA_TYPES, ScriptFile } from '../types/project';
 import { CharacterRef, CharacterForm, STORYBOARD_STYLES, type StoryboardStyle } from '../types';
 import { EditModal } from './EditModal';
@@ -2274,7 +2275,7 @@ const CharacterCard: React.FC<{
         </div>
 
         {/* ── Lightbox 全屏查看 Modal（支持滚轮缩放 + 鼠标拖动）─────────────────── */}
-        {lightboxUrl && (
+        {lightboxUrl && typeof document !== 'undefined' && ReactDOM.createPortal(
           <div
             className="fixed inset-0 z-[9999] flex flex-col bg-black/92 backdrop-blur-sm select-none"
             onWheel={(e) => {
@@ -2365,7 +2366,8 @@ const CharacterCard: React.FC<{
             <div className="absolute bottom-3 left-0 right-0 flex justify-center pointer-events-none">
               <span className="text-white/30 text-[11px]">滚轮缩放 · 拖动平移 · 点击空白关闭</span>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </>
     );

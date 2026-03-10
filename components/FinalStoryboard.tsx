@@ -419,8 +419,8 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
               <button
                 onClick={() => setViewMode('original')}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${viewMode === 'original'
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                   }`}
               >
                 🎬 原始镜头
@@ -428,8 +428,8 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
               <button
                 onClick={() => setViewMode('grouped')}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${viewMode === 'grouped'
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                   }`}
               >
                 📦 分组视频
@@ -612,17 +612,125 @@ function VideoGroupCard({
             </div>
           </div>
 
-          {prompt && (
-            <button
-              onClick={() => setShowPrompt(!showPrompt)}
-              className="px-4 py-2 bg-black/30 hover:bg-black/50 border border-white/10 rounded-lg text-indigo-300 hover:text-white transition-all text-sm font-medium flex items-center gap-2 group whitespace-nowrap"
-            >
-              📹 Seedance 2.0 提示词
-              <span className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] uppercase group-hover:bg-white/20 transition-colors">
-                {showPrompt ? 'HIDE' : 'SHOW'}
-              </span>
-            </button>
-          )}
+          <div className="flex gap-2">
+            {group.shots.some(s => s.shot.storyboardGridUrl) && (
+              <button
+                onClick={async () => {
+                  try {
+                    // Create canvas and merge images
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+
+                    const cellWidth = 1280;
+                    const cellHeight = 720;
+                    const shotsWithImages = group.shots.filter(s => s.shot.storyboardGridUrl && typeof s.shot.storyboardGridCellIndex === 'number');
+                    if (shotsWithImages.length === 0) {
+                      alert('该分组内没有图片可供合并');
+                      return;
+                    }
+
+                    const cols = Math.min(2, shotsWithImages.length);
+                    const rows = Math.ceil(shotsWithImages.length / cols);
+
+                    canvas.width = cols * cellWidth;
+                    canvas.height = rows * cellHeight;
+
+                    ctx.fillStyle = '#0f111a'; // Dark background
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    const loadImage = (src: string): Promise<HTMLImageElement> => {
+                      return new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous'; // try anonymous first
+                        img.onload = () => resolve(img);
+                        img.onerror = () => {
+                          // Fallback to no-cors approach if possible, though canvas might taint
+                          const fallbackImg = new Image();
+                          fallbackImg.onload = () => resolve(fallbackImg);
+                          fallbackImg.onerror = () => reject(new Error('Failed to load image ' + src));
+                          fallbackImg.src = src;
+                        };
+                        img.src = src;
+                      });
+                    };
+
+                    const imgCache = new Map<string, HTMLImageElement>();
+                    let currentIdx = 0;
+
+                    // Show a toast or loading state ideally, but window.alert/console is fine for quick feedback if needed.
+                    console.log('Merging images for group:', group.groupName);
+
+                    for (const shotRange of shotsWithImages) {
+                      const shot = shotRange.shot;
+                      try {
+                        let img = imgCache.get(shot.storyboardGridUrl!);
+                        if (!img) {
+                          img = await loadImage(shot.storyboardGridUrl!);
+                          imgCache.set(shot.storyboardGridUrl!, img);
+                        }
+
+                        const gridW = img.width / 3;
+                        const gridH = img.height / 3;
+                        const row = Math.floor(shot.storyboardGridCellIndex! / 3);
+                        const col = shot.storyboardGridCellIndex! % 3;
+
+                        const sx = col * gridW;
+                        const sy = row * gridH;
+
+                        const dx = (currentIdx % cols) * cellWidth;
+                        const dy = Math.floor(currentIdx / cols) * cellHeight;
+
+                        ctx.drawImage(img, sx, sy, gridW, gridH, dx, dy, cellWidth, cellHeight);
+
+                        // Overlay sequence number
+                        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                        ctx.beginPath();
+                        ctx.roundRect(dx + 20, dy + 20, 100, 100, 16);
+                        ctx.fill();
+
+                        ctx.fillStyle = '#34d399'; // Emerald-400
+                        ctx.font = 'bold 54px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(String(currentIdx + 1), dx + 70, dy + 74);
+
+                      } catch (err) {
+                        console.error('Error drawing cell index:', shot.storyboardGridCellIndex, err);
+                      }
+
+                      currentIdx++;
+                    }
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                    const a = document.createElement('a');
+                    a.href = dataUrl;
+                    a.download = `${group.groupName.replace(/\s+/g, '_')}_合并参考图.jpg`;
+                    a.click();
+                  } catch (err) {
+                    console.error('Failed to merge images:', err);
+                    alert('导出合并图失败，可能是图片跨域限制导致。');
+                  }
+                }}
+                className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 rounded-lg text-emerald-400 hover:text-emerald-300 transition-all text-sm font-medium flex items-center gap-2 whitespace-nowrap"
+                title="合并分组内的所有分镜图为一张长图或网格图，以便作为一个参考图上传给AI"
+              >
+                📸 下载合并大图
+              </button>
+            )}
+
+            {prompt && (
+              <button
+                onClick={() => setShowPrompt(!showPrompt)}
+                className="px-4 py-2 bg-black/30 hover:bg-black/50 border border-white/10 rounded-lg text-indigo-300 hover:text-white transition-all text-sm font-medium flex items-center gap-2 group whitespace-nowrap"
+              >
+                📹 Seedance 2.0 提示词
+                <span className="bg-white/10 px-1.5 py-0.5 rounded text-[10px] uppercase group-hover:bg-white/20 transition-colors">
+                  {showPrompt ? 'HIDE' : 'SHOW'}
+                </span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

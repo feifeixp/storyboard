@@ -204,7 +204,7 @@ export function generateVideoGroupPrompt(
   let assetsText = '';
   const firstShot = group.shots[0]?.shot;
   if (firstShot?.storyboardGridUrl) {
-    assetsText = '以@图片1为首帧参考';
+    assetsText = '以@图片1作为分镜参考';
     sections.push(assetsText + '，');
   }
 
