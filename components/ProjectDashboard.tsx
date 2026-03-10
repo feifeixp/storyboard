@@ -1992,284 +1992,286 @@ const CharacterCard: React.FC<{
     };
 
     return (
-      <div className="glass-card rounded-xl overflow-hidden">
-        {/* 角色头部信息 */}
-        <div className="p-4 cursor-pointer hover:bg-[var(--color-surface-hover)] flex flex-col items-center gap-3 transition-colors relative text-center" onClick={onToggle}>
-          {/* 展开箭头 */}
-          <div className="absolute top-3 right-3 text-[var(--color-text-tertiary)] text-[12px]">
-            {isExpanded ? '▼' : '▶'}
-          </div>
-
-          {/* 编辑按钮 */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(); }}
-            className="absolute top-3 left-3 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[14px] p-1 transition-colors"
-            title="编辑角色"
-          >
-            ✏️
-          </button>
-
-          {/* 头像 (点击可直达上传/生成面板) */}
-          <div
-            className="w-28 h-28 bg-[var(--color-surface)] rounded-full flex items-center justify-center text-4xl shrink-0 border-2 border-[var(--color-primary)]/30 relative group cursor-pointer overflow-hidden transition-transform hover:scale-105 mt-2"
-            onClick={(e) => {
-              if (onUploadImage) {
-                e.stopPropagation();
-                onUploadImage();
-              }
-            }}
-            title="点击更换或生成头像"
-          >
-            {character.data ? (
-              <img src={character.data} alt={character.name} className="w-full h-full object-cover transition-opacity group-hover:opacity-60" />
-            ) : (character.gender === '女' ? '👩' : '👨')}
-
-            {/* 悬浮提示层 */}
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <span className="text-[12px] text-white font-medium">更换头像</span>
+      <>
+        <div className="glass-card flex flex-col h-full rounded-xl overflow-hidden relative">
+          {/* 角色头部信息 */}
+          <div className="p-4 cursor-pointer hover:bg-[var(--color-surface-hover)] flex flex-col items-center gap-3 transition-colors relative text-center" onClick={onToggle}>
+            {/* 展开箭头 */}
+            <div className="absolute top-3 right-3 text-[var(--color-text-tertiary)] text-[12px]">
+              {isExpanded ? '▼' : '▶'}
             </div>
-          </div>
 
-          {/* 信息 */}
-          <div className="w-full flex flex-col items-center min-w-0">
-            <div className="flex flex-wrap justify-center items-center gap-1.5 mb-1">
-              <span className="text-[var(--color-text)] font-semibold text-[16px] truncate max-w-[120px]" title={character.name}>{character.name}</span>
-              <span className="text-[var(--color-text-tertiary)] text-[11px] px-1.5 py-0.5 bg-[var(--color-surface)] rounded-md">{character.gender}</span>
-              {character.forms && character.forms.length > 0 && (
-                <span className="text-[var(--color-primary-light)] text-[11px] px-1.5 py-0.5 bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 rounded-md">
-                  {character.forms.length}形态
-                </span>
+            {/* 编辑按钮 */}
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              className="absolute top-3 left-3 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[14px] p-1 transition-colors"
+              title="编辑角色"
+            >
+              ✏️
+            </button>
+
+            {/* 头像 (点击可直达上传/生成面板) */}
+            <div
+              className="w-28 h-28 bg-[var(--color-surface)] rounded-full flex items-center justify-center text-4xl shrink-0 border-2 border-[var(--color-primary)]/30 relative group cursor-pointer overflow-hidden transition-transform hover:scale-105 mt-2"
+              onClick={(e) => {
+                if (onUploadImage) {
+                  e.stopPropagation();
+                  onUploadImage();
+                }
+              }}
+              title="点击更换或生成头像"
+            >
+              {character.data ? (
+                <img src={character.data} alt={character.name} className="w-full h-full object-cover transition-opacity group-hover:opacity-60" />
+              ) : (character.gender === '女' ? '👩' : '👨')}
+
+              {/* 悬浮提示层 */}
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-[12px] text-white font-medium">更换头像</span>
+              </div>
+            </div>
+
+            {/* 信息 */}
+            <div className="w-full flex flex-col items-center min-w-0">
+              <div className="flex flex-wrap justify-center items-center gap-1.5 mb-1">
+                <span className="text-[var(--color-text)] font-semibold text-[16px] truncate max-w-[120px]" title={character.name}>{character.name}</span>
+                <span className="text-[var(--color-text-tertiary)] text-[11px] px-1.5 py-0.5 bg-[var(--color-surface)] rounded-md">{character.gender}</span>
+                {character.forms && character.forms.length > 0 && (
+                  <span className="text-[var(--color-primary-light)] text-[11px] px-1.5 py-0.5 bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 rounded-md">
+                    {character.forms.length}形态
+                  </span>
+                )}
+              </div>
+
+              {completenessInfo && (
+                <div className={`text-[11px] ${completenessInfo.color} mb-1.5`} title={`完整度: ${completeness}%`}>
+                  {completenessInfo.emoji} 完整度 {completeness}%
+                </div>
+              )}
+
+              {character.identityEvolution && (
+                <p className="text-[var(--color-text-tertiary)] text-[12px] line-clamp-2 w-full px-2" title={character.identityEvolution}>
+                  {character.identityEvolution}
+                </p>
               )}
             </div>
 
-            {completenessInfo && (
-              <div className={`text-[11px] ${completenessInfo.color} mb-1.5`} title={`完整度: ${completeness}%`}>
-                {completenessInfo.emoji} 完整度 {completeness}%
+            {/* 能力标签 - 最多显示前3个 */}
+            {character.abilities && character.abilities.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-1.5 w-full px-2">
+                {character.abilities.slice(0, 3).map((a, i) => (
+                  <span key={i} className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">
+                    {a}
+                  </span>
+                ))}
+                {character.abilities.length > 3 && (
+                  <span className="text-[10px] text-[var(--color-text-tertiary)] flex items-center px-1">+{character.abilities.length - 3}</span>
+                )}
               </div>
             )}
 
-            {character.identityEvolution && (
-              <p className="text-[var(--color-text-tertiary)] text-[12px] line-clamp-2 w-full px-2" title={character.identityEvolution}>
-                {character.identityEvolution}
-              </p>
-            )}
+            {/* 操作按钮区 */}
+            <div className="flex flex-wrap justify-center gap-2 mt-2 w-full px-2">
+              {/* 上传角色图片按钮 */}
+              {onUploadImage && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUploadImage();
+                  }}
+                  className="flex-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-2 py-1.5 rounded-lg text-[12px] font-medium transition-colors whitespace-nowrap"
+                  title="上传角色图片并AI分析"
+                >
+                  📤 上传图片
+                </button>
+              )}
+
+              {/* 生成角色设定图 - 有形态时隐藏主体按钮，只在形态上显示 */}
+              {onGenerateImage && !(character.forms && character.forms.length > 0) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGenerateImage();
+                  }}
+                  disabled={!!isGenerating}
+                  className="flex-1 bg-emerald-600/20 hover:bg-emerald-600/40 disabled:bg-gray-800 disabled:text-gray-500 disabled:border-gray-700 text-emerald-400 border border-emerald-500/30 px-2 py-1.5 rounded-lg text-[12px] font-medium disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                  title={character.imageSheetUrl ? '重新生成角色设定图' : '自动生成'}
+                >
+                  {isGenerating ? '⏳ 生成中...' : (character.imageSheetUrl ? '🔄 重新生成' : '🎨 自动生成')}
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* 能力标签 - 最多显示前3个 */}
-          {character.abilities && character.abilities.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-1.5 w-full px-2">
-              {character.abilities.slice(0, 3).map((a, i) => (
-                <span key={i} className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">
-                  {a}
-                </span>
-              ))}
-              {character.abilities.length > 3 && (
-                <span className="text-[10px] text-[var(--color-text-tertiary)] flex items-center px-1">+{character.abilities.length - 3}</span>
+          {/* 生成进度 - 有形态时主体进度隐藏（进度在形态卡片上显示） */}
+          {!(character.forms && character.forms.length > 0) && isGenerating && generationProgress && (
+            <div className="border-t border-[var(--color-border)] p-3 text-[11px] text-[var(--color-text-secondary)] bg-[var(--color-surface)]">
+              <div className="flex items-center justify-between gap-2">
+                <span>⏳ {generationProgress.stage}</span>
+                <span className="text-[var(--color-text-tertiary)]">{Math.round(generationProgress.percent)}%</span>
+              </div>
+              <div className="mt-1.5 h-1.5 bg-[var(--color-bg-subtle)] rounded overflow-hidden">
+                <div
+                  className="h-full bg-[var(--color-accent-green)]"
+                  style={{ width: `${Math.max(0, Math.min(100, generationProgress.percent))}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 设定图预览 - 有形态时主体设定图隐藏（在形态卡片上显示） */}
+          {!(character.forms && character.forms.length > 0) && character.imageSheetUrl && (
+            <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
+              <img
+                src={character.imageSheetUrl}
+                alt={`${character.name} 设定图`}
+                className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[320px] cursor-zoom-in hover:opacity-90 transition-opacity"
+                loading="lazy"
+                title="点击全屏查看"
+                onClick={() => openLightbox(character.imageSheetUrl!)}
+              />
+              {character.imageGenerationMeta && (
+                <div className="mt-1.5 text-[10px] text-[var(--color-text-tertiary)]">
+                  模型：{character.imageGenerationMeta.modelName} · 风格：{character.imageGenerationMeta.styleName}
+                </div>
               )}
             </div>
           )}
 
-          {/* 操作按钮区 */}
-          <div className="flex flex-wrap justify-center gap-2 mt-2 w-full px-2">
-            {/* 上传角色图片按钮 */}
-            {onUploadImage && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUploadImage();
-                }}
-                className="flex-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-2 py-1.5 rounded-lg text-[12px] font-medium transition-colors whitespace-nowrap"
-                title="上传角色图片并AI分析"
-              >
-                📤 上传图片
-              </button>
-            )}
-
-            {/* 生成角色设定图 - 有形态时隐藏主体按钮，只在形态上显示 */}
-            {onGenerateImage && !(character.forms && character.forms.length > 0) && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onGenerateImage();
-                }}
-                disabled={!!isGenerating}
-                className="flex-1 bg-emerald-600/20 hover:bg-emerald-600/40 disabled:bg-gray-800 disabled:text-gray-500 disabled:border-gray-700 text-emerald-400 border border-emerald-500/30 px-2 py-1.5 rounded-lg text-[12px] font-medium disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-                title={character.imageSheetUrl ? '重新生成角色设定图' : '自动生成'}
-              >
-                {isGenerating ? '⏳ 生成中...' : (character.imageSheetUrl ? '🔄 重新生成' : '🎨 自动生成')}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 生成进度 - 有形态时主体进度隐藏（进度在形态卡片上显示） */}
-        {!(character.forms && character.forms.length > 0) && isGenerating && generationProgress && (
-          <div className="border-t border-[var(--color-border)] p-3 text-[11px] text-[var(--color-text-secondary)] bg-[var(--color-surface)]">
-            <div className="flex items-center justify-between gap-2">
-              <span>⏳ {generationProgress.stage}</span>
-              <span className="text-[var(--color-text-tertiary)]">{Math.round(generationProgress.percent)}%</span>
-            </div>
-            <div className="mt-1.5 h-1.5 bg-[var(--color-bg-subtle)] rounded overflow-hidden">
-              <div
-                className="h-full bg-[var(--color-accent-green)]"
-                style={{ width: `${Math.max(0, Math.min(100, generationProgress.percent))}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 设定图预览 - 有形态时主体设定图隐藏（在形态卡片上显示） */}
-        {!(character.forms && character.forms.length > 0) && character.imageSheetUrl && (
-          <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
-            <img
-              src={character.imageSheetUrl}
-              alt={`${character.name} 设定图`}
-              className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[320px] cursor-zoom-in hover:opacity-90 transition-opacity"
-              loading="lazy"
-              title="点击全屏查看"
-              onClick={() => openLightbox(character.imageSheetUrl!)}
-            />
-            {character.imageGenerationMeta && (
-              <div className="mt-1.5 text-[10px] text-[var(--color-text-tertiary)]">
-                模型：{character.imageGenerationMeta.modelName} · 风格：{character.imageGenerationMeta.styleName}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 缺失字段提示和智能补充按钮 */}
-        {missingFields && missingFields.length > 0 && completeness !== undefined && (
-          <div className={`border-t border-[var(--color-border)] p-3 ${completeness < 85 ? 'bg-[var(--color-accent-amber)]/5' : 'bg-[var(--color-accent-blue)]/5'}`}>
-            <div className="flex items-center justify-between mb-2">
-              <div className={`text-[12px] ${completeness < 85 ? 'text-[var(--color-accent-amber)]' : 'text-[var(--color-accent-blue)]'}`}>
-                {completeness < 85 ? '⚠️ 待补充信息：' : '💡 可继续优化：'}
-              </div>
-              {onSupplement && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSupplement();
-                  }}
-                  disabled={isSupplementing}
-                  className="btn-secondary px-2.5 py-1 rounded-md text-[11px] flex items-center gap-1 disabled:opacity-50"
-                  title={completeness < 85 ? '使用AI智能补充角色细节' : '继续优化角色信息'}
-                >
-                  {isSupplementing ? '⏳ 补充中...' : (completeness < 85 ? '✨ 智能补充' : '🔄 继续补充')}
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {missingFields.slice(0, 3).map((field, idx) => {
-                // 特殊处理形态字段，显示剧本中发现的形态数量
-                const isFormField = field.field === 'forms' && field.label.includes('剧本中发现');
-                return (
-                  <span
-                    key={idx}
-                    className={`px-2 py-0.5 rounded-md text-[10px] ${isFormField
-                      ? 'bg-[var(--color-accent-violet)]/10 text-[var(--color-accent-violet)] border border-[var(--color-accent-violet)]/30'
-                      : completeness < 85
-                        ? 'bg-[var(--color-accent-amber)]/10 text-[var(--color-accent-amber)] border border-[var(--color-accent-amber)]/30'
-                        : 'bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] border border-[var(--color-accent-blue)]/30'
-                      }`}
-                    title={isFormField ? '点击"智能补充"可自动提取剧本中的形态' : ''}
+          {/* 缺失字段提示和智能补充按钮 */}
+          {missingFields && missingFields.length > 0 && completeness !== undefined && (
+            <div className={`border-t border-[var(--color-border)] p-3 ${completeness < 85 ? 'bg-[var(--color-accent-amber)]/5' : 'bg-[var(--color-accent-blue)]/5'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className={`text-[12px] ${completeness < 85 ? 'text-[var(--color-accent-amber)]' : 'text-[var(--color-accent-blue)]'}`}>
+                  {completeness < 85 ? '⚠️ 待补充信息：' : '💡 可继续优化：'}
+                </div>
+                {onSupplement && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSupplement();
+                    }}
+                    disabled={isSupplementing}
+                    className="btn-secondary px-2.5 py-1 rounded-md text-[11px] flex items-center gap-1 disabled:opacity-50"
+                    title={completeness < 85 ? '使用AI智能补充角色细节' : '继续优化角色信息'}
                   >
-                    {field.label}
+                    {isSupplementing ? '⏳ 补充中...' : (completeness < 85 ? '✨ 智能补充' : '🔄 继续补充')}
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {missingFields.slice(0, 3).map((field, idx) => {
+                  // 特殊处理形态字段，显示剧本中发现的形态数量
+                  const isFormField = field.field === 'forms' && field.label.includes('剧本中发现');
+                  return (
+                    <span
+                      key={idx}
+                      className={`px-2 py-0.5 rounded-md text-[10px] ${isFormField
+                        ? 'bg-[var(--color-accent-violet)]/10 text-[var(--color-accent-violet)] border border-[var(--color-accent-violet)]/30'
+                        : completeness < 85
+                          ? 'bg-[var(--color-accent-amber)]/10 text-[var(--color-accent-amber)] border border-[var(--color-accent-amber)]/30'
+                          : 'bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] border border-[var(--color-accent-blue)]/30'
+                        }`}
+                      title={isFormField ? '点击"智能补充"可自动提取剧本中的形态' : ''}
+                    >
+                      {field.label}
+                    </span>
+                  );
+                })}
+                {missingFields.length > 3 && (
+                  <span className={`text-[10px] ${completeness < 85 ? 'text-[var(--color-accent-amber)]' : 'text-[var(--color-accent-blue)]'}`}>
+                    +{missingFields.length - 3}项
                   </span>
-                );
-              })}
-              {missingFields.length > 3 && (
-                <span className={`text-[10px] ${completeness < 85 ? 'text-[var(--color-accent-amber)]' : 'text-[var(--color-accent-blue)]'}`}>
-                  +{missingFields.length - 3}项
-                </span>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 形态列表 - 始终显示（不需要点击展开） */}
-        {character.forms && character.forms.length > 0 && (
-          <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
-            <div className="grid grid-cols-1 gap-3">
-              {character.forms.map((form) => {
-                const isFormGenerating = generatingFormIds.includes(form.id);
-                const currentFormProgress = formGenProgressMap[form.id] || null;
-                // 🔍 调试日志
-                if (form.imageSheetUrl) {
-                  console.log(`[CharacterCard] 🔍 形态 ${form.name} 有设定图: ${form.imageSheetUrl.substring(0, 80)}...`);
-                }
-                return (
-                  <div key={form.id} className="bg-[var(--color-surface-solid)] rounded-lg p-3 text-[12px] group relative border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-colors">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[var(--color-text)] font-medium">{form.name}</span>
-                      <div className="flex items-center gap-1.5">
-                        {form.episodeRange && (
-                          <span className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">
-                            {form.episodeRange}
-                          </span>
-                        )}
-                        {/* 形态设定图生成按钮 */}
-                        {onGenerateFormImage && (
+          {/* 形态列表 - 始终显示（不需要点击展开） */}
+          {character.forms && character.forms.length > 0 && (
+            <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
+              <div className="grid grid-cols-1 gap-3">
+                {character.forms.map((form) => {
+                  const isFormGenerating = generatingFormIds.includes(form.id);
+                  const currentFormProgress = formGenProgressMap[form.id] || null;
+                  // 🔍 调试日志
+                  if (form.imageSheetUrl) {
+                    console.log(`[CharacterCard] 🔍 形态 ${form.name} 有设定图: ${form.imageSheetUrl.substring(0, 80)}...`);
+                  }
+                  return (
+                    <div key={form.id} className="bg-[var(--color-surface-solid)] rounded-lg p-3 text-[12px] group relative border border-[var(--color-border)] hover:border-[var(--color-border-hover)] transition-colors">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[var(--color-text)] font-medium">{form.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          {form.episodeRange && (
+                            <span className="bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] px-2 py-0.5 rounded-md text-[10px] border border-[var(--color-accent-blue)]/30">
+                              {form.episodeRange}
+                            </span>
+                          )}
+                          {/* 形态设定图生成按钮 */}
+                          {onGenerateFormImage && (
+                            <button
+                              onClick={() => onGenerateFormImage(form.id)}
+                              disabled={isFormGenerating}
+                              className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-2 py-0.5 rounded-md text-[10px] font-medium disabled:cursor-not-allowed transition-colors"
+                              title={form.imageSheetUrl ? '重新生成形态设定图' : '生成形态设定图'}
+                            >
+                              {isFormGenerating ? '⏳ 生成中...' : (form.imageSheetUrl ? '🔄 重新生成' : '🎨 生成设定图')}
+                            </button>
+                          )}
                           <button
-                            onClick={() => onGenerateFormImage(form.id)}
-                            disabled={isFormGenerating}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-2 py-0.5 rounded-md text-[10px] font-medium disabled:cursor-not-allowed transition-colors"
-                            title={form.imageSheetUrl ? '重新生成形态设定图' : '生成形态设定图'}
+                            onClick={() => onEditForm(form)}
+                            className="opacity-0 group-hover:opacity-100 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[11px] transition-all"
+                            title="编辑形态"
                           >
-                            {isFormGenerating ? '⏳ 生成中...' : (form.imageSheetUrl ? '🔄 重新生成' : '🎨 生成设定图')}
+                            ✏️
                           </button>
-                        )}
-                        <button
-                          onClick={() => onEditForm(form)}
-                          className="opacity-0 group-hover:opacity-100 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-light)] text-[11px] transition-all"
-                          title="编辑形态"
-                        >
-                          ✏️
-                        </button>
-                      </div>
-                    </div>
-                    {/* 描述完整显示（不截断） */}
-                    <p className="text-[var(--color-text-secondary)] text-[11px] leading-relaxed whitespace-pre-wrap">{form.description}</p>
-                    {form.note && (
-                      <p className="text-[var(--color-text-tertiary)] text-[10px] mt-1.5 italic">💡 {form.note}</p>
-                    )}
-
-                    {/* 形态生成进度 */}
-                    {isFormGenerating && currentFormProgress && (
-                      <div className="mt-2 text-[10px] text-[var(--color-text-secondary)]">
-                        <div className="flex items-center justify-between gap-2">
-                          <span>⏳ {currentFormProgress.stage}</span>
-                          <span className="text-[var(--color-text-tertiary)]">{Math.round(currentFormProgress.percent)}%</span>
-                        </div>
-                        <div className="mt-1 h-1 bg-[var(--color-bg-subtle)] rounded overflow-hidden">
-                          <div className="h-full bg-[var(--color-accent-green)]" style={{ width: `${Math.max(0, Math.min(100, currentFormProgress.percent))}%` }} />
                         </div>
                       </div>
-                    )}
+                      {/* 描述完整显示（不截断） */}
+                      <p className="text-[var(--color-text-secondary)] text-[11px] leading-relaxed whitespace-pre-wrap">{form.description}</p>
+                      {form.note && (
+                        <p className="text-[var(--color-text-tertiary)] text-[10px] mt-1.5 italic">💡 {form.note}</p>
+                      )}
 
-                    {/* 形态设定图预览 */}
-                    {form.imageSheetUrl && (
-                      <div className="mt-2">
-                        <img
-                          src={form.imageSheetUrl}
-                          alt={`${form.name} 设定图`}
-                          className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[200px] cursor-zoom-in hover:opacity-90 transition-opacity"
-                          loading="lazy"
-                          title="点击全屏查看"
-                          onClick={() => openLightbox(form.imageSheetUrl!)}
-                        />
-                        {form.imageGenerationMeta && (
-                          <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
-                            模型：{form.imageGenerationMeta.modelName} · 风格：{form.imageGenerationMeta.styleName}
+                      {/* 形态生成进度 */}
+                      {isFormGenerating && currentFormProgress && (
+                        <div className="mt-2 text-[10px] text-[var(--color-text-secondary)]">
+                          <div className="flex items-center justify-between gap-2">
+                            <span>⏳ {currentFormProgress.stage}</span>
+                            <span className="text-[var(--color-text-tertiary)]">{Math.round(currentFormProgress.percent)}%</span>
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                          <div className="mt-1 h-1 bg-[var(--color-bg-subtle)] rounded overflow-hidden">
+                            <div className="h-full bg-[var(--color-accent-green)]" style={{ width: `${Math.max(0, Math.min(100, currentFormProgress.percent))}%` }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 形态设定图预览 */}
+                      {form.imageSheetUrl && (
+                        <div className="mt-2">
+                          <img
+                            src={form.imageSheetUrl}
+                            alt={`${form.name} 设定图`}
+                            className="w-full rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border)] object-contain max-h-[200px] cursor-zoom-in hover:opacity-90 transition-opacity"
+                            loading="lazy"
+                            title="点击全屏查看"
+                            onClick={() => openLightbox(form.imageSheetUrl!)}
+                          />
+                          {form.imageGenerationMeta && (
+                            <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                              模型：{form.imageGenerationMeta.modelName} · 风格：{form.imageGenerationMeta.styleName}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* ── Lightbox 全屏查看 Modal（支持滚轮缩放 + 鼠标拖动）─────────────────── */}
         {lightboxUrl && (
@@ -2365,7 +2367,7 @@ const CharacterCard: React.FC<{
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   };
 

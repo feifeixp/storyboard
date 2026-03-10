@@ -46,7 +46,7 @@ export function ProjectList({
         {/* 标题 */}
         <div className="text-center mb-12">
           <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 mb-3 drop-shadow-sm">
-            🎬 Visionary Storyboard Studio
+            🎬 NeoAI - 导演助手
           </h1>
           <p className="text-gray-400 text-sm md:text-base">
             AI驱动的专业分镜脚本生成系统 | 支持多集剧本统一管理

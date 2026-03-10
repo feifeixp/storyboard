@@ -39,7 +39,7 @@ export default function Login(props: LoginProps) {
 
     try {
       await sendVerificationCode(contact);
-      
+
       // 开始倒计时（60秒）
       setCountdown(60);
       const timer = setInterval(() => {
@@ -113,7 +113,7 @@ export default function Login(props: LoginProps) {
             <span className="text-3xl">🎬</span>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">
-            Visionary Storyboard Studio
+            NeoAI - 导演助手
           </h1>
           <p className="text-sm text-gray-300">
             AI驱动的分镜脚本生成系统
