@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shot } from '../../types';
+import { Shot, CharacterRef } from '../../types';
 
 /**
  * 安全解析提示词提取结果 JSON，自动处理 ```json 代码块包裹等常见格式问题。
@@ -89,6 +89,7 @@ interface PromptExtractionPageProps {
   // 分镜数据
   shots: Shot[];
   setShots: (shots: Shot[]) => void;
+  characterRefs: CharacterRef[];
 
   // 提取状态
   isExtracting: boolean;
@@ -144,7 +145,84 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
   currentEpisodeNumber,
   script,
   saveEpisode,
+  characterRefs,
 }) => {
+  // ── 提取当前分镜组涉及的登场角色
+  const usedCharacters = React.useMemo(() => {
+    const ids = new Set<string>();
+    shots.forEach(s => {
+      if (s.assignedCharacterIds && s.assignedCharacterIds.length > 0) {
+        s.assignedCharacterIds.forEach(id => ids.add(id));
+      } else {
+        const eventText = typeof s.storyBeat === 'string' ? s.storyBeat : s.storyBeat?.event || '';
+        const searchText = `${s.imagePromptCn || ''} ${eventText}`;
+        characterRefs.forEach(c => {
+          if (searchText.includes(c.name) || (s.imagePromptCn && s.imagePromptCn.includes(`@${c.name}`))) {
+            ids.add(c.id);
+          }
+        });
+      }
+    });
+    return characterRefs.filter(c => ids.has(c.id));
+  }, [shots, characterRefs]);
+
+  // ── 提取图片 URL 的辅助函数
+  const getCharacterImageUrl = (c: CharacterRef) => {
+    if (c.imageSheetUrl) return c.imageSheetUrl;
+    if (c.referenceImageUrl) return c.referenceImageUrl;
+    if (c.imageUrls && c.imageUrls.length > 0) return c.imageUrls[0];
+    // 回退：从 forms 中取第一个有设定图的形态
+    if (c.forms && c.forms.length > 0) {
+      const formWithImage = c.forms.find(f => f.imageSheetUrl);
+      if (formWithImage) return formWithImage.imageSheetUrl;
+    }
+    return c.data;
+  };
+
+  // ── 渲染带 @标签 的提示词组件
+  const RenderPromptWithTags = ({ text }: { text: string }) => {
+    if (!text) return <span>—</span>;
+
+    // 匹配 @角色名 或 @角色名(状态)
+    const regex = /@([^(]+)(?:\(([^)]+)\))?/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      // 拉取匹配项之前的文本
+      if (match.index > lastIndex) {
+        parts.push(<span key={`text-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
+      }
+
+      const roleName = match[1].trim();
+      const stateName = match[2]?.trim();
+      const fullMatch = match[0];
+
+      // 尝试寻找角色及图片
+      const character = characterRefs.find(c => c.name === roleName);
+      const imageUrl = character ? getCharacterImageUrl(character) : null;
+
+      parts.push(
+        <span key={`tag-${match.index}`} className="inline-flex items-center gap-1 mx-1 px-1.5 py-0.5 bg-blue-900/40 border border-blue-700/50 text-blue-300 rounded text-[11px] align-middle shadow-sm">
+          {imageUrl && (
+            <img src={imageUrl} alt={roleName} className="w-4 h-4 rounded-sm object-cover border border-blue-600/50" />
+          )}
+          <span className="font-bold">{roleName}</span>
+          {stateName && <span className="text-blue-400 opacity-80 text-[10px]">({stateName})</span>}
+        </span>
+      );
+
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(<span key={`text-${lastIndex}`}>{text.slice(lastIndex)}</span>);
+    }
+
+    return <span className="leading-loose">{parts}</span>;
+  };
+
   const handleExtractPrompts = async () => {
     setIsExtracting(true);
     setExtractProgress('正在分析分镜脚本，提取AI生图提示词...');
@@ -158,17 +236,32 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
         setExtractProgress(`提取中... (${Math.min(Math.round(fullText.length / 250), 99)}%)`);
       }
 
-	      // 解析JSON并更新shots（兼容 ```json 代码块等格式）
-	      const extracted = safeParsePromptExtractionResult(fullText);
-	      if (!Array.isArray(extracted) || extracted.length === 0) {
-	        throw new Error('提示词提取结果解析失败，请稍后重试或尝试更换模型');
-	      }
+      // 解析JSON并更新shots（兼容 ```json 代码块等格式）
+      const extracted = safeParsePromptExtractionResult(fullText);
+      if (!Array.isArray(extracted) || extracted.length === 0) {
+        throw new Error('提示词提取结果解析失败，请稍后重试或尝试更换模型');
+      }
       const updatedShots = shots.map(shot => {
         const match = extracted.find((e: any) => e.shotNumber === shot.shotNumber);
         if (match) {
+          const newPrompt = match.imagePromptCn || '';
+
+          // ── 新增：提取并关联角色 ──
+          const regex = /@([^(]+)(?:\(([^)]+)\))?/g;
+          const assignedCharIds = new Set<string>(shot.assignedCharacterIds || []);
+          let m;
+          while ((m = regex.exec(newPrompt)) !== null) {
+            const roleName = m[1].trim();
+            const char = characterRefs.find(c => c.name === roleName);
+            if (char) {
+              assignedCharIds.add(char.id);
+            }
+          }
+
           return {
             ...shot,
-            imagePromptCn: match.imagePromptCn || '',
+            imagePromptCn: newPrompt,
+            assignedCharacterIds: Array.from(assignedCharIds),
           };
         }
         return shot;
@@ -191,7 +284,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
               updatedAt: new Date().toISOString(),
             };
             await saveEpisode(currentProject.id, updatedEpisode);
-            setExtractProgress(prev => (prev.includes('✅') ? `${prev}（已保存到云端）` : prev));
+            setExtractProgress(`✅ 提取完成！已更新 ${extracted.length} 个镜头的AI提示词（已保存到云端）`);
           } catch (error) {
             console.error('[D1存储] ❌ 保存提示词失败:', error);
           }
@@ -322,6 +415,44 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
         )}
       </div>
 
+      {/* 登场角色预览面板 */}
+      {usedCharacters.length > 0 && (
+        <div className="glass-card p-4 rounded-xl mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-white flex items-center gap-2">
+              🎭 参与生成登场角色 <span className="text-xs font-normal text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full">{usedCharacters.length}</span>
+            </h3>
+            <span className="text-xs text-gray-400">以下角色的参考组合将作为上下文传给AI生图模型</span>
+          </div>
+
+          <div className="flex flex-wrap gap-4">
+            {usedCharacters.map((c) => {
+              const url = getCharacterImageUrl(c);
+              const hasNoImage = !url;
+              return (
+                <div key={c.id} className="flex flex-col items-center w-16">
+                  <div className={`w-14 h-14 rounded-full mb-2 overflow-hidden border-2 shadow-sm ${hasNoImage ? 'border-red-500/50 border-dashed bg-red-900/20' : 'border-gray-600 bg-gray-800'}`}>
+                    {url ? (
+                      <img src={url} alt={c.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-red-400">
+                        <svg className="w-6 h-6 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-200 text-center font-medium truncate w-full" title={c.name}>
+                    {c.name}
+                  </span>
+                  {hasNoImage && <span className="text-[10px] text-red-400 mt-0.5 whitespace-nowrap">缺图片</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 提示词表格 */}
       <div className="glass-card p-4 rounded-xl">
         <h3 className="font-bold text-white mb-3">📋 提示词列表</h3>
@@ -351,16 +482,15 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
                       )}
                     </td>
                     <td className="px-3 py-2 border border-[var(--color-border)] text-center">
-                      <span className={`px-2 py-0.5 rounded text-xs ${
-                        shot.shotType === '运动'
-                          ? 'bg-green-900/30 text-green-300'
-                          : 'bg-gray-700 text-gray-300'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-xs ${shot.shotType === '运动'
+                        ? 'bg-green-900/30 text-green-300'
+                        : 'bg-gray-700 text-gray-300'
+                        }`}>
                         {shot.shotType || '静态'}
                       </span>
                     </td>
                     <td className={`px-3 py-2 border border-[var(--color-border)] ${wasOptimized ? 'text-emerald-300' : 'text-[var(--color-text-secondary)]'}`}>
-                      {shot.imagePromptCn || '—'}
+                      <RenderPromptWithTags text={shot.imagePromptCn || ''} />
                     </td>
                   </tr>
                 );

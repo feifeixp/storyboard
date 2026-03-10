@@ -118,17 +118,63 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
     [scenes, currentProject]
   );
 
+  // ── 图像获取辅助函数 ────────────────────────
+  const getCharacterImageUrl = (c: CharacterRef) => {
+    // 1. 角色顶层字段
+    if (c.imageSheetUrl) return c.imageSheetUrl;
+    if (c.referenceImageUrl) return c.referenceImageUrl;
+    if (c.imageUrls && c.imageUrls.length > 0) return c.imageUrls[0];
+    // 2. 回退：从 forms 中取第一个有设定图的形态
+    if (c.forms && c.forms.length > 0) {
+      const formWithImage = c.forms.find(f => f.imageSheetUrl);
+      if (formWithImage) return formWithImage.imageSheetUrl;
+    }
+    // 3. 兜底：base64 data
+    return c.data;
+  };
+  const getSceneImageUrl = (s: SceneRef) => s.imageSheetUrl || (s.imageUrls && s.imageUrls.length > 0 ? s.imageUrls[0] : undefined);
+
+  // ── 收集当前所有的镜头涉及到的角色和场景 ────────────────────────
+  const usedCharacterIds = useMemo(() => {
+    const ids = new Set<string>();
+    shots.forEach(s => {
+      if (s.assignedCharacterIds && s.assignedCharacterIds.length > 0) {
+        s.assignedCharacterIds.forEach(id => ids.add(id));
+      } else {
+        const eventText = typeof s.storyBeat === 'string' ? s.storyBeat : s.storyBeat?.event || '';
+        const searchText = `${s.imagePromptCn || ''} ${eventText}`;
+        characterRefs.forEach(c => {
+          if (searchText.includes(c.name) || (s.imagePromptCn && s.imagePromptCn.includes(`@${c.name}`))) {
+            ids.add(c.id);
+          }
+        });
+      }
+    });
+    return ids;
+  }, [shots, characterRefs]);
+
+  const usedSceneIds = useMemo(() => {
+    const ids = new Set<string>();
+    shots.forEach(s => {
+      const sId = s.sceneId || s.assignedSceneId;
+      if (sId) ids.add(sId);
+    });
+    return ids;
+  }, [shots]);
+
   // ── 警告判断 ──────────────────────────────────────────
   const hasCharacters = characterRefs.length > 0;
   const hasScenes = allScenes.length > 0;
-  const charsWithoutImage = useMemo(
-    () => characterRefs.filter(c => !c.imageSheetUrl && !(c.imageUrls && c.imageUrls.length > 0)),
-    [characterRefs]
-  );
-  const scenesWithoutImage = useMemo(
-    () => allScenes.filter(s => !s.imageSheetUrl),
-    [allScenes]
-  );
+
+  const charsWithoutImage = useMemo(() => {
+    return characterRefs.filter(c => usedCharacterIds.has(c.id) && !getCharacterImageUrl(c));
+  }, [characterRefs, usedCharacterIds]);
+
+  const scenesWithoutImage = useMemo(() => {
+    return allScenes.filter(s => usedSceneIds.has(s.id) && !getSceneImageUrl(s));
+  }, [allScenes, usedSceneIds]);
+
+
 
   // ── 每格上下文（角色 + 场景） ─────────────────────────
   const totalGrids = Math.ceil(shots.length / GRID_SIZE);
@@ -139,7 +185,19 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
 
     // 收集该格出现的角色ID
     const charIds = new Set<string>();
-    gridShots.forEach(s => s.assignedCharacterIds?.forEach(id => charIds.add(id)));
+    gridShots.forEach(s => {
+      if (s.assignedCharacterIds && s.assignedCharacterIds.length > 0) {
+        s.assignedCharacterIds.forEach(id => charIds.add(id));
+      } else {
+        const eventText = typeof s.storyBeat === 'string' ? s.storyBeat : s.storyBeat?.event || '';
+        const searchText = `${s.imagePromptCn || ''} ${eventText}`;
+        characterRefs.forEach(c => {
+          if (searchText.includes(c.name) || (s.imagePromptCn && s.imagePromptCn.includes(`@${c.name}`))) {
+            charIds.add(c.id);
+          }
+        });
+      }
+    });
     const chars = characterRefs.filter(c => charIds.has(c.id));
 
     // 收集该格涉及的场景ID
@@ -234,11 +292,10 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
               <button
                 key={style.id}
                 onClick={() => setSelectedStyle(style)}
-                className={`p-3 rounded-lg border-2 transition-all text-left ${
-                  selectedStyle.id === style.id
-                    ? 'border-blue-500 bg-blue-900/30'
-                    : 'border-gray-700 bg-gray-800 hover:border-gray-600'
-                }`}
+                className={`p-3 rounded-lg border-2 transition-all text-left ${selectedStyle.id === style.id
+                  ? 'border-blue-500 bg-blue-900/30'
+                  : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                  }`}
               >
                 <div className="flex items-center gap-2 mb-2">
                   <div
@@ -338,138 +395,138 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
               const { gridShots, chars, usedScenes } = getGridContext(idx);
               const isExpanded = expandedGrids.has(idx);
               return (
-              <div key={idx} className="bg-gray-800 rounded-lg overflow-hidden border border-green-700">
-                <div className="flex justify-between items-center px-3 py-2 bg-gray-900 border-b border-gray-700">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-gray-200">第 {idx + 1} 页</span>
-                    <button
-                      onClick={() => toggleGrid(idx)}
-                      className="text-xs text-blue-400 hover:text-blue-300 underline"
-                      title="查看生成上下文（提示词 + 参考图）"
-                    >
-                      {isExpanded ? '▲ 收起上下文' : '▼ 查看上下文'}
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    {url ? (
-                      <>
-                        <button
-                          onClick={() => handleRegenerateGrid(idx)}
-                          disabled={isLoading}
-                          className="px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="重新生成这张九宫格"
-                        >
-                          🔄 重新生成
-                        </button>
-                        <button
-                          onClick={() => {
-                            setUploadGridIndex(idx);
-                            setUploadDialogOpen(true);
-                          }}
-                          disabled={isLoading}
-                          className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="上传自定义图片"
-                        >
-                          📤 上传
-                        </button>
-                        <a
-                          href={url}
-                          download={`storyboard_grid_${idx + 1}_${Date.now()}.png`}
-                          className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
-                        >
-                          📥 下载
-                        </a>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-xs text-orange-400">生成中...</span>
-                        {shots[idx * 9]?.storyboardGridGenerationMeta?.taskCode && (
+                <div key={idx} className="bg-gray-800 rounded-lg overflow-hidden border border-green-700">
+                  <div className="flex justify-between items-center px-3 py-2 bg-gray-900 border-b border-gray-700">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-200">第 {idx + 1} 页</span>
+                      <button
+                        onClick={() => toggleGrid(idx)}
+                        className="text-xs text-blue-400 hover:text-blue-300 underline"
+                        title="查看生成上下文（提示词 + 参考图）"
+                      >
+                        {isExpanded ? '▲ 收起上下文' : '▼ 查看上下文'}
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      {url ? (
+                        <>
                           <button
-                            onClick={() => handleRefreshGrid(idx, shots[idx * 9]?.storyboardGridGenerationMeta)}
+                            onClick={() => handleRegenerateGrid(idx)}
                             disabled={isLoading}
-                            className="px-2 py-1 bg-cyan-600 text-white rounded text-xs hover:bg-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed ml-2"
-                            title="刷新任务状态，获取生成结果"
+                            className="px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="重新生成这张九宫格"
                           >
-                            🔄 刷新任务
+                            🔄 重新生成
                           </button>
-                        )}
-                      </>
-                    )}
+                          <button
+                            onClick={() => {
+                              setUploadGridIndex(idx);
+                              setUploadDialogOpen(true);
+                            }}
+                            disabled={isLoading}
+                            className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="上传自定义图片"
+                          >
+                            📤 上传
+                          </button>
+                          <a
+                            href={url}
+                            download={`storyboard_grid_${idx + 1}_${Date.now()}.png`}
+                            className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                          >
+                            📥 下载
+                          </a>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-orange-400">生成中...</span>
+                          {shots[idx * 9]?.storyboardGridGenerationMeta?.taskCode && (
+                            <button
+                              onClick={() => handleRefreshGrid(idx, shots[idx * 9]?.storyboardGridGenerationMeta)}
+                              disabled={isLoading}
+                              className="px-2 py-1 bg-cyan-600 text-white rounded text-xs hover:bg-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                              title="刷新任务状态，获取生成结果"
+                            >
+                              🔄 刷新任务
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
+                  {url ? (
+                    <img src={url} alt={`Storyboard Grid ${idx + 1}`} className="w-full" />
+                  ) : (
+                    <div className="h-64 bg-gray-700 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                        <p className="text-sm text-gray-400">正在生成第 {idx + 1} 张九宫格...</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── 上下文展开面板 ── */}
+                  {isExpanded && (
+                    <div className="bg-gray-900 border-t border-gray-700 p-3 space-y-3 text-xs">
+                      {/* 参考图 */}
+                      {(chars.length > 0 || usedScenes.length > 0) && (
+                        <div className="space-y-2">
+                          {chars.length > 0 && (
+                            <div>
+                              <p className="text-gray-400 font-semibold mb-1">👤 角色参考图</p>
+                              <div className="flex flex-wrap gap-2">
+                                {chars.map(c => (
+                                  <div key={c.id} className="flex flex-col items-center gap-1">
+                                    {getCharacterImageUrl(c) ? (
+                                      <img src={getCharacterImageUrl(c)} alt={c.name} className="w-16 h-16 object-cover rounded border border-gray-600" />
+                                    ) : (
+                                      <div className="w-16 h-16 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400 text-lg">?</div>
+                                    )}
+                                    <span className="text-gray-400 text-[10px] max-w-[64px] text-center truncate">{c.name}</span>
+                                    {!getCharacterImageUrl(c) && <span className="text-amber-400 text-[9px]">无设定图</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {usedScenes.length > 0 && (
+                            <div>
+                              <p className="text-gray-400 font-semibold mb-1">🏛️ 场景参考图</p>
+                              <div className="flex flex-wrap gap-2">
+                                {usedScenes.map(s => (
+                                  <div key={s.id} className="flex flex-col items-center gap-1">
+                                    {getSceneImageUrl(s) ? (
+                                      <img src={getSceneImageUrl(s)} alt={s.name} className="w-16 h-16 object-cover rounded border border-gray-600" />
+                                    ) : (
+                                      <div className="w-16 h-16 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400 text-lg">?</div>
+                                    )}
+                                    <span className="text-gray-400 text-[10px] max-w-[64px] text-center truncate">{s.name}</span>
+                                    {!getSceneImageUrl(s) && <span className="text-amber-400 text-[9px]">无设定图</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 镜头提示词列表 */}
+                      <div>
+                        <p className="text-gray-400 font-semibold mb-1">📝 镜头生图提示词（共 {gridShots.length} 个）</p>
+                        <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                          {gridShots.map((shot, sIdx) => (
+                            <div key={shot.id} className="flex gap-2 items-start bg-gray-800 rounded px-2 py-1">
+                              <span className="text-gray-500 shrink-0">#{shot.shotNumber || (idx * GRID_SIZE + sIdx + 1)}</span>
+                              <span className="text-gray-300 leading-relaxed">
+                                {shot.imagePromptCn || <em className="text-gray-500">（未提取生图提示词）</em>}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {url ? (
-                  <img src={url} alt={`Storyboard Grid ${idx + 1}`} className="w-full" />
-                ) : (
-                  <div className="h-64 bg-gray-700 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                      <p className="text-sm text-gray-400">正在生成第 {idx + 1} 张九宫格...</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* ── 上下文展开面板 ── */}
-                {isExpanded && (
-                  <div className="bg-gray-900 border-t border-gray-700 p-3 space-y-3 text-xs">
-                    {/* 参考图 */}
-                    {(chars.length > 0 || usedScenes.length > 0) && (
-                      <div className="space-y-2">
-                        {chars.length > 0 && (
-                          <div>
-                            <p className="text-gray-400 font-semibold mb-1">👤 角色参考图</p>
-                            <div className="flex flex-wrap gap-2">
-                              {chars.map(c => (
-                                <div key={c.id} className="flex flex-col items-center gap-1">
-                                  {c.imageSheetUrl ? (
-                                    <img src={c.imageSheetUrl} alt={c.name} className="w-16 h-16 object-cover rounded border border-gray-600" />
-                                  ) : (
-                                    <div className="w-16 h-16 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400 text-lg">?</div>
-                                  )}
-                                  <span className="text-gray-400 text-[10px] max-w-[64px] text-center truncate">{c.name}</span>
-                                  {!c.imageSheetUrl && <span className="text-amber-400 text-[9px]">无设定图</span>}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {usedScenes.length > 0 && (
-                          <div>
-                            <p className="text-gray-400 font-semibold mb-1">🏛️ 场景参考图</p>
-                            <div className="flex flex-wrap gap-2">
-                              {usedScenes.map(s => (
-                                <div key={s.id} className="flex flex-col items-center gap-1">
-                                  {s.imageSheetUrl ? (
-                                    <img src={s.imageSheetUrl} alt={s.name} className="w-16 h-16 object-cover rounded border border-gray-600" />
-                                  ) : (
-                                    <div className="w-16 h-16 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400 text-lg">?</div>
-                                  )}
-                                  <span className="text-gray-400 text-[10px] max-w-[64px] text-center truncate">{s.name}</span>
-                                  {!s.imageSheetUrl && <span className="text-amber-400 text-[9px]">无设定图</span>}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* 镜头提示词列表 */}
-                    <div>
-                      <p className="text-gray-400 font-semibold mb-1">📝 镜头生图提示词（共 {gridShots.length} 个）</p>
-                      <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                        {gridShots.map((shot, sIdx) => (
-                          <div key={shot.id} className="flex gap-2 items-start bg-gray-800 rounded px-2 py-1">
-                            <span className="text-gray-500 shrink-0">#{shot.shotNumber || (idx * GRID_SIZE + sIdx + 1)}</span>
-                            <span className="text-gray-300 leading-relaxed">
-                              {shot.imagePromptCn || <em className="text-gray-500">（未提取生图提示词）</em>}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
               );
             })}
           </div>
@@ -512,8 +569,8 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
                         <div className="flex flex-wrap gap-3">
                           {chars.map(c => (
                             <div key={c.id} className="flex items-center gap-1.5">
-                              {c.imageSheetUrl
-                                ? <img src={c.imageSheetUrl} alt={c.name} className="w-10 h-10 object-cover rounded border border-gray-600" />
+                              {getCharacterImageUrl(c)
+                                ? <img src={getCharacterImageUrl(c)} alt={c.name} className="w-10 h-10 object-cover rounded border border-gray-600" />
                                 : <div className="w-10 h-10 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400">?</div>
                               }
                               <span className="text-gray-400">{c.name}</span>
@@ -521,8 +578,8 @@ export const ImageGenerationPage: React.FC<ImageGenerationPageProps> = ({
                           ))}
                           {usedScenes.map(s => (
                             <div key={s.id} className="flex items-center gap-1.5">
-                              {s.imageSheetUrl
-                                ? <img src={s.imageSheetUrl} alt={s.name} className="w-10 h-10 object-cover rounded border border-gray-600" />
+                              {getSceneImageUrl(s)
+                                ? <img src={getSceneImageUrl(s)} alt={s.name} className="w-10 h-10 object-cover rounded border border-gray-600" />
                                 : <div className="w-10 h-10 bg-gray-700 rounded border border-amber-600 flex items-center justify-center text-amber-400">?</div>
                               }
                               <span className="text-gray-400">{s.name}</span>

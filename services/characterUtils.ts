@@ -153,12 +153,27 @@ export function getCharacterReferenceImagesForEpisode(
       }
     }
 
-    // 2. 回退：使用角色主体设定图
-    if (!imageUrl && character.imageSheetUrl) {
-      imageUrl = character.imageSheetUrl;
-      // 简要描述：用角色外观的前10字
-      const desc = character.appearance || character.name;
-      briefDesc = desc.length > 10 ? desc.slice(0, 10) : desc;
+    // 2. 回退：使用角色主体设定图、手动上传参考图、图片列表首图，或形态设定图，或角色基础头像数据(data)
+    if (!imageUrl) {
+      imageUrl = character.imageSheetUrl || character.referenceImageUrl || (character.imageUrls?.length ? character.imageUrls[0] : undefined);
+      // 2b. 进一步回退：从 forms 中取第一个有设定图的形态
+      if (!imageUrl && character.forms && character.forms.length > 0) {
+        const formWithImage = character.forms.find(f => f.imageSheetUrl);
+        if (formWithImage) {
+          imageUrl = formWithImage.imageSheetUrl;
+          const cleanName = formWithImage.name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').trim();
+          briefDesc = cleanName.length > 10 ? cleanName.slice(0, 10) : cleanName;
+        }
+      }
+      // 2c. 兜底：角色基础头像数据
+      if (!imageUrl) {
+        imageUrl = character.data;
+      }
+      if (imageUrl && !briefDesc) {
+        // 简要描述：用角色外观的前10字
+        const desc = character.appearance || character.name;
+        briefDesc = desc.length > 10 ? desc.slice(0, 10) : desc;
+      }
     }
 
     if (imageUrl) {
@@ -265,13 +280,17 @@ export function getCharactersForShot(
       }
     }
 
-    // 2. 回退：使用角色主体设定图
-    if (!imageUrl && character.imageSheetUrl) {
-      imageUrl = character.imageSheetUrl;
-      briefDesc = buildBriefCharacterDescription(character);
+    // 2. 回退：使用角色主体设定图、手动上传参考图（支持 imageUrls 回退）
+    if (!imageUrl) {
+      imageUrl = character.imageSheetUrl || character.referenceImageUrl || (character.imageUrls?.length ? character.imageUrls[0] : undefined);
+      if (imageUrl) {
+        briefDesc = buildBriefCharacterDescription(character);
+      }
     }
 
-    result.push({ id: character.id, name: character.name, briefDesc, imageUrl, imageIndex: result.length + 1 });
+    if (imageUrl) {
+      result.push({ id: character.id, name: character.name, briefDesc, imageUrl, imageIndex: result.length + 1 });
+    }
   }
 
   return result;
@@ -315,10 +334,12 @@ export function getCharactersForGrid(
         }
       }
 
-      // 2. 回退：使用角色主体设定图
-      if (!imageUrl && character.imageSheetUrl) {
-        imageUrl = character.imageSheetUrl;
-        briefDesc = buildBriefCharacterDescription(character);
+      // 2. 回退：使用角色主体设定图、手动上传参考图或原本设定的参考首图
+      if (!imageUrl) {
+        imageUrl = character.imageSheetUrl || character.referenceImageUrl || (character.imageUrls?.length ? character.imageUrls[0] : undefined);
+        if (imageUrl) {
+          briefDesc = buildBriefCharacterDescription(character);
+        }
       }
 
       if (imageUrl) {

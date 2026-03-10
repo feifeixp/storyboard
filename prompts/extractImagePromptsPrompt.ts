@@ -36,7 +36,13 @@ export function buildExtractImagePromptsPrompt(shots: Shot[]): string {
 - 格式：{景别}拍摄，镜头{角度高度}，{角度朝向}。{主体描述}。{环境描述}。{光影描述}。
 - 示例："广角镜头拍摄，镜头从上方拍摄，背对镜头。画面中心是一道细长的红色闪电状裂缝正缓慢撕裂，周围布满分层翻滚的红色几何状数据云团。场景设定在深邃黑暗的二进制虚空中，由裂缝辐射出的戏剧性红光照亮，勾勒出云团边缘。前景有失焦的二进制碎片形成散景效果。"
 
+**🚨 角色引用强制格式（新增）**：
+为了能在系统中准确链接角色参考图，只要在提示词中提到具体角色，必须统一使用 \`@角色名(子状态)\` 的格式（即使用 @ 前缀，如果角色处于某种独立设定的服饰/变身/战损等状态，需在括号内标明）。
+- ✅ 正确示例：\`@林溪(战术服)\` 站在画面中央 / 侧后方是 \`@晋安\` 的轮廓。
+- ❌ 错误示例：林溪站在 / 林溪(战术服) 站在 （缺少 @ 符号）。
+
 **🚨 中文提示词必须使用摄影术语，不使用分镜术语！**
+
 
 **术语映射表**：
 | 分镜术语 | 中文摄影术语 |
@@ -128,23 +134,23 @@ export function buildExtractImagePromptsPrompt(shots: Shot[]): string {
 
 ## 输入分镜数据
 ${JSON.stringify(shots.map(s => ({
-  shotNumber: s.shotNumber,
-  shotType: s.shotType,
-  storyBeat: s.storyBeat,
-  dialogue: s.dialogue,
-  shotSize: s.shotSize,
-  angleDirection: s.angleDirection,
-  angleHeight: s.angleHeight,
-  foreground: s.foreground,
-  midground: s.midground,
-  background: s.background,
-  lighting: s.lighting,
-  cameraMove: s.cameraMove,
-  startFrame: s.startFrame,
-  endFrame: s.endFrame,
-  promptCn: s.promptCn,
-  promptEn: s.promptEn
-})), null, 2)}
+    shotNumber: s.shotNumber,
+    shotType: s.shotType,
+    storyBeat: s.storyBeat,
+    dialogue: s.dialogue,
+    shotSize: s.shotSize,
+    angleDirection: s.angleDirection,
+    angleHeight: s.angleHeight,
+    foreground: s.foreground,
+    midground: s.midground,
+    background: s.background,
+    lighting: s.lighting,
+    cameraMove: s.cameraMove,
+    startFrame: s.startFrame,
+    endFrame: s.endFrame,
+    promptCn: s.promptCn,
+    promptEn: s.promptEn
+  })), null, 2)}
 
 ## 输出格式
 返回JSON数组，每个对象包含：

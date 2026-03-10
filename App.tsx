@@ -394,9 +394,9 @@ const App: React.FC = () => {
     loadFromStorage(STORAGE_KEYS.CHAT_HISTORY, [])
   );
   const chatScrollRef = useRef<HTMLDivElement>(null);
-	  // 🆕 记录当前选中的 episodeId + 恢复任务 token，避免快速切换剧集时“旧恢复任务”污染新剧集状态
-	  const selectedEpisodeIdRef = useRef<string | null>(null);
-	  const nineGridResumeTokenRef = useRef(0);
+  // 🆕 记录当前选中的 episodeId + 恢复任务 token，避免快速切换剧集时“旧恢复任务”污染新剧集状态
+  const selectedEpisodeIdRef = useRef<string | null>(null);
+  const nineGridResumeTokenRef = useRef(0);
 
   // State for Step 4 Images
   // 🆕 不再从 localStorage 加载 hqUrls（图片数据太大）
@@ -410,7 +410,7 @@ const App: React.FC = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   // 🆕 生图模型选择（动态从 Neodomain API 获取）
-  const [imageModel, setImageModel] = useState<string>('nanobanana-pro');
+  const [imageModel, setImageModel] = useState<string>('nanobanana-2');
   const [availableImageModels, setAvailableImageModels] = useState<ImageGenerationModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
 
@@ -487,9 +487,10 @@ const App: React.FC = () => {
       try {
         const models = await getModelsByScenario(ScenarioType.STORYBOARD);
         setAvailableImageModels(models);
-        // 若当前 imageModel 不在列表里，自动切换为默认分镜模型
+        // 若当前 imageModel 不在列表里，自动切换为 nanobanana-2 或默认分镜模型
         if (models.length > 0 && !models.find(m => m.model_name === imageModel)) {
-          const defaultModel = models.find(m => m.is_default_shot_model) || models[0];
+          const nanobanana2 = models.find(m => m.model_name.toLowerCase().includes('nanobanana') && m.model_name.includes('2'));
+          const defaultModel = nanobanana2 || models.find(m => m.is_default_shot_model) || models[0];
           setImageModel(defaultModel.model_name);
         }
         console.log(`[App] 加载到 ${models.length} 个可用生图模型`);
@@ -500,7 +501,7 @@ const App: React.FC = () => {
       }
     };
     loadModels();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, loggedIn]);
 
   // Robust Parsing helper for partial JSON streams
@@ -510,30 +511,30 @@ const App: React.FC = () => {
     // Only try to parse as JSON if we are NOT in the "chatting" mode (which returns plain text)
     // We differentiate by checking if we are running 'Execute' action
     if (progressMsg.includes('正在修改') || progressMsg.includes('构思') || progressMsg.includes('重写')) {
-        const parseAndSet = (jsonStr: string) => {
-          try {
-            const parsed = JSON.parse(jsonStr);
-            if (Array.isArray(parsed)) {
-              setShots(parsed.map((s: any, idx: number) => ({
-                ...s,
-                id: s.id || `shot-stable-${idx}`, 
-                status: s.status || 'pending'
-              })));
-            }
-          } catch (e) {
-            // Silent fail
+      const parseAndSet = (jsonStr: string) => {
+        try {
+          const parsed = JSON.parse(jsonStr);
+          if (Array.isArray(parsed)) {
+            setShots(parsed.map((s: any, idx: number) => ({
+              ...s,
+              id: s.id || `shot-stable-${idx}`,
+              status: s.status || 'pending'
+            })));
           }
-        };
-
-        if (streamText.trim().endsWith(']')) {
-          parseAndSet(streamText);
-        } else {
-          const lastCloseBrace = streamText.lastIndexOf('}');
-          if (lastCloseBrace > -1) {
-            const candidate = streamText.substring(0, lastCloseBrace + 1) + ']';
-            parseAndSet(candidate);
-          }
+        } catch (e) {
+          // Silent fail
         }
+      };
+
+      if (streamText.trim().endsWith(']')) {
+        parseAndSet(streamText);
+      } else {
+        const lastCloseBrace = streamText.lastIndexOf('}');
+        if (lastCloseBrace > -1) {
+          const candidate = streamText.substring(0, lastCloseBrace + 1) + ']';
+          parseAndSet(candidate);
+        }
+      }
     }
   }, [streamText, currentStep, progressMsg]);
 
@@ -581,7 +582,7 @@ const App: React.FC = () => {
   // Auto scroll chat
   useEffect(() => {
     if (chatScrollRef.current) {
-        chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [chatHistory, streamText]);
 
@@ -1164,106 +1165,106 @@ const App: React.FC = () => {
     return await analyzeProjectScriptsWithProgress(scripts, model, onProgress, mode);
   };
 
-	  /**
-	   * 🆕 九宫格任务自动恢复
-	   * - 触发时机：选择剧集后
-	   * - 恢复目标：把 shots.storyboardGridGenerationMeta 里记录的 taskCode 轮询拿回 imageUrl，并写回到 hqUrls
-	   * - 重要约束：不写 storyboardGridUrl（避免影响“完成步骤跳转”逻辑），仅恢复“绘制步骤”的临时预览
-	   */
-	  const resumeNineGridTasksFromShots = async (
-	    episodeId: string | undefined,
-	    episodeShots: Shot[],
-	    token: number
-	  ) => {
-	    if (!episodeId) return;
-	    if (!Array.isArray(episodeShots) || episodeShots.length === 0) return;
-	    // 防止用户切换到其它剧集后仍然写入旧剧集状态
-	    if (selectedEpisodeIdRef.current !== episodeId) return;
-	    if (nineGridResumeTokenRef.current !== token) return;
+  /**
+   * 🆕 九宫格任务自动恢复
+   * - 触发时机：选择剧集后
+   * - 恢复目标：把 shots.storyboardGridGenerationMeta 里记录的 taskCode 轮询拿回 imageUrl，并写回到 hqUrls
+   * - 重要约束：不写 storyboardGridUrl（避免影响“完成步骤跳转”逻辑），仅恢复“绘制步骤”的临时预览
+   */
+  const resumeNineGridTasksFromShots = async (
+    episodeId: string | undefined,
+    episodeShots: Shot[],
+    token: number
+  ) => {
+    if (!episodeId) return;
+    if (!Array.isArray(episodeShots) || episodeShots.length === 0) return;
+    // 防止用户切换到其它剧集后仍然写入旧剧集状态
+    if (selectedEpisodeIdRef.current !== episodeId) return;
+    if (nineGridResumeTokenRef.current !== token) return;
 
-	    const GRID_SIZE = 9;
+    const GRID_SIZE = 9;
 
-	    // 已经“应用到分镜表”的 grid（shots 上存在 storyboardGridUrl）不需要恢复
-	    const appliedGrids = new Set<number>();
-	    episodeShots.forEach((shot, idx) => {
-	      const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
-	      if (!url) return;
-	      appliedGrids.add(Math.floor(idx / GRID_SIZE));
-	    });
+    // 已经“应用到分镜表”的 grid（shots 上存在 storyboardGridUrl）不需要恢复
+    const appliedGrids = new Set<number>();
+    episodeShots.forEach((shot, idx) => {
+      const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
+      if (!url) return;
+      appliedGrids.add(Math.floor(idx / GRID_SIZE));
+    });
 
-	    // 收集待恢复的 grid task（允许同一 grid 多次生成，取最新的 taskCreatedAt）
-	    const pendingByGrid = new Map<number, NonNullable<Shot['storyboardGridGenerationMeta']>>();
-	    for (let i = 0; i < episodeShots.length; i++) {
-	      const meta = episodeShots[i]?.storyboardGridGenerationMeta;
-	      if (!meta?.taskCode) continue;
-	      const gridIndex = typeof meta.gridIndex === 'number' ? meta.gridIndex : Math.floor(i / GRID_SIZE);
-	      if (appliedGrids.has(gridIndex)) continue;
+    // 收集待恢复的 grid task（允许同一 grid 多次生成，取最新的 taskCreatedAt）
+    const pendingByGrid = new Map<number, NonNullable<Shot['storyboardGridGenerationMeta']>>();
+    for (let i = 0; i < episodeShots.length; i++) {
+      const meta = episodeShots[i]?.storyboardGridGenerationMeta;
+      if (!meta?.taskCode) continue;
+      const gridIndex = typeof meta.gridIndex === 'number' ? meta.gridIndex : Math.floor(i / GRID_SIZE);
+      if (appliedGrids.has(gridIndex)) continue;
 
-	      const existing = pendingByGrid.get(gridIndex);
-	      if (!existing) {
-	        pendingByGrid.set(gridIndex, { ...meta, gridIndex });
-	        continue;
-	      }
+      const existing = pendingByGrid.get(gridIndex);
+      if (!existing) {
+        pendingByGrid.set(gridIndex, { ...meta, gridIndex });
+        continue;
+      }
 
-	      const a = Date.parse(existing.taskCreatedAt || '');
-	      const b = Date.parse(meta.taskCreatedAt || '');
-	      const shouldReplace = Number.isNaN(a) ? !Number.isNaN(b) : (!Number.isNaN(b) && b > a);
-	      if (shouldReplace) pendingByGrid.set(gridIndex, { ...meta, gridIndex });
-	    }
+      const a = Date.parse(existing.taskCreatedAt || '');
+      const b = Date.parse(meta.taskCreatedAt || '');
+      const shouldReplace = Number.isNaN(a) ? !Number.isNaN(b) : (!Number.isNaN(b) && b > a);
+      if (shouldReplace) pendingByGrid.set(gridIndex, { ...meta, gridIndex });
+    }
 
-	    if (pendingByGrid.size === 0) return;
-	    console.log(`[NineGrid恢复] 发现 ${pendingByGrid.size} 个可恢复任务（episodeId=${episodeId}）`);
+    if (pendingByGrid.size === 0) return;
+    console.log(`[NineGrid恢复] 发现 ${pendingByGrid.size} 个可恢复任务（episodeId=${episodeId}）`);
 
-	    // 逐个恢复，避免并发过高造成 API 压力/控制台噪声
-	    for (const [gridIndex, meta] of pendingByGrid.entries()) {
-	      if (selectedEpisodeIdRef.current !== episodeId) return;
-	      if (nineGridResumeTokenRef.current !== token) return;
+    // 逐个恢复，避免并发过高造成 API 压力/控制台噪声
+    for (const [gridIndex, meta] of pendingByGrid.entries()) {
+      if (selectedEpisodeIdRef.current !== episodeId) return;
+      if (nineGridResumeTokenRef.current !== token) return;
 
-	      try {
-	        // 先快速查询一次（命中 SUCCESS 可省掉轮询）
-	        const quick = await getGenerationResult(meta.taskCode);
-	        if (quick.status === TaskStatus.SUCCESS && Array.isArray(quick.image_urls) && quick.image_urls[0]) {
-	          const url = quick.image_urls[0];
-	          setHqUrls(prev => {
-	            const next = [...prev];
-	            next[gridIndex] = url;
-	            return next;
-	          });
-	          console.log(`[NineGrid恢复] ✅ grid#${gridIndex + 1} 已就绪（快速命中 SUCCESS）`);
-	          continue;
-	        }
+      try {
+        // 先快速查询一次（命中 SUCCESS 可省掉轮询）
+        const quick = await getGenerationResult(meta.taskCode);
+        if (quick.status === TaskStatus.SUCCESS && Array.isArray(quick.image_urls) && quick.image_urls[0]) {
+          const url = quick.image_urls[0];
+          setHqUrls(prev => {
+            const next = [...prev];
+            next[gridIndex] = url;
+            return next;
+          });
+          console.log(`[NineGrid恢复] ✅ grid#${gridIndex + 1} 已就绪（快速命中 SUCCESS）`);
+          continue;
+        }
 
-	        if (quick.status === TaskStatus.FAILED) {
-	          const reason = quick.failure_reason || '任务已失败（服务端未返回原因）';
-	          console.warn(`[NineGrid恢复] ❌ grid#${gridIndex + 1} 任务失败：${meta.taskCode}`);
-	          setProgressMsg(`⚠️ 第 ${gridIndex + 1} 张九宫格生成任务失败：${reason}`);
-	          continue;
-	        }
+        if (quick.status === TaskStatus.FAILED) {
+          const reason = quick.failure_reason || '任务已失败（服务端未返回原因）';
+          console.warn(`[NineGrid恢复] ❌ grid#${gridIndex + 1} 任务失败：${meta.taskCode}`);
+          setProgressMsg(`⚠️ 第 ${gridIndex + 1} 张九宫格生成任务失败：${reason}`);
+          continue;
+        }
 
-	        // PENDING：进入轮询（内部指数退避，约 3 分钟超时）
-	        const result = await pollGenerationResult(meta.taskCode, (status, attempt) => {
-	          console.log(`[NineGrid恢复] grid#${gridIndex + 1} 状态=${status}，第${attempt}次查询`);
-	        });
+        // PENDING：进入轮询（内部指数退避，约 3 分钟超时）
+        const result = await pollGenerationResult(meta.taskCode, (status, attempt) => {
+          console.log(`[NineGrid恢复] grid#${gridIndex + 1} 状态=${status}，第${attempt}次查询`);
+        });
 
-	        if (result.status === TaskStatus.SUCCESS && Array.isArray(result.image_urls) && result.image_urls[0]) {
-	          const url = result.image_urls[0];
-	          setHqUrls(prev => {
-	            const next = [...prev];
-	            next[gridIndex] = url;
-	            return next;
-	          });
-	          console.log(`[NineGrid恢复] ✅ grid#${gridIndex + 1} 恢复成功`);
-	        } else if (result.status === TaskStatus.FAILED) {
-	          const reason = result.failure_reason || '任务已失败（服务端未返回原因）';
-	          console.warn(`[NineGrid恢复] ❌ grid#${gridIndex + 1} 任务失败：${meta.taskCode}`);
-	          setProgressMsg(`⚠️ 第 ${gridIndex + 1} 张九宫格生成任务失败：${reason}`);
-	        }
-	      } catch (error) {
-	        // 不阻断用户；保留 meta，下一次进入剧集时仍可再次恢复
-	        console.warn(`[NineGrid恢复] ⚠️ grid#${gridIndex + 1} 恢复失败（稍后可重试）：`, error);
-	      }
-	    }
-	  };
+        if (result.status === TaskStatus.SUCCESS && Array.isArray(result.image_urls) && result.image_urls[0]) {
+          const url = result.image_urls[0];
+          setHqUrls(prev => {
+            const next = [...prev];
+            next[gridIndex] = url;
+            return next;
+          });
+          console.log(`[NineGrid恢复] ✅ grid#${gridIndex + 1} 恢复成功`);
+        } else if (result.status === TaskStatus.FAILED) {
+          const reason = result.failure_reason || '任务已失败（服务端未返回原因）';
+          console.warn(`[NineGrid恢复] ❌ grid#${gridIndex + 1} 任务失败：${meta.taskCode}`);
+          setProgressMsg(`⚠️ 第 ${gridIndex + 1} 张九宫格生成任务失败：${reason}`);
+        }
+      } catch (error) {
+        // 不阻断用户；保留 meta，下一次进入剧集时仍可再次恢复
+        console.warn(`[NineGrid恢复] ⚠️ grid#${gridIndex + 1} 恢复失败（稍后可重试）：`, error);
+      }
+    }
+  };
 
   const goToProjectList = () => {
     // 🔧 清理所有剧集相关状态，避免项目间数据混乱
@@ -1289,8 +1290,8 @@ const App: React.FC = () => {
   const handleSelectEpisode = async (episode: Episode) => {
     try {
       console.log(`[handleSelectEpisode] 加载第${episode.episodeNumber}集完整数据, id=${episode.id}`);
-	      selectedEpisodeIdRef.current = episode.id || null;
-	      const resumeToken = ++nineGridResumeTokenRef.current;
+      selectedEpisodeIdRef.current = episode.id || null;
+      const resumeToken = ++nineGridResumeTokenRef.current;
 
       // 🔧 从后端获取完整的 episode 数据（包含 script 和 shots）
       // 列表 API 返回的 episode 可能不包含 script 和 shots
@@ -1299,7 +1300,7 @@ const App: React.FC = () => {
         const fetched = await getEpisode(episode.id);
         if (fetched) {
           fullEpisode = fetched;
-	          selectedEpisodeIdRef.current = fullEpisode.id || episode.id || null;
+          selectedEpisodeIdRef.current = fullEpisode.id || episode.id || null;
           console.log(`[handleSelectEpisode] 获取完整数据成功, script长度=${fullEpisode.script?.length || 0}, shots数量=${fullEpisode.shots?.length || 0}`);
         } else {
           console.warn(`[handleSelectEpisode] 无法获取完整数据，使用列表数据`);
@@ -1311,33 +1312,33 @@ const App: React.FC = () => {
       console.log(`[handleSelectEpisode] 剧本前100字: ${episodeScript.substring(0, 100)}...`);
       setScript(episodeScript);
       setCurrentEpisodeNumber(fullEpisode.episodeNumber);
-	      if (fullEpisode.shots && fullEpisode.shots.length > 0) {
-	        console.log(`[handleSelectEpisode] 加载 ${fullEpisode.shots.length} 个镜头`);
-	        console.log(`[handleSelectEpisode] 第1个镜头剧情: ${typeof fullEpisode.shots[0].storyBeat === 'string' ? fullEpisode.shots[0].storyBeat : fullEpisode.shots[0].storyBeat?.event || '未知'}`);
-	        setShots(fullEpisode.shots);
+      if (fullEpisode.shots && fullEpisode.shots.length > 0) {
+        console.log(`[handleSelectEpisode] 加载 ${fullEpisode.shots.length} 个镜头`);
+        console.log(`[handleSelectEpisode] 第1个镜头剧情: ${typeof fullEpisode.shots[0].storyBeat === 'string' ? fullEpisode.shots[0].storyBeat : fullEpisode.shots[0].storyBeat?.event || '未知'}`);
+        setShots(fullEpisode.shots);
 
-	        // 🆕 从 shots 中恢复九宫格 URLs（用于“绘制”步骤展示与下载）
-	        // 注意：storyboardGridCellIndex 仅为 0-8 的格子索引，不能用来推回 gridIndex。
-	        // 这里按 shot 在数组中的顺序恢复：每 9 个镜头对应一张九宫格。
-	        const gridUrls: string[] = [];
-	        fullEpisode.shots.forEach((shot, shotIndex) => {
-	          const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
-	          if (!url) return;
-	          const gridIndex = Math.floor(shotIndex / 9);
-	          if (!gridUrls[gridIndex]) gridUrls[gridIndex] = url;
-	        });
-	        const restored = gridUrls.filter(Boolean);
-	        if (restored.length > 0) {
-	          setHqUrls(gridUrls);
-	          console.log(`[handleSelectEpisode] ✅ 恢复了 ${restored.length} 张九宫格图片`);
-	        } else {
-	          setHqUrls([]);
-	        }
+        // 🆕 从 shots 中恢复九宫格 URLs（用于“绘制”步骤展示与下载）
+        // 注意：storyboardGridCellIndex 仅为 0-8 的格子索引，不能用来推回 gridIndex。
+        // 这里按 shot 在数组中的顺序恢复：每 9 个镜头对应一张九宫格。
+        const gridUrls: string[] = [];
+        fullEpisode.shots.forEach((shot, shotIndex) => {
+          const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
+          if (!url) return;
+          const gridIndex = Math.floor(shotIndex / 9);
+          if (!gridUrls[gridIndex]) gridUrls[gridIndex] = url;
+        });
+        const restored = gridUrls.filter(Boolean);
+        if (restored.length > 0) {
+          setHqUrls(gridUrls);
+          console.log(`[handleSelectEpisode] ✅ 恢复了 ${restored.length} 张九宫格图片`);
+        } else {
+          setHqUrls([]);
+        }
 
-		        // 🆕 自动恢复“未应用到分镜表”的九宫格生图任务（依赖 shots.storyboardGridGenerationMeta）
-		        // 说明：不影响步骤跳转逻辑，仅恢复绘制步骤的临时预览 hqUrls。
-		        void resumeNineGridTasksFromShots(fullEpisode.id, fullEpisode.shots, resumeToken);
-	      } else {
+        // 🆕 自动恢复“未应用到分镜表”的九宫格生图任务（依赖 shots.storyboardGridGenerationMeta）
+        // 说明：不影响步骤跳转逻辑，仅恢复绘制步骤的临时预览 hqUrls。
+        void resumeNineGridTasksFromShots(fullEpisode.id, fullEpisode.shots, resumeToken);
+      } else {
         setShots([]);
         setHqUrls([]);
       }
@@ -1370,94 +1371,94 @@ const App: React.FC = () => {
       }
 
 
-		      // ✅ 根据剧集完成进度，跳转到最远的已完成步骤
-		      // 优先级：最终故事板(九宫格已回填到 shots) > 提示词 > 精修 > 导入
-	      const hasShots = Array.isArray(fullEpisode.shots) && fullEpisode.shots.length > 0;
-		      const hasStoryboard =
-		        hasShots &&
-		        fullEpisode.shots!.some(s => typeof s.storyboardGridUrl === 'string' && s.storyboardGridUrl.trim());
-	      const hasExtractedPrompts =
-	        hasShots &&
-	        fullEpisode.shots!.some(s =>
-	          Boolean(
-	            (s.imagePromptCn && s.imagePromptCn.trim()) ||
-	              (s.imagePromptEn && s.imagePromptEn.trim()) ||
-	              (s.endImagePromptCn && s.endImagePromptCn.trim()) ||
-	              (s.endImagePromptEn && s.endImagePromptEn.trim()) ||
-	              (s.videoGenPrompt && s.videoGenPrompt.trim())
-	          )
-	        );
+      // ✅ 根据剧集完成进度，跳转到最远的已完成步骤
+      // 优先级：最终故事板(九宫格已回填到 shots) > 提示词 > 精修 > 导入
+      const hasShots = Array.isArray(fullEpisode.shots) && fullEpisode.shots.length > 0;
+      const hasStoryboard =
+        hasShots &&
+        fullEpisode.shots!.some(s => typeof s.storyboardGridUrl === 'string' && s.storyboardGridUrl.trim());
+      const hasExtractedPrompts =
+        hasShots &&
+        fullEpisode.shots!.some(s =>
+          Boolean(
+            (s.imagePromptCn && s.imagePromptCn.trim()) ||
+            (s.imagePromptEn && s.imagePromptEn.trim()) ||
+            (s.endImagePromptCn && s.endImagePromptCn.trim()) ||
+            (s.endImagePromptEn && s.endImagePromptEn.trim()) ||
+            (s.videoGenPrompt && s.videoGenPrompt.trim())
+          )
+        );
 
-	      const targetStep = !hasShots
-	        ? AppStep.INPUT_SCRIPT
-		        : hasStoryboard
-		          ? AppStep.FINAL_STORYBOARD
-		          : hasExtractedPrompts
-		            ? AppStep.EXTRACT_PROMPTS
-		            : AppStep.MANUAL_EDIT;
+      const targetStep = !hasShots
+        ? AppStep.INPUT_SCRIPT
+        : hasStoryboard
+          ? AppStep.FINAL_STORYBOARD
+          : hasExtractedPrompts
+            ? AppStep.EXTRACT_PROMPTS
+            : AppStep.MANUAL_EDIT;
 
-	      setCurrentStep(targetStep);
-	      console.log(`[handleSelectEpisode] ✅ 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
+      setCurrentStep(targetStep);
+      console.log(`[handleSelectEpisode] ✅ 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
     } catch (error) {
       console.error('[handleSelectEpisode] 加载剧集失败:', error);
       // 降级：使用列表数据（可能不完整但不至于报错）
       // 🔧 确保 script 始终是字符串
       setScript(typeof episode.script === 'string' ? episode.script : '');
       setCurrentEpisodeNumber(episode.episodeNumber);
-	      if (episode.shots && Array.isArray(episode.shots) && episode.shots.length > 0) {
+      if (episode.shots && Array.isArray(episode.shots) && episode.shots.length > 0) {
         setShots(episode.shots);
 
-	        // 🆕 从 shots 中恢复九宫格 URLs（fallback 逻辑同上）
-	        const gridUrls: string[] = [];
-	        episode.shots.forEach((shot, shotIndex) => {
-	          const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
-	          if (!url) return;
-	          const gridIndex = Math.floor(shotIndex / 9);
-	          if (!gridUrls[gridIndex]) gridUrls[gridIndex] = url;
-	        });
-	        const restored = gridUrls.filter(Boolean);
-	        if (restored.length > 0) {
-	          setHqUrls(gridUrls);
-	          console.log(`[handleSelectEpisode fallback] ✅ 恢复了 ${restored.length} 张九宫格图片`);
-	        } else {
-	          setHqUrls([]);
-	        }
+        // 🆕 从 shots 中恢复九宫格 URLs（fallback 逻辑同上）
+        const gridUrls: string[] = [];
+        episode.shots.forEach((shot, shotIndex) => {
+          const url = typeof shot.storyboardGridUrl === 'string' ? shot.storyboardGridUrl.trim() : '';
+          if (!url) return;
+          const gridIndex = Math.floor(shotIndex / 9);
+          if (!gridUrls[gridIndex]) gridUrls[gridIndex] = url;
+        });
+        const restored = gridUrls.filter(Boolean);
+        if (restored.length > 0) {
+          setHqUrls(gridUrls);
+          console.log(`[handleSelectEpisode fallback] ✅ 恢复了 ${restored.length} 张九宫格图片`);
+        } else {
+          setHqUrls([]);
+        }
 
-		        // 🆕 fallback 情况下也尝试自动恢复（若 episode.id 存在）
-		        selectedEpisodeIdRef.current = episode.id || null;
-		        const resumeToken = ++nineGridResumeTokenRef.current;
-		        void resumeNineGridTasksFromShots(episode.id, episode.shots, resumeToken);
+        // 🆕 fallback 情况下也尝试自动恢复（若 episode.id 存在）
+        selectedEpisodeIdRef.current = episode.id || null;
+        const resumeToken = ++nineGridResumeTokenRef.current;
+        void resumeNineGridTasksFromShots(episode.id, episode.shots, resumeToken);
       } else {
         setShots([]);
         setHqUrls([]);
       }
 
-		      const hasShots = Array.isArray(episode.shots) && episode.shots.length > 0;
-		      const hasStoryboard =
-		        hasShots &&
-		        episode.shots!.some(s => typeof s.storyboardGridUrl === 'string' && s.storyboardGridUrl.trim());
-	      const hasExtractedPrompts =
-	        hasShots &&
-	        episode.shots!.some(s =>
-	          Boolean(
-	            (s.imagePromptCn && s.imagePromptCn.trim()) ||
-	              (s.imagePromptEn && s.imagePromptEn.trim()) ||
-	              (s.endImagePromptCn && s.endImagePromptCn.trim()) ||
-	              (s.endImagePromptEn && s.endImagePromptEn.trim()) ||
-	              (s.videoGenPrompt && s.videoGenPrompt.trim())
-	          )
-	        );
+      const hasShots = Array.isArray(episode.shots) && episode.shots.length > 0;
+      const hasStoryboard =
+        hasShots &&
+        episode.shots!.some(s => typeof s.storyboardGridUrl === 'string' && s.storyboardGridUrl.trim());
+      const hasExtractedPrompts =
+        hasShots &&
+        episode.shots!.some(s =>
+          Boolean(
+            (s.imagePromptCn && s.imagePromptCn.trim()) ||
+            (s.imagePromptEn && s.imagePromptEn.trim()) ||
+            (s.endImagePromptCn && s.endImagePromptCn.trim()) ||
+            (s.endImagePromptEn && s.endImagePromptEn.trim()) ||
+            (s.videoGenPrompt && s.videoGenPrompt.trim())
+          )
+        );
 
-	      const targetStep = !hasShots
-	        ? AppStep.INPUT_SCRIPT
-		        : hasStoryboard
-		          ? AppStep.FINAL_STORYBOARD
-		          : hasExtractedPrompts
-		            ? AppStep.EXTRACT_PROMPTS
-		            : AppStep.MANUAL_EDIT;
+      const targetStep = !hasShots
+        ? AppStep.INPUT_SCRIPT
+        : hasStoryboard
+          ? AppStep.FINAL_STORYBOARD
+          : hasExtractedPrompts
+            ? AppStep.EXTRACT_PROMPTS
+            : AppStep.MANUAL_EDIT;
 
-	      setCurrentStep(targetStep);
-	      console.log(`[handleSelectEpisode] ✅ (fallback) 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
+      setCurrentStep(targetStep);
+      console.log(`[handleSelectEpisode] ✅ (fallback) 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
     }
   };
 
@@ -2079,7 +2080,7 @@ const App: React.FC = () => {
         const bg = depthLayers.background || comp.background || '';
 
         const lightingDesc = lightingData.description || lightingData.mood ||
-                            (lightingData.keyLight ? `主光:${lightingData.keyLight}` : '');
+          (lightingData.keyLight ? `主光:${lightingData.keyLight}` : '');
 
         const cameraMovement = camera.movement || '固定';
         const cameraSpeed = camera.speed || '';
@@ -2097,9 +2098,9 @@ const App: React.FC = () => {
         ].filter(Boolean).join('\n');
 
         const storyEvent = storyBeatData.event ||
-                          characters.actions ||
-                          shotList[idx]?.briefDescription ||
-                          `镜头${idx + 1}`;
+          characters.actions ||
+          shotList[idx]?.briefDescription ||
+          `镜头${idx + 1}`;
 
         const dialogue = storyBeatData.dialogue || '';
 
@@ -2293,8 +2294,8 @@ const App: React.FC = () => {
         });
       };
 
-	      // 分批处理（每批6个镜头）
-	      const batchSize = 6;
+      // 分批处理（每批6个镜头）
+      const batchSize = 6;
       const totalBatches = Math.ceil(shotList.length / batchSize);
       let completedShotCount = 0;
 
@@ -2309,10 +2310,10 @@ const App: React.FC = () => {
         let retryCount = 0;
         const maxRetries = 3;
 
-	        while (retryCount < maxRetries) {
-	          try {
-	            stage4Text = '';
-	            const stage4Gen = generateStage4Analysis(script, stage1Result, stage2Result, stage3Result, batch);
+        while (retryCount < maxRetries) {
+          try {
+            stage4Text = '';
+            const stage4Gen = generateStage4Analysis(script, stage1Result, stage2Result, stage3Result, batch);
             for await (const chunk of stage4Gen) {
               stage4Text += chunk;
               setCotRawOutput(stage4Text);
@@ -2334,10 +2335,10 @@ const App: React.FC = () => {
         const stage4Result = parseStage4Output(stage4Text);
         allDesignedShots.push(...(stage4Result.shots || []));
 
-	      	// 🆕 实时更新分镜表格显示（同时应用正面视角使用上限和角度多样化）
-	      	const convertedShots = allDesignedShots.map((design, idx) => convertDesignToShot(design, idx));
-	      	const currentShots = applyAngleDiversityLimit(applyFrontViewLimit(convertedShots));
-	      	setShots(currentShots);
+        // 🆕 实时更新分镜表格显示（同时应用正面视角使用上限和角度多样化）
+        const convertedShots = allDesignedShots.map((design, idx) => convertDesignToShot(design, idx));
+        const currentShots = applyAngleDiversityLimit(applyFrontViewLimit(convertedShots));
+        setShots(currentShots);
         completedShotCount = currentShots.length;
 
         setStreamText(prev => `【阶段4】逐镜设计 (批次 ${batchNum}/${totalBatches})\n\n${stage4Text}\n\n✅ 已完成 ${completedShotCount} 个镜头`);
@@ -2789,7 +2790,24 @@ const App: React.FC = () => {
             oldPrompt: shot.imagePromptCn || '',
             newPrompt: fix.imagePromptCn,
           });
-          return { ...shot, imagePromptCn: fix.imagePromptCn };
+
+          // ── 新增：提取并关联角色 ──
+          const regex = /@([^(]+)(?:\(([^)]+)\))?/g;
+          const assignedCharIds = new Set<string>(shot.assignedCharacterIds || []);
+          let m;
+          while ((m = regex.exec(fix.imagePromptCn)) !== null) {
+            const roleName = m[1].trim();
+            const char = characterRefs.find(c => c.name === roleName);
+            if (char) {
+              assignedCharIds.add(char.id);
+            }
+          }
+
+          return {
+            ...shot,
+            imagePromptCn: fix.imagePromptCn,
+            assignedCharacterIds: Array.from(assignedCharIds)
+          };
         }
         return shot;
       });
@@ -2933,7 +2951,7 @@ const App: React.FC = () => {
 
     setCurrentStep(AppStep.MANUAL_EDIT);
     // Initialize Chat
-    setChatHistory([{role: 'assistant', content: `我已经根据选中的 ${selectedSuggestionsList.length} 条建议优化了剧本。如果你有其他想法，可以随时告诉我。`}]);
+    setChatHistory([{ role: 'assistant', content: `我已经根据选中的 ${selectedSuggestionsList.length} 条建议优化了剧本。如果你有其他想法，可以随时告诉我。` }]);
 
     setStreamText('');
     setIsLoading(true);
@@ -2987,7 +3005,7 @@ const App: React.FC = () => {
 
     const currentShots = [...shots];
     setCurrentStep(AppStep.MANUAL_EDIT);
-    setChatHistory([{role: 'assistant', content: `一键优化：正在应用全部 ${allSuggestions.length} 条建议，请稍候...`}]);
+    setChatHistory([{ role: 'assistant', content: `一键优化：正在应用全部 ${allSuggestions.length} 条建议，请稍候...` }]);
     setStreamText('');
     setIsLoading(true);
     setProgressMsg(`一键优化：正在应用全部 ${allSuggestions.length} 条建议...`);
@@ -3016,18 +3034,18 @@ const App: React.FC = () => {
     let aiResponse = "";
 
     try {
-        // 使用选中的模型进行对话
-        const stream = chatWithDirectorStream(chatHistory, userMsg);
-        for await (const chunk of stream) {
-            aiResponse += chunk;
-            // Update last message in real-time or just let it build
-        }
-        setChatHistory(prev => [...prev, { role: 'assistant', content: aiResponse }]);
+      // 使用选中的模型进行对话
+      const stream = chatWithDirectorStream(chatHistory, userMsg);
+      for await (const chunk of stream) {
+        aiResponse += chunk;
+        // Update last message in real-time or just let it build
+      }
+      setChatHistory(prev => [...prev, { role: 'assistant', content: aiResponse }]);
     } catch (e) {
-        console.error(e);
-        setChatHistory(prev => [...prev, { role: 'assistant', content: "抱歉，我走神了，请再说一遍。" }]);
+      console.error(e);
+      setChatHistory(prev => [...prev, { role: 'assistant', content: "抱歉，我走神了，请再说一遍。" }]);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -3165,34 +3183,34 @@ const App: React.FC = () => {
         selectedStyle,
         currentEpisodeNumber,
         currentProject.scenes || [],
-	        artStyle,
-	        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
-	        async (taskCode) => {
-	          console.log(`[九宫格重绘] taskCode创建: grid#${gridIndex + 1}, taskCode=${taskCode}`);
-	          const taskCreatedAt = new Date().toISOString();
-	          const GRID_SIZE = 9;
-	          const startIdx = gridIndex * GRID_SIZE;
-	          setShots(prev => {
-	            if (startIdx < 0 || startIdx >= prev.length) return prev;
-	            // 约定：将 meta 写在该 grid 的第一个 shot 上即可（恢复逻辑按 gridIndex 聚合）
-	            const next = prev.map((s, idx) => {
-	              if (idx !== startIdx) return s;
-	              return {
-	                ...s,
-	                storyboardGridGenerationMeta: {
-	                  taskCode,
-	                  taskCreatedAt,
-	                  gridIndex,
-	                },
-	              };
-	            });
+        artStyle,
+        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
+        async (taskCode) => {
+          console.log(`[九宫格重绘] taskCode创建: grid#${gridIndex + 1}, taskCode=${taskCode}`);
+          const taskCreatedAt = new Date().toISOString();
+          const GRID_SIZE = 9;
+          const startIdx = gridIndex * GRID_SIZE;
+          setShots(prev => {
+            if (startIdx < 0 || startIdx >= prev.length) return prev;
+            // 约定：将 meta 写在该 grid 的第一个 shot 上即可（恢复逻辑按 gridIndex 聚合）
+            const next = prev.map((s, idx) => {
+              if (idx !== startIdx) return s;
+              return {
+                ...s,
+                storyboardGridGenerationMeta: {
+                  taskCode,
+                  taskCreatedAt,
+                  gridIndex,
+                },
+              };
+            });
 
-	            void patchEpisode(episodeId, { shots: next }).catch(err => {
-	              console.error('[D1存储] 九宫格 taskCode 持久化失败', err);
-	            });
-	            return next;
-	          });
-	        },
+            void patchEpisode(episodeId, { shots: next }).catch(err => {
+              console.error('[D1存储] 九宫格 taskCode 持久化失败', err);
+            });
+            return next;
+          });
+        },
         projectId  // 🔧 传入项目 ID（已验证），用于上传到 OSS
       );
 
@@ -3396,31 +3414,31 @@ const App: React.FC = () => {
           // 🆕 完成后重置当前生成索引
           setCurrentGeneratingGrid(null);
         },
-	        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
-	        async (taskCode, gridIndex) => {
-	          console.log(`[九宫格生成] taskCode创建: grid#${gridIndex + 1}, taskCode=${taskCode}`);
-	          const taskCreatedAt = new Date().toISOString();
-	          const GRID_SIZE = 9;
-	          const startIdx = gridIndex * GRID_SIZE;
-	          setShots(prev => {
-	            if (startIdx < 0 || startIdx >= prev.length) return prev;
-	            const next = prev.map((s, idx) => {
-	              if (idx !== startIdx) return s;
-	              return {
-	                ...s,
-	                storyboardGridGenerationMeta: {
-	                  taskCode,
-	                  taskCreatedAt,
-	                  gridIndex,
-	                },
-	              };
-	            });
-	            void patchEpisode(episodeId, { shots: next }).catch(err => {
-	              console.error('[D1存储] 九宫格 taskCode 持久化失败', err);
-	            });
-	            return next;
-	          });
-	        },
+        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
+        async (taskCode, gridIndex) => {
+          console.log(`[九宫格生成] taskCode创建: grid#${gridIndex + 1}, taskCode=${taskCode}`);
+          const taskCreatedAt = new Date().toISOString();
+          const GRID_SIZE = 9;
+          const startIdx = gridIndex * GRID_SIZE;
+          setShots(prev => {
+            if (startIdx < 0 || startIdx >= prev.length) return prev;
+            const next = prev.map((s, idx) => {
+              if (idx !== startIdx) return s;
+              return {
+                ...s,
+                storyboardGridGenerationMeta: {
+                  taskCode,
+                  taskCreatedAt,
+                  gridIndex,
+                },
+              };
+            });
+            void patchEpisode(episodeId, { shots: next }).catch(err => {
+              console.error('[D1存储] 九宫格 taskCode 持久化失败', err);
+            });
+            return next;
+          });
+        },
         currentEpisodeNumber,               // 🆕 传入当前集数
         currentProject.scenes || [],        // 🆕 传入场景库
         artStyle,                           // 🆕 传入美术风格类型
@@ -3487,95 +3505,95 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [gridGenerationStartTime, currentGeneratingGrid]);
 
-	/**
-	 * 🎨 B1：将“九宫格图片URL”按序映射到每个镜头（虚拟切割，不生成独立小图文件）
-	 * - 映射规则：每 9 个镜头对应一张九宫格；cellIndex = idx % 9
-	 * - 显示规则：在分镜表新增“草图”列，通过 CSS 平移实现裁切
-	 * - 持久化：将 mapping 写入 shots 并 saveEpisode 落库到 D1，便于下次恢复
-	 */
-	const applyGridsToShots = async () => {
-	  const availableCount = hqUrls.filter(Boolean).length;
-	  if (availableCount === 0) {
-	    alert('⚠️ 当前没有可用的九宫格图片，请先生成完成后再应用。');
-	    return;
-	  }
+  /**
+   * 🎨 B1：将“九宫格图片URL”按序映射到每个镜头（虚拟切割，不生成独立小图文件）
+   * - 映射规则：每 9 个镜头对应一张九宫格；cellIndex = idx % 9
+   * - 显示规则：在分镜表新增“草图”列，通过 CSS 平移实现裁切
+   * - 持久化：将 mapping 写入 shots 并 saveEpisode 落库到 D1，便于下次恢复
+   */
+  const applyGridsToShots = async () => {
+    const availableCount = hqUrls.filter(Boolean).length;
+    if (availableCount === 0) {
+      alert('⚠️ 当前没有可用的九宫格图片，请先生成完成后再应用。');
+      return;
+    }
 
-	  const GRID_SIZE = 9;
-	  const updatedShots = shots.map((shot, idx) => {
-	    const gridIndex = Math.floor(idx / GRID_SIZE);
-	    const cellIndex = idx % GRID_SIZE;
-	    const gridUrl = hqUrls[gridIndex];
+    const GRID_SIZE = 9;
+    const updatedShots = shots.map((shot, idx) => {
+      const gridIndex = Math.floor(idx / GRID_SIZE);
+      const cellIndex = idx % GRID_SIZE;
+      const gridUrl = hqUrls[gridIndex];
 
-	    if (!gridUrl) return shot;
-	    return {
-	      ...shot,
-	      storyboardGridUrl: gridUrl,
-	      storyboardGridCellIndex: cellIndex,
-		      // 🧹 清理九宫格生成任务元信息（已应用到 storyboardGridUrl，无需继续保留 taskCode）
-		      storyboardGridGenerationMeta: undefined,
-	    };
-	  });
+      if (!gridUrl) return shot;
+      return {
+        ...shot,
+        storyboardGridUrl: gridUrl,
+        storyboardGridCellIndex: cellIndex,
+        // 🧹 清理九宫格生成任务元信息（已应用到 storyboardGridUrl，无需继续保留 taskCode）
+        storyboardGridGenerationMeta: undefined,
+      };
+    });
 
-	  setShots(updatedShots);
+    setShots(updatedShots);
 
-	  // 保存到 D1（跨设备/跨成员可恢复）
-	  if (!currentProject || currentEpisodeNumber === null) {
-	    alert('⚠️ 未选择项目/剧集，已在本地应用草图映射，但无法保存到云端。');
-	    return;
-	  }
+    // 保存到 D1（跨设备/跨成员可恢复）
+    if (!currentProject || currentEpisodeNumber === null) {
+      alert('⚠️ 未选择项目/剧集，已在本地应用草图映射，但无法保存到云端。');
+      return;
+    }
 
-	  const currentEpisode = currentProject.episodes?.find(
-	    ep => ep.episodeNumber === currentEpisodeNumber
-	  );
-	  if (!currentEpisode) {
-	    alert('⚠️ 未找到当前剧集元信息，已在本地应用草图映射，但无法保存到云端。');
-	    return;
-	  }
+    const currentEpisode = currentProject.episodes?.find(
+      ep => ep.episodeNumber === currentEpisodeNumber
+    );
+    if (!currentEpisode) {
+      alert('⚠️ 未找到当前剧集元信息，已在本地应用草图映射，但无法保存到云端。');
+      return;
+    }
 
-	  setIsLoading(true);
-	  setProgressMsg('正在将九宫格草图应用到分镜表并保存到云端...');
-	  try {
-		    if (currentEpisode.id) {
-		      // 🔧 保存到云端（patchEpisode 内部会自动优化数据）
-		      await patchEpisode(currentEpisode.id, {
-		        shots: updatedShots,
-		      });
-		    } else {
-		      // fallback：缺少 episodeId 时使用 saveEpisode（兼容旧数据/异常情况）
-		      console.warn('[D1存储] 未找到 episodeId，使用 saveEpisode fallback');
-		      await saveEpisode(currentProject.id, {
-		        ...currentEpisode,
-		        script: script || '',
-		        shots: updatedShots,
-		        updatedAt: new Date().toISOString(),
-		      });
-		    }
-	    setProgressMsg('✅ 九宫格草图已应用到分镜表，并已保存到云端。');
+    setIsLoading(true);
+    setProgressMsg('正在将九宫格草图应用到分镜表并保存到云端...');
+    try {
+      if (currentEpisode.id) {
+        // 🔧 保存到云端（patchEpisode 内部会自动优化数据）
+        await patchEpisode(currentEpisode.id, {
+          shots: updatedShots,
+        });
+      } else {
+        // fallback：缺少 episodeId 时使用 saveEpisode（兼容旧数据/异常情况）
+        console.warn('[D1存储] 未找到 episodeId，使用 saveEpisode fallback');
+        await saveEpisode(currentProject.id, {
+          ...currentEpisode,
+          script: script || '',
+          shots: updatedShots,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      setProgressMsg('✅ 九宫格草图已应用到分镜表，并已保存到云端。');
 
-	    // 🆕 成功保存后自动跳转到故事板预览页面
-	    setTimeout(() => {
-	      setCurrentStep(AppStep.FINAL_STORYBOARD);
-	    }, 500); // 延迟500ms，让用户看到成功提示
-	  } catch (error) {
-	    console.error('[D1存储] 保存九宫格草图映射失败:', error);
+      // 🆕 成功保存后自动跳转到故事板预览页面
+      setTimeout(() => {
+        setCurrentStep(AppStep.FINAL_STORYBOARD);
+      }, 500); // 延迟500ms，让用户看到成功提示
+    } catch (error) {
+      console.error('[D1存储] 保存九宫格草图映射失败:', error);
 
-	    // 🔧 提供更详细的错误信息
-	    let errorMsg = '❌ 已应用到本地分镜表，但保存到云端失败。';
-	    if (error instanceof Error) {
-	      if (error.message.includes('Load failed') || error.message.includes('Failed to fetch')) {
-	        errorMsg += '\n\n可能原因：\n1. 网络连接问题\n2. 数据量过大（已自动优化，如仍失败请减少镜头数量）\n3. API 服务暂时不可用\n\n请查看浏览器控制台了解详细信息。';
-	      } else if (error.message.includes('timeout')) {
-	        errorMsg += '\n\n原因：请求超时（已延长至60秒），请检查网络连接。';
-	      } else {
-	        errorMsg += `\n\n错误详情：${error.message}`;
-	      }
-	    }
+      // 🔧 提供更详细的错误信息
+      let errorMsg = '❌ 已应用到本地分镜表，但保存到云端失败。';
+      if (error instanceof Error) {
+        if (error.message.includes('Load failed') || error.message.includes('Failed to fetch')) {
+          errorMsg += '\n\n可能原因：\n1. 网络连接问题\n2. 数据量过大（已自动优化，如仍失败请减少镜头数量）\n3. API 服务暂时不可用\n\n请查看浏览器控制台了解详细信息。';
+        } else if (error.message.includes('timeout')) {
+          errorMsg += '\n\n原因：请求超时（已延长至60秒），请检查网络连接。';
+        } else {
+          errorMsg += `\n\n错误详情：${error.message}`;
+        }
+      }
 
-	    alert(errorMsg);
-	  } finally {
-	    setIsLoading(false);
-	  }
-	};
+      alert(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const downloadImage = (url: string, filename: string) => {
     const link = document.createElement('a');
@@ -3685,10 +3703,10 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-	  // 导出为CSV（Excel兼容）- 紧凑5列布局（不含提示词）
-	  const exportToExcel = () => {
-	    // CSV头部
-	    const headers = ['#', '故事', '视觉设计', '首帧', '尾帧'];
+  // 导出为CSV（Excel兼容）- 紧凑5列布局（不含提示词）
+  const exportToExcel = () => {
+    // CSV头部
+    const headers = ['#', '故事', '视觉设计', '首帧', '尾帧'];
 
     // 转义CSV字段
     const escapeCSV = (str: string | undefined) => {
@@ -3699,9 +3717,9 @@ const App: React.FC = () => {
       return str;
     };
 
-	    // 数据行
-	    const rows = shots.map(shot => {
-	      const isMotion = shot.shotType === '运动';
+    // 数据行
+    const rows = shots.map(shot => {
+      const isMotion = shot.shotType === '运动';
 
       // 列1: # 编号·时长·类型（紧凑）
       const col1 = `#${shot.shotNumber}·${shot.duration || '—'}·${shot.shotType || '静态'}`;
@@ -3730,19 +3748,19 @@ const App: React.FC = () => {
       ];
       const col3 = col3Parts.filter(Boolean).join(' | ');
 
-	      // 列4: 首帧
-	      const col4 = shot.startFrame || (isMotion ? '—' : '');
+      // 列4: 首帧
+      const col4 = shot.startFrame || (isMotion ? '—' : '');
 
-	      // 列5: 尾帧
-	      const col5 = shot.endFrame || (isMotion ? '—' : '');
+      // 列5: 尾帧
+      const col5 = shot.endFrame || (isMotion ? '—' : '');
 
-	      return [
-	        escapeCSV(col1),
-	        escapeCSV(col2),
-	        escapeCSV(col3),
-	        escapeCSV(col4),
-	        escapeCSV(col5)
-	      ];
+      return [
+        escapeCSV(col1),
+        escapeCSV(col2),
+        escapeCSV(col3),
+        escapeCSV(col4),
+        escapeCSV(col5)
+      ];
     });
 
     // 组合CSV内容（添加BOM以支持中文）
@@ -3865,61 +3883,62 @@ const App: React.FC = () => {
           {sceneLayouts.map((layout) => {
             const shotRange = getShotRangeForScene(layout.sceneId);
             return (
-            <div key={layout.sceneId} className="bg-gray-800/50 p-2 rounded border border-gray-700">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="bg-emerald-800 text-emerald-300 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                  {layout.sceneId}
-                </span>
-                {shotRange && (
-                  <span className="bg-blue-800 text-blue-300 px-1.5 py-0.5 rounded text-[10px]">
-                    镜头 {shotRange}
+              <div key={layout.sceneId} className="bg-gray-800/50 p-2 rounded border border-gray-700">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="bg-emerald-800 text-emerald-300 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                    {layout.sceneId}
                   </span>
-                )}
-                <span className="text-cyan-400 text-[10px]">📍 {layout.spatialSummary}</span>
-              </div>
-              {layout.landmarks && layout.landmarks.length > 0 && (
-                <div className="text-gray-400 text-[9px] mb-1">🏛️ 地标: {layout.landmarks.join('、')}</div>
-              )}
-              {layout.defaultPositions && Object.keys(layout.defaultPositions).length > 0 && (
-                <div className="text-amber-400 text-[9px]">
-                  👤 站位: {Object.entries(layout.defaultPositions).map(([name, pos]) => `${name}→${pos}`).join(' | ')}
+                  {shotRange && (
+                    <span className="bg-blue-800 text-blue-300 px-1.5 py-0.5 rounded text-[10px]">
+                      镜头 {shotRange}
+                    </span>
+                  )}
+                  <span className="text-cyan-400 text-[10px]">📍 {layout.spatialSummary}</span>
                 </div>
-              )}
-            </div>
-          )})}
+                {layout.landmarks && layout.landmarks.length > 0 && (
+                  <div className="text-gray-400 text-[9px] mb-1">🏛️ 地标: {layout.landmarks.join('、')}</div>
+                )}
+                {layout.defaultPositions && Object.keys(layout.defaultPositions).length > 0 && (
+                  <div className="text-amber-400 text-[9px]">
+                    👤 站位: {Object.entries(layout.defaultPositions).map(([name, pos]) => `${name}→${pos}`).join(' | ')}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
     );
   };
 
-	// 🆕 九宫格虚拟切割缩略图（B1）：通过 CSS 平移显示 3×3 中的某一格
-	const GridCellThumbnail = ({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: number }) => {
-	  const safeIndex = Math.min(8, Math.max(0, Math.floor(cellIndex)));
-	  const row = Math.floor(safeIndex / 3);
-	  const col = safeIndex % 3;
+  // 🆕 九宫格虚拟切割缩略图（B1）：通过 CSS 平移显示 3×3 中的某一格
+  const GridCellThumbnail = ({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: number }) => {
+    const safeIndex = Math.min(8, Math.max(0, Math.floor(cellIndex)));
+    const row = Math.floor(safeIndex / 3);
+    const col = safeIndex % 3;
 
-	  return (
-	    <div
-	      className="w-20 h-20 overflow-hidden rounded border border-gray-700 bg-gray-800"
-	      title={`九宫格格子 #${safeIndex + 1}`}
-	    >
-	      <img
-	        src={gridUrl}
-	        alt={`grid-cell-${safeIndex}`}
-	        loading="lazy"
-	        className="block max-w-none max-h-none"
-	        style={{
-	          width: '300%',
-	          height: '300%',
-	          transform: `translate(-${col * 33.333}%, -${row * 33.333}%)`,
-	          transformOrigin: 'top left',
-	        }}
-	      />
-	    </div>
-	  );
-	};
+    return (
+      <div
+        className="w-20 h-20 overflow-hidden rounded border border-gray-700 bg-gray-800"
+        title={`九宫格格子 #${safeIndex + 1}`}
+      >
+        <img
+          src={gridUrl}
+          alt={`grid-cell-${safeIndex}`}
+          loading="lazy"
+          className="block max-w-none max-h-none"
+          style={{
+            width: '300%',
+            height: '300%',
+            transform: `translate(-${col * 33.333}%, -${row * 33.333}%)`,
+            transformOrigin: 'top left',
+          }}
+        />
+      </div>
+    );
+  };
 
-	const renderShotTable = (editable: boolean, fullHeight: boolean = false) => (
+  const renderShotTable = (editable: boolean, fullHeight: boolean = false) => (
     <div className={`${fullHeight ? '' : 'max-h-[70vh] overflow-y-auto'}`}>
       {/* 🆕 场景空间布局信息 - 表格顶部单独显示 */}
       {renderSceneSpaceHeader()}
@@ -3931,161 +3950,160 @@ const App: React.FC = () => {
               <th className="px-2 py-2 border-r border-[var(--color-border)] w-[60px] text-center">#</th>
               <th className="px-2 py-2 border-r border-[var(--color-border)] w-[18%]">故事</th>
               <th className="px-2 py-2 border-r border-[var(--color-border)] w-[32%]">视觉设计</th>
-	              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[25%]">首帧</th>
-	              <th className="px-2 py-2 w-[25%]">尾帧</th>
+              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[25%]">首帧</th>
+              <th className="px-2 py-2 w-[25%]">尾帧</th>
             </tr>
           </thead>
           <tbody className="bg-[var(--color-bg)]">
             {shots.map((shot) => {
               const isMotion = shot.shotType === '运动';
-            return (
-              <tr key={shot.id} className="hover:bg-[var(--color-surface-hover)] border-b border-[var(--color-border)] text-[var(--color-text-primary)] align-top transition-colors">
-                {/* # 列：编号+时长+类型+视频模式+场景ID */}
-                <td className="px-2 py-2 border-r border-[var(--color-border)] text-center">
-                  <div className="font-bold text-blue-400 text-sm">{shot.shotNumber}</div>
-                  <div className="text-[var(--color-text-tertiary)] text-[10px]">{shot.duration}</div>
-                  {/* 🆕 显示场景ID（关联空间布局） */}
-                  {shot.sceneId && (
-                    <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-emerald-900/30 text-emerald-300 border border-emerald-600/50" title="所属场景（查看顶部场景空间布局）">
-                      {shot.sceneId}
+              return (
+                <tr key={shot.id} className="hover:bg-[var(--color-surface-hover)] border-b border-[var(--color-border)] text-[var(--color-text-primary)] align-top transition-colors">
+                  {/* # 列：编号+时长+类型+视频模式+场景ID */}
+                  <td className="px-2 py-2 border-r border-[var(--color-border)] text-center">
+                    <div className="font-bold text-blue-400 text-sm">{shot.shotNumber}</div>
+                    <div className="text-[var(--color-text-tertiary)] text-[10px]">{shot.duration}</div>
+                    {/* 🆕 显示场景ID（关联空间布局） */}
+                    {shot.sceneId && (
+                      <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-emerald-900/30 text-emerald-300 border border-emerald-600/50" title="所属场景（查看顶部场景空间布局）">
+                        {shot.sceneId}
+                      </span>
+                    )}
+                    <span className={`mt-1 inline-block px-1.5 py-0.5 rounded-md text-[9px] font-bold ${isMotion ? 'bg-amber-900/30 text-amber-300 border border-amber-600/50' : 'bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]'}`}>
+                      {isMotion ? '运动' : '静态'}
                     </span>
-                  )}
-                  <span className={`mt-1 inline-block px-1.5 py-0.5 rounded-md text-[9px] font-bold ${isMotion ? 'bg-amber-900/30 text-amber-300 border border-amber-600/50' : 'bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]'}`}>
-                    {isMotion ? '运动' : '静态'}
-                  </span>
-                  {/* 🆕 显示视频生成模式 */}
-                  {shot.videoMode && (
-                    <span className={`mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold ${
-                      shot.videoMode === 'Keyframe'
+                    {/* 🆕 显示视频生成模式 */}
+                    {shot.videoMode && (
+                      <span className={`mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold ${shot.videoMode === 'Keyframe'
                         ? 'bg-purple-900/30 text-purple-300 border border-purple-600/50'
                         : 'bg-cyan-900/30 text-cyan-300 border border-cyan-600/50'
-                    }`}>
-                      {shot.videoMode === 'Keyframe' ? '首尾帧' : '图生视频'}
-                    </span>
-                  )}
-                  {/* 🆕 校验警告指示器（只检测生图提示词 imagePromptCn） */}
-                  {(() => {
-                    if (!shot.imagePromptCn) return null;
-                    const hasForbidden = detectForbiddenTerms(shot.imagePromptCn).length > 0;
-                    const lengthResult = validateImagePrompt(shot.imagePromptCn);
-                    const hasLengthIssue = !lengthResult.valid || lengthResult.warnings.length > 0;
-                    const hasConsistencyIssue = shot.videoMode === 'Keyframe' && shot.imagePromptCn && shot.endImagePromptCn &&
-                       !validateKeyframeConsistency(shot.imagePromptCn, shot.endImagePromptCn).valid;
-                    const hasIssues = hasForbidden || hasLengthIssue || hasConsistencyIssue;
-                    return hasIssues ? (
-                      <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-red-900/30 text-red-300 border border-red-600/50" title="存在校验问题">
-                        ⚠️
+                        }`}>
+                        {shot.videoMode === 'Keyframe' ? '首尾帧' : '图生视频'}
                       </span>
-                    ) : null;
-                  })()}
-                </td>
-
-                {/* 故事列：故事节拍+对白+导演意图+技术备注 */}
-                <td className="px-2 py-2 border-r border-[var(--color-border)]">
-                  {editable ? (
-                    <div className="space-y-1.5">
-                      <textarea className="w-full h-12 p-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-xs text-[var(--color-text-primary)] resize-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        placeholder="故事节拍（人物+地点+事件+冲突）" value={shot.storyBeat || ''} onChange={(e) => updateShotField(shot.id, 'storyBeat', e.target.value)} />
-                      <textarea className="w-full h-8 p-1 bg-indigo-900/20 border border-indigo-700/50 rounded text-[10px] text-indigo-200 resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                        placeholder="对白/音效" value={shot.dialogue || ''} onChange={(e) => updateShotField(shot.id, 'dialogue', e.target.value)} />
-                      <textarea className="w-full h-8 p-1 bg-purple-900/20 border border-purple-700/50 rounded text-[10px] text-purple-200 resize-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                        placeholder="🎬 导演意图（为什么这么设计、观众应感受...）" value={shot.directorNote || ''} onChange={(e) => updateShotField(shot.id, 'directorNote', e.target.value)} />
-                      <textarea className="w-full h-8 p-1 bg-amber-900/20 border border-amber-700/50 rounded text-[10px] text-amber-200 resize-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                        placeholder="🔧 技术备注（慢动作/手持/景深变化...）" value={shot.technicalNote || ''} onChange={(e) => updateShotField(shot.id, 'technicalNote', e.target.value)} />
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <div className="text-[var(--color-text-primary)] font-medium text-xs leading-relaxed">{shot.storyBeat}</div>
-                      {shot.dialogue && <div className="text-indigo-300 text-[10px] bg-indigo-900/30 px-1.5 py-1 rounded-md">💬 {shot.dialogue}</div>}
-                      {shot.directorNote && (
-                        <div className="text-purple-300 text-[9px] bg-purple-900/30 px-1.5 py-1 rounded-md border-l-2 border-purple-500">
-                          🎬 {shot.directorNote}
-                        </div>
-                      )}
-                      {shot.technicalNote && (
-                        <div className="text-amber-300 text-[9px] bg-amber-900/30 px-1.5 py-1 rounded-md border-l-2 border-amber-500">
-                          🔧 {shot.technicalNote}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </td>
-
-                {/* 视觉设计列：景别/角度 + FG/MG/BG + 光影 + 运镜/动线 */}
-                <td className="px-2 py-2 border-r border-[var(--color-border)] text-[10px]">
-                  {/* 景别+角度行 */}
-                  <div className="flex items-center gap-2 mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
-                    <span className="bg-blue-900/30 text-blue-300 px-1.5 py-0.5 rounded-md font-bold border border-blue-600/50">{shot.shotSize || '—'}</span>
-                    <span className="text-[var(--color-text-secondary)]">{shot.angleDirection || '—'}</span>
-                    <span className="text-[var(--color-text-tertiary)]">+</span>
-                    <span className="text-[var(--color-text-secondary)]">{shot.angleHeight || '—'}</span>
-                    {shot.dutchAngle && <span className="text-purple-400 font-medium">荷兰角{shot.dutchAngle}</span>}
-                  </div>
-
-                  {/* 三层构图 */}
-                  <div className="space-y-0.5 mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
-                    <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">FG:</span> <span className="text-[var(--color-text-secondary)]">{shot.foreground || '—'}</span></div>
-                    <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">MG:</span> <span className="text-[var(--color-text-primary)] font-medium">{shot.midground || '—'}</span></div>
-                    <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">BG:</span> <span className="text-[var(--color-text-secondary)]">{shot.background || '—'}</span></div>
-                  </div>
-
-                  {/* 光影 */}
-                  <div className="mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
-                    <span className="text-yellow-400">💡</span> <span className="text-[var(--color-text-secondary)]">{shot.lighting || '—'}</span>
-                  </div>
-
-                  {/* 运镜+动线 */}
-                  <div className="flex items-start gap-1">
-                    <span className="bg-cyan-900/30 text-cyan-300 px-1.5 py-0.5 rounded-md font-medium shrink-0 border border-cyan-600/50">📹 {shot.cameraMove || '—'}</span>
-                    {isMotion && shot.motionPath && (
-                      <span className="text-[var(--color-text-tertiary)] text-[9px]">| {shot.motionPath}</span>
                     )}
-                  </div>
-                </td>
+                    {/* 🆕 校验警告指示器（只检测生图提示词 imagePromptCn） */}
+                    {(() => {
+                      if (!shot.imagePromptCn) return null;
+                      const hasForbidden = detectForbiddenTerms(shot.imagePromptCn).length > 0;
+                      const lengthResult = validateImagePrompt(shot.imagePromptCn);
+                      const hasLengthIssue = !lengthResult.valid || lengthResult.warnings.length > 0;
+                      const hasConsistencyIssue = shot.videoMode === 'Keyframe' && shot.imagePromptCn && shot.endImagePromptCn &&
+                        !validateKeyframeConsistency(shot.imagePromptCn, shot.endImagePromptCn).valid;
+                      const hasIssues = hasForbidden || hasLengthIssue || hasConsistencyIssue;
+                      return hasIssues ? (
+                        <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-red-900/30 text-red-300 border border-red-600/50" title="存在校验问题">
+                          ⚠️
+                        </span>
+                      ) : null;
+                    })()}
+                  </td>
 
-                {/* 首帧列 - 运动镜头显示首帧描述，静态镜头留空 */}
-                <td className="px-2 py-2 border-r border-[var(--color-border)]">
-                  {isMotion ? (
-                    editable ? (
-                      <textarea className="w-full h-20 p-1.5 bg-green-900/20 border border-green-700/50 rounded text-[10px] text-green-200 resize-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                        placeholder="【首帧】画面描述..." value={shot.startFrame || ''} onChange={(e) => updateShotField(shot.id, 'startFrame', e.target.value)} />
-                    ) : (
-                      <div className="bg-green-900/30 p-2 rounded-md border-l-2 border-green-500 text-[10px] text-green-100 leading-relaxed">
-                        {shot.startFrame || <span className="text-[var(--color-text-tertiary)] italic">未填写</span>}
+                  {/* 故事列：故事节拍+对白+导演意图+技术备注 */}
+                  <td className="px-2 py-2 border-r border-[var(--color-border)]">
+                    {editable ? (
+                      <div className="space-y-1.5">
+                        <textarea className="w-full h-12 p-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-xs text-[var(--color-text-primary)] resize-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                          placeholder="故事节拍（人物+地点+事件+冲突）" value={shot.storyBeat || ''} onChange={(e) => updateShotField(shot.id, 'storyBeat', e.target.value)} />
+                        <textarea className="w-full h-8 p-1 bg-indigo-900/20 border border-indigo-700/50 rounded text-[10px] text-indigo-200 resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                          placeholder="对白/音效" value={shot.dialogue || ''} onChange={(e) => updateShotField(shot.id, 'dialogue', e.target.value)} />
+                        <textarea className="w-full h-8 p-1 bg-purple-900/20 border border-purple-700/50 rounded text-[10px] text-purple-200 resize-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                          placeholder="🎬 导演意图（为什么这么设计、观众应感受...）" value={shot.directorNote || ''} onChange={(e) => updateShotField(shot.id, 'directorNote', e.target.value)} />
+                        <textarea className="w-full h-8 p-1 bg-amber-900/20 border border-amber-700/50 rounded text-[10px] text-amber-200 resize-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                          placeholder="🔧 技术备注（慢动作/手持/景深变化...）" value={shot.technicalNote || ''} onChange={(e) => updateShotField(shot.id, 'technicalNote', e.target.value)} />
                       </div>
-                    )
-                  ) : (
-                    <div className="text-[var(--color-text-tertiary)] text-center py-4 italic text-[10px]">静态镜头</div>
-                  )}
-                </td>
-
-
-
-                {/* 尾帧列 - 运动镜头显示尾帧描述，静态镜头留空 */}
-                <td className="px-2 py-2">
-                  {isMotion ? (
-                    editable ? (
-                      <textarea className="w-full h-20 p-1.5 bg-orange-900/20 border border-orange-700/50 rounded text-[10px] text-orange-200 resize-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                        placeholder="【尾帧】画面描述..." value={shot.endFrame || ''} onChange={(e) => updateShotField(shot.id, 'endFrame', e.target.value)} />
                     ) : (
-                      <div className="bg-orange-900/30 p-2 rounded-md border-l-2 border-orange-500 text-[10px] text-orange-100 leading-relaxed">
-                        {shot.endFrame || <span className="text-[var(--color-text-tertiary)] italic">未填写</span>}
+                      <div className="space-y-1.5">
+                        <div className="text-[var(--color-text-primary)] font-medium text-xs leading-relaxed">{shot.storyBeat}</div>
+                        {shot.dialogue && <div className="text-indigo-300 text-[10px] bg-indigo-900/30 px-1.5 py-1 rounded-md">💬 {shot.dialogue}</div>}
+                        {shot.directorNote && (
+                          <div className="text-purple-300 text-[9px] bg-purple-900/30 px-1.5 py-1 rounded-md border-l-2 border-purple-500">
+                            🎬 {shot.directorNote}
+                          </div>
+                        )}
+                        {shot.technicalNote && (
+                          <div className="text-amber-300 text-[9px] bg-amber-900/30 px-1.5 py-1 rounded-md border-l-2 border-amber-500">
+                            🔧 {shot.technicalNote}
+                          </div>
+                        )}
                       </div>
-                    )
-                  ) : (
-                    <div className="text-[var(--color-text-tertiary)] text-center py-4 italic text-[10px]">静态镜头</div>
-                  )}
+                    )}
+                  </td>
+
+                  {/* 视觉设计列：景别/角度 + FG/MG/BG + 光影 + 运镜/动线 */}
+                  <td className="px-2 py-2 border-r border-[var(--color-border)] text-[10px]">
+                    {/* 景别+角度行 */}
+                    <div className="flex items-center gap-2 mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
+                      <span className="bg-blue-900/30 text-blue-300 px-1.5 py-0.5 rounded-md font-bold border border-blue-600/50">{shot.shotSize || '—'}</span>
+                      <span className="text-[var(--color-text-secondary)]">{shot.angleDirection || '—'}</span>
+                      <span className="text-[var(--color-text-tertiary)]">+</span>
+                      <span className="text-[var(--color-text-secondary)]">{shot.angleHeight || '—'}</span>
+                      {shot.dutchAngle && <span className="text-purple-400 font-medium">荷兰角{shot.dutchAngle}</span>}
+                    </div>
+
+                    {/* 三层构图 */}
+                    <div className="space-y-0.5 mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
+                      <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">FG:</span> <span className="text-[var(--color-text-secondary)]">{shot.foreground || '—'}</span></div>
+                      <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">MG:</span> <span className="text-[var(--color-text-primary)] font-medium">{shot.midground || '—'}</span></div>
+                      <div><span className="text-[var(--color-text-tertiary)] font-medium w-8 inline-block">BG:</span> <span className="text-[var(--color-text-secondary)]">{shot.background || '—'}</span></div>
+                    </div>
+
+                    {/* 光影 */}
+                    <div className="mb-1.5 pb-1.5 border-b border-[var(--color-border)]">
+                      <span className="text-yellow-400">💡</span> <span className="text-[var(--color-text-secondary)]">{shot.lighting || '—'}</span>
+                    </div>
+
+                    {/* 运镜+动线 */}
+                    <div className="flex items-start gap-1">
+                      <span className="bg-cyan-900/30 text-cyan-300 px-1.5 py-0.5 rounded-md font-medium shrink-0 border border-cyan-600/50">📹 {shot.cameraMove || '—'}</span>
+                      {isMotion && shot.motionPath && (
+                        <span className="text-[var(--color-text-tertiary)] text-[9px]">| {shot.motionPath}</span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* 首帧列 - 运动镜头显示首帧描述，静态镜头留空 */}
+                  <td className="px-2 py-2 border-r border-[var(--color-border)]">
+                    {isMotion ? (
+                      editable ? (
+                        <textarea className="w-full h-20 p-1.5 bg-green-900/20 border border-green-700/50 rounded text-[10px] text-green-200 resize-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                          placeholder="【首帧】画面描述..." value={shot.startFrame || ''} onChange={(e) => updateShotField(shot.id, 'startFrame', e.target.value)} />
+                      ) : (
+                        <div className="bg-green-900/30 p-2 rounded-md border-l-2 border-green-500 text-[10px] text-green-100 leading-relaxed">
+                          {shot.startFrame || <span className="text-[var(--color-text-tertiary)] italic">未填写</span>}
+                        </div>
+                      )
+                    ) : (
+                      <div className="text-[var(--color-text-tertiary)] text-center py-4 italic text-[10px]">静态镜头</div>
+                    )}
+                  </td>
+
+
+
+                  {/* 尾帧列 - 运动镜头显示尾帧描述，静态镜头留空 */}
+                  <td className="px-2 py-2">
+                    {isMotion ? (
+                      editable ? (
+                        <textarea className="w-full h-20 p-1.5 bg-orange-900/20 border border-orange-700/50 rounded text-[10px] text-orange-200 resize-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                          placeholder="【尾帧】画面描述..." value={shot.endFrame || ''} onChange={(e) => updateShotField(shot.id, 'endFrame', e.target.value)} />
+                      ) : (
+                        <div className="bg-orange-900/30 p-2 rounded-md border-l-2 border-orange-500 text-[10px] text-orange-100 leading-relaxed">
+                          {shot.endFrame || <span className="text-[var(--color-text-tertiary)] italic">未填写</span>}
+                        </div>
+                      )
+                    ) : (
+                      <div className="text-[var(--color-text-tertiary)] text-center py-4 italic text-[10px]">静态镜头</div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {isLoading && progressMsg.includes('修改') && (
+              <tr className="bg-blue-900/20">
+                <td colSpan={6} className="p-4 text-center text-blue-400 font-medium animate-pulse text-sm">
+                  正在重写分镜表...
                 </td>
               </tr>
-            );
-          })}
-          {isLoading && progressMsg.includes('修改') && (
-            <tr className="bg-blue-900/20">
-	              <td colSpan={6} className="p-4 text-center text-blue-400 font-medium animate-pulse text-sm">
-                正在重写分镜表...
-              </td>
-            </tr>
-          )}
+            )}
           </tbody>
         </table>
       </div>
@@ -4163,11 +4181,10 @@ const App: React.FC = () => {
             <button
               onClick={startReanalyzeProject}
               disabled={isReanalyzing}
-              className={`px-3 py-1.5 border rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
-                isReanalyzing
-                  ? 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed'
-                  : 'bg-gray-800 text-purple-400 border border-gray-700 hover:bg-gray-700'
-              }`}
+              className={`px-3 py-1.5 border rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${isReanalyzing
+                ? 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed'
+                : 'bg-gray-800 text-purple-400 border border-gray-700 hover:bg-gray-700'
+                }`}
               title="重新分析所有剧集，提取角色、场景、类型等信息"
             >
               {isReanalyzing ? '🔄 分析中...' : '🔍 重新分析'}
@@ -4449,220 +4466,221 @@ const App: React.FC = () => {
               />
             )}
 
-        {/* 🆕 剧本清洗页面 */}
-        {currentStep === AppStep.SCRIPT_CLEANING && (
-          <ScriptCleaningPage
-            isCleaning={isCleaning}
-            cleaningProgress={cleaningProgress}
-            cleaningResult={cleaningResult}
-            generationMode={generationMode}
-            setGenerationMode={setGenerationMode}
-            characterRefs={characterRefs}
-            startShotListGeneration={startShotListGeneration}
-          />
-        )}
+            {/* 🆕 剧本清洗页面 */}
+            {currentStep === AppStep.SCRIPT_CLEANING && (
+              <ScriptCleaningPage
+                isCleaning={isCleaning}
+                cleaningProgress={cleaningProgress}
+                cleaningResult={cleaningResult}
+                generationMode={generationMode}
+                setGenerationMode={setGenerationMode}
+                characterRefs={characterRefs}
+                startShotListGeneration={startShotListGeneration}
+              />
+            )}
 
-        {/* 🆕 统一的分镜编辑页面（Tab布局） */}
-        {(currentStep === AppStep.GENERATE_LIST || currentStep === AppStep.REVIEW_OPTIMIZE || currentStep === AppStep.MANUAL_EDIT) && (
-          <ShotGenerationPage
-            currentTab={currentTab}
-            handleTabChange={handleTabChange}
-            shots={shots}
-            isLoading={isLoading}
-            progressMsg={progressMsg}
-            generationMode={generationMode}
-            cotCurrentStage={cotCurrentStage}
-            cotStage1={cotStage1}
-            cotStage2={cotStage2}
-            cotStage3={cotStage3}
-            cotStage4={cotStage4}
-            cotStage5={cotStage5}
-            cotRawOutput={cotRawOutput}
-            suggestions={suggestions}
-            selectedSuggestion={selectedSuggestion}
-            setSelectedSuggestion={setSelectedSuggestion}
-            startReview={startReview}
-            applyOptimizations={applyOptimizations}
-            oneClickOptimize={oneClickOptimize}
-            getSelectedSuggestionsCount={getSelectedSuggestionsCount}
-            selectAllSuggestions={selectAllSuggestions}
-            deselectAllSuggestions={deselectAllSuggestions}
-            toggleSuggestionSelection={toggleSuggestionSelection}
-            chatHistory={chatHistory}
-            chatInput={chatInput}
-            setChatInput={setChatInput}
-            chatScrollRef={chatScrollRef}
-            handleConsultDirector={handleConsultDirector}
-            handleExecuteChanges={handleExecuteChanges}
-            exportToJSON={exportToJSON}
-            exportToExcel={exportToExcel}
-            downloadScript={downloadScript}
-            setCurrentStep={setCurrentStep}
-            renderShotTable={renderShotTable}
-            episodeSummary={episodeSummary}
-          />
-        )}
+            {/* 🆕 统一的分镜编辑页面（Tab布局） */}
+            {(currentStep === AppStep.GENERATE_LIST || currentStep === AppStep.REVIEW_OPTIMIZE || currentStep === AppStep.MANUAL_EDIT) && (
+              <ShotGenerationPage
+                currentTab={currentTab}
+                handleTabChange={handleTabChange}
+                shots={shots}
+                isLoading={isLoading}
+                progressMsg={progressMsg}
+                generationMode={generationMode}
+                cotCurrentStage={cotCurrentStage}
+                cotStage1={cotStage1}
+                cotStage2={cotStage2}
+                cotStage3={cotStage3}
+                cotStage4={cotStage4}
+                cotStage5={cotStage5}
+                cotRawOutput={cotRawOutput}
+                suggestions={suggestions}
+                selectedSuggestion={selectedSuggestion}
+                setSelectedSuggestion={setSelectedSuggestion}
+                startReview={startReview}
+                applyOptimizations={applyOptimizations}
+                oneClickOptimize={oneClickOptimize}
+                getSelectedSuggestionsCount={getSelectedSuggestionsCount}
+                selectAllSuggestions={selectAllSuggestions}
+                deselectAllSuggestions={deselectAllSuggestions}
+                toggleSuggestionSelection={toggleSuggestionSelection}
+                chatHistory={chatHistory}
+                chatInput={chatInput}
+                setChatInput={setChatInput}
+                chatScrollRef={chatScrollRef}
+                handleConsultDirector={handleConsultDirector}
+                handleExecuteChanges={handleExecuteChanges}
+                exportToJSON={exportToJSON}
+                exportToExcel={exportToExcel}
+                downloadScript={downloadScript}
+                setCurrentStep={setCurrentStep}
+                renderShotTable={renderShotTable}
+                episodeSummary={episodeSummary}
+              />
+            )}
 
-        {/* 🆕 提取AI提示词页面 */}
-        {currentStep === AppStep.EXTRACT_PROMPTS && (
-          <PromptExtractionPage
-            shots={shots}
-            setShots={setShots}
-            isExtracting={isExtracting}
-            setIsExtracting={setIsExtracting}
-            extractProgress={extractProgress}
-            setExtractProgress={setExtractProgress}
-            isValidatingPrompts={isValidatingPrompts}
-            promptValidationResults={promptValidationResults}
-            setPromptValidationResults={setPromptValidationResults}
-            extractImagePromptsStream={extractImagePromptsStream}
-            validatePrompts={validatePrompts}
-            oneClickOptimizePrompts={oneClickOptimizePrompts}
-            optimizedChanges={optimizedChanges}
-            setOptimizedChanges={setOptimizedChanges}
-            setCurrentStep={setCurrentStep}
-            currentProject={currentProject}
-            currentEpisodeNumber={currentEpisodeNumber}
-            script={script}
-            saveEpisode={saveEpisode}
-          />
-        )}
+            {/* 🆕 提取AI提示词页面 */}
+            {currentStep === AppStep.EXTRACT_PROMPTS && (
+              <PromptExtractionPage
+                shots={shots}
+                setShots={setShots}
+                isExtracting={isExtracting}
+                setIsExtracting={setIsExtracting}
+                extractProgress={extractProgress}
+                setExtractProgress={setExtractProgress}
+                isValidatingPrompts={isValidatingPrompts}
+                promptValidationResults={promptValidationResults}
+                setPromptValidationResults={setPromptValidationResults}
+                extractImagePromptsStream={extractImagePromptsStream}
+                validatePrompts={validatePrompts}
+                oneClickOptimizePrompts={oneClickOptimizePrompts}
+                optimizedChanges={optimizedChanges}
+                setOptimizedChanges={setOptimizedChanges}
+                setCurrentStep={setCurrentStep}
+                currentProject={currentProject}
+                currentEpisodeNumber={currentEpisodeNumber}
+                script={script}
+                saveEpisode={saveEpisode}
+                characterRefs={characterRefs}
+              />
+            )}
 
-        {currentStep === AppStep.GENERATE_IMAGES && (
-          <ImageGenerationPage
-            shots={shots}
-            characterRefs={characterRefs}
-            hqUrls={hqUrls}
-            setHqUrls={setHqUrls}
-            selectedStyle={selectedStyle}
-            setSelectedStyle={setSelectedStyle}
-            showStyleCards={showStyleCards}
-            setShowStyleCards={setShowStyleCards}
-            customStylePrompt={customStylePrompt}
-            setCustomStylePrompt={setCustomStylePrompt}
-            imageModel={imageModel}
-            setImageModel={setImageModel}
-            availableImageModels={availableImageModels}
-            isLoadingModels={isLoadingModels}
-            uploadGridIndex={uploadGridIndex}
-            setUploadGridIndex={setUploadGridIndex}
-            uploadDialogOpen={uploadDialogOpen}
-            setUploadDialogOpen={setUploadDialogOpen}
-            uploadUrl={uploadUrl}
-            setUploadUrl={setUploadUrl}
-            uploadFile={uploadFile}
-            setUploadFile={setUploadFile}
-            isLoading={isLoading}
-            progressMsg={progressMsg}
-            generateHQ={generateHQ}
-            handleRegenerateGrid={regenerateSingleGrid}
-            handleUploadGrid={handleUploadGrid}
-            handleRefreshGrid={handleRefreshGrid}
-            applyGridsToShots={applyGridsToShots}
-            abortController={abortController}
-            setAbortController={setAbortController}
-            setCurrentStep={setCurrentStep}
-            currentProject={currentProject}
-            currentEpisodeNumber={currentEpisodeNumber}
-          />
-        )}
+            {currentStep === AppStep.GENERATE_IMAGES && (
+              <ImageGenerationPage
+                shots={shots}
+                characterRefs={characterRefs}
+                hqUrls={hqUrls}
+                setHqUrls={setHqUrls}
+                selectedStyle={selectedStyle}
+                setSelectedStyle={setSelectedStyle}
+                showStyleCards={showStyleCards}
+                setShowStyleCards={setShowStyleCards}
+                customStylePrompt={customStylePrompt}
+                setCustomStylePrompt={setCustomStylePrompt}
+                imageModel={imageModel}
+                setImageModel={setImageModel}
+                availableImageModels={availableImageModels}
+                isLoadingModels={isLoadingModels}
+                uploadGridIndex={uploadGridIndex}
+                setUploadGridIndex={setUploadGridIndex}
+                uploadDialogOpen={uploadDialogOpen}
+                setUploadDialogOpen={setUploadDialogOpen}
+                uploadUrl={uploadUrl}
+                setUploadUrl={setUploadUrl}
+                uploadFile={uploadFile}
+                setUploadFile={setUploadFile}
+                isLoading={isLoading}
+                progressMsg={progressMsg}
+                generateHQ={generateHQ}
+                handleRegenerateGrid={regenerateSingleGrid}
+                handleUploadGrid={handleUploadGrid}
+                handleRefreshGrid={handleRefreshGrid}
+                applyGridsToShots={applyGridsToShots}
+                abortController={abortController}
+                setAbortController={setAbortController}
+                setCurrentStep={setCurrentStep}
+                currentProject={currentProject}
+                currentEpisodeNumber={currentEpisodeNumber}
+              />
+            )}
 
-        {/* 🆕 最终故事板预览 */}
-        {currentStep === AppStep.FINAL_STORYBOARD && (
-          <FinalStoryboard
-            shots={shots}
-            characterRefs={characterRefs}
-            scenes={currentProject?.scenes || []}
-            episodeNumber={currentEpisodeNumber}
-            projectName={currentProject?.name}
-            onBack={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
-          />
-        )}
-      </main>
+            {/* 🆕 最终故事板预览 */}
+            {currentStep === AppStep.FINAL_STORYBOARD && (
+              <FinalStoryboard
+                shots={shots}
+                characterRefs={characterRefs}
+                scenes={currentProject?.scenes || []}
+                episodeNumber={currentEpisodeNumber}
+                projectName={currentProject?.name}
+                onBack={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
+              />
+            )}
+          </main>
 
-      {isLoading && (
-        <div className="fixed bottom-4 right-4 z-[100]">
-          <div className="bg-gray-800 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 border border-gray-700">
-            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-sm font-medium text-gray-200">{progressMsg}</p>
-          </div>
-        </div>
-      )}
-
-      {/* 🆕 上传九宫格对话框 */}
-      {uploadDialogOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
-          <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
-              📤 上传第 {uploadGridIndex !== null ? uploadGridIndex + 1 : ''} 张九宫格
-            </h3>
-
-            <div className="space-y-4">
-              {/* URL输入 */}
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  图片URL
-                </label>
-                <input
-                  type="text"
-                  value={uploadUrl}
-                  onChange={(e) => setUploadUrl(e.target.value)}
-                  placeholder="https://example.com/image.png"
-                  className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              {/* 分隔线 */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-                <span className="text-xs text-[var(--color-text-tertiary)]">或</span>
-                <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-              </div>
-
-              {/* 文件上传 */}
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  上传本地图片
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                  className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
-                />
-                {uploadFile && (
-                  <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
-                    已选择: {uploadFile.name}
-                  </p>
-                )}
+          {isLoading && (
+            <div className="fixed bottom-4 right-4 z-[100]">
+              <div className="bg-gray-800 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 border border-gray-700">
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-sm font-medium text-gray-200">{progressMsg}</p>
               </div>
             </div>
+          )}
 
-            {/* 按钮 */}
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setUploadDialogOpen(false);
-                  setUploadGridIndex(null);
-                  setUploadUrl('');
-                  setUploadFile(null);
-                }}
-                className="flex-1 px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg font-medium hover:bg-[var(--color-surface-hover)] transition-all"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleUploadGrid}
-                disabled={!uploadUrl.trim() && !uploadFile}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                确认上传
-              </button>
+          {/* 🆕 上传九宫格对话框 */}
+          {uploadDialogOpen && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
+              <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4 shadow-2xl">
+                <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
+                  📤 上传第 {uploadGridIndex !== null ? uploadGridIndex + 1 : ''} 张九宫格
+                </h3>
+
+                <div className="space-y-4">
+                  {/* URL输入 */}
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                      图片URL
+                    </label>
+                    <input
+                      type="text"
+                      value={uploadUrl}
+                      onChange={(e) => setUploadUrl(e.target.value)}
+                      placeholder="https://example.com/image.png"
+                      className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  {/* 分隔线 */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+                    <span className="text-xs text-[var(--color-text-tertiary)]">或</span>
+                    <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+                  </div>
+
+                  {/* 文件上传 */}
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                      上传本地图片
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                    />
+                    {uploadFile && (
+                      <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
+                        已选择: {uploadFile.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 按钮 */}
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setUploadDialogOpen(false);
+                      setUploadGridIndex(null);
+                      setUploadUrl('');
+                      setUploadFile(null);
+                    }}
+                    className="flex-1 px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg font-medium hover:bg-[var(--color-surface-hover)] transition-all"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleUploadGrid}
+                    disabled={!uploadUrl.trim() && !uploadFile}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    确认上传
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-      </>
+          )}
+        </>
       )}
     </div>
   );

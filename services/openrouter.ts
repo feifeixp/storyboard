@@ -809,14 +809,14 @@ import type { ShotDesign } from '../prompts/chain-of-thought/types';
  * ⚠️ 新增：传入完整剧本 script，用于严格对齐 storyBeat.dialogue 的对白，禁止改写
  */
 export async function* generateStage4Analysis(
-	  script: string,
-	  stage1Result: ScriptAnalysis,
-	  stage2Result: VisualStrategy,
-	  stage3Result: ShotPlanning,
-	  shotBatch: ShotListItem[],
-	  model: string = DEFAULT_THINKING_MODEL
-	): AsyncGenerator<string, string, unknown> {
-	  const prompt = buildStage4Prompt(script, stage1Result, stage2Result, stage3Result, shotBatch);
+  script: string,
+  stage1Result: ScriptAnalysis,
+  stage2Result: VisualStrategy,
+  stage3Result: ShotPlanning,
+  shotBatch: ShotListItem[],
+  model: string = DEFAULT_THINKING_MODEL
+): AsyncGenerator<string, string, unknown> {
+  const prompt = buildStage4Prompt(script, stage1Result, stage2Result, stage3Result, shotBatch);
 
   console.log('[DEBUG] 开始调用阶段4 API...');
   console.log('[DEBUG] 模型:', model);
@@ -1265,10 +1265,10 @@ function forceFixJSONAtErrorPosition(fullText: string, error: any): { shots: Sho
 
         // 如果当前行是属性值结束（以 " 或 } 结尾），下一行是新属性开始（以 " 开头）
         if ((trimmedLine.endsWith('"') || trimmedLine.endsWith('}')) &&
-            !trimmedLine.endsWith(',') &&
-            !trimmedLine.endsWith('{') &&
-            !trimmedLine.endsWith('[') &&
-            (nextLine.startsWith('"') || nextLine.startsWith('{'))) {
+          !trimmedLine.endsWith(',') &&
+          !trimmedLine.endsWith('{') &&
+          !trimmedLine.endsWith('[') &&
+          (nextLine.startsWith('"') || nextLine.startsWith('{'))) {
           console.log('[强制修复] 检测到缺少逗号，尝试修复');
           lines[i] = line + ',';
         }
@@ -1653,24 +1653,24 @@ export async function reviewStoryboardOpenRouter(
     max_tokens: 12000, // 🔧 从4000提升到12000，防止32个镜头自检JSON被截断
   });
 
-	  const rawText = response.choices[0]?.message?.content || '[]';
+  const rawText = response.choices[0]?.message?.content || '[]';
 
-	  // 先移除 markdown 代码块标记，再增强 JSON 提取 - 找到数组边界
-	  let jsonText = cleanJsonOutput(rawText);
-	  const jsonStart = jsonText.indexOf('[');
-	  const jsonEnd = jsonText.lastIndexOf(']');
+  // 先移除 markdown 代码块标记，再增强 JSON 提取 - 找到数组边界
+  let jsonText = cleanJsonOutput(rawText);
+  const jsonStart = jsonText.indexOf('[');
+  const jsonEnd = jsonText.lastIndexOf(']');
 
-	  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-	    jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
-	  }
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+  }
 
-	  const suggestions = safeParseReviewSuggestions(jsonText);
-	  if (suggestions.length === 0 && jsonText.trim()) {
-	    // 仅在有内容但完全解析失败时输出错误日志，方便后续排查
-	    console.error('自检 JSON 解析失败，原始文本:', rawText);
-	  }
+  const suggestions = safeParseReviewSuggestions(jsonText);
+  if (suggestions.length === 0 && jsonText.trim()) {
+    // 仅在有内容但完全解析失败时输出错误日志，方便后续排查
+    console.error('自检 JSON 解析失败，原始文本:', rawText);
+  }
 
-	  return suggestions;
+  return suggestions;
 }
 
 /**
@@ -1755,8 +1755,8 @@ export async function* chatWithDirectorStream(
  * 不含美术风格！风格在生图时由用户选择后附加。
  */
 export async function* extractImagePromptsStream(
-    shots: Shot[],
-    model: string = DEFAULT_MODEL
+  shots: Shot[],
+  model: string = DEFAULT_MODEL
 ) {
   const prompt = buildExtractImagePromptsPrompt(shots);
 
@@ -1986,7 +1986,7 @@ async function generateSingleImage(
 
     const task = await generateImage({
       prompt: prompt,
-	      negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
+      negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
       modelName: preferredModelName,  // ✅ 使用动态获取的 model_name
       imageUrls: imageUrls && imageUrls.length > 0 ? imageUrls : undefined,  // 🆕 角色参考图
       numImages: '1',
@@ -1999,14 +1999,14 @@ async function generateSingleImage(
 
     console.log(`[Neodomain] 任务已提交: ${task.task_code}`);
 
-			// 🆕 任务创建后立即回调（用于把 taskCode 持久化到 D1，支持断网/刷新自动恢复）
-			if (onTaskCreated) {
-				try {
-					await Promise.resolve(onTaskCreated(task.task_code));
-				} catch (err) {
-					console.warn('[Neodomain] onTaskCreated 回调执行失败（忽略，不影响继续轮询）:', err);
-				}
-			}
+    // 🆕 任务创建后立即回调（用于把 taskCode 持久化到 D1，支持断网/刷新自动恢复）
+    if (onTaskCreated) {
+      try {
+        await Promise.resolve(onTaskCreated(task.task_code));
+      } catch (err) {
+        console.warn('[Neodomain] onTaskCreated 回调执行失败（忽略，不影响继续轮询）:', err);
+      }
+    }
 
     // 轮询查询结果
     const result = await pollGenerationResult(
@@ -2026,8 +2026,8 @@ async function generateSingleImage(
 
       // 🔧 如果是会员限制错误且使用的是主模型，尝试降级
       const isMembershipError = result.failure_reason?.includes('会员') ||
-                                result.failure_reason?.includes('membership') ||
-                                result.failure_reason?.includes('权限');
+        result.failure_reason?.includes('membership') ||
+        result.failure_reason?.includes('权限');
 
       if (isMembershipError && primaryModel && preferredModel === primaryModel && fallbackModel) {
         console.warn(`[Neodomain] ${preferredModel.model_display_name} 会员限制，降级到 ${fallbackModel.model_display_name}`);
@@ -2050,7 +2050,7 @@ async function generateSingleImage(
       try {
         const fallbackTask = await generateImage({
           prompt: prompt,
-	          negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
+          negativePrompt: 'blurry, low quality, watermark, signature, logo, text, typography, letters, numbers, digits, caption, subtitle, label, annotations, UI overlay, distorted, deformed',
           modelName: fallbackModel!.model_name,  // ✅ 使用备用模型的 model_name
           imageUrls: imageUrls && imageUrls.length > 0 ? imageUrls : undefined,  // 🆕 角色参考图
           numImages: '1',
@@ -2063,14 +2063,14 @@ async function generateSingleImage(
 
         console.log(`[Neodomain] 备用模型任务已提交: ${fallbackTask.task_code}`);
 
-				// 🆕 若发生降级，则以备用任务的 taskCode 覆盖持久化（确保恢复时拿到真实可用任务）
-				if (onTaskCreated) {
-					try {
-						await Promise.resolve(onTaskCreated(fallbackTask.task_code));
-					} catch (err) {
-						console.warn('[Neodomain] onTaskCreated(备用任务) 回调执行失败（忽略）:', err);
-					}
-				}
+        // 🆕 若发生降级，则以备用任务的 taskCode 覆盖持久化（确保恢复时拿到真实可用任务）
+        if (onTaskCreated) {
+          try {
+            await Promise.resolve(onTaskCreated(fallbackTask.task_code));
+          } catch (err) {
+            console.warn('[Neodomain] onTaskCreated(备用任务) 回调执行失败（忽略）:', err);
+          }
+        }
 
         const fallbackResult = await pollGenerationResult(
           fallbackTask.task_code,
@@ -2189,11 +2189,26 @@ export async function generateMergedStoryboardSheet(
     // 🆕 获取角色参考图信息（根据集数匹配形态的设定图）
     const allCharacterRefImages = getCharacterReferenceImagesForEpisode(characterRefs, episodeNumber);
 
-    // 收集当前九宫格涉及的所有角色ID
+    // 收集当前九宫格涉及的所有角色ID和场景ID
     const involvedCharacterIds = new Set<string>();
+    const involvedSceneIds = new Set<string>();
     for (const shot of gridShots) {
-      if (shot.assignedCharacterIds) {
+      if (shot.assignedCharacterIds && shot.assignedCharacterIds.length > 0) {
         shot.assignedCharacterIds.forEach(id => involvedCharacterIds.add(id));
+      } else {
+        // 兼容旧数据：如果没有分配 ID，则直接在提示词和剧情简述中暴力全字面量匹配角色名
+        const eventText = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat?.event || '';
+        const searchText = `${shot.imagePromptCn || ''} ${eventText}`;
+        characterRefs.forEach(c => {
+          if (searchText.includes(c.name) || (shot.imagePromptCn && shot.imagePromptCn.includes(`@${c.name}`))) {
+            involvedCharacterIds.add(c.id);
+          }
+        });
+      }
+
+      const sId = shot.sceneId || shot.assignedSceneId;
+      if (sId) {
+        involvedSceneIds.add(sId);
       }
     }
 
@@ -2203,12 +2218,41 @@ export async function generateMergedStoryboardSheet(
       return character && involvedCharacterIds.has(character.id);
     });
 
-    // 构建角色名称列表（用于日志）
-    const characterNames = filteredCharacterRefs.map(r => r.name);
+    // 🆕 筛选场景参考图：提取当前九宫格使用的场景设定图片
+    const filteredSceneRefs: CharacterReferenceImage[] = [];
+    if (scenes) {
+      const episodeScenes = scenes.filter(s => !episodeNumber || (s.appearsInEpisodes && s.appearsInEpisodes.includes(episodeNumber)));
+      for (const sceneId of involvedSceneIds) {
+        const scene = episodeScenes.find(s => s.id === sceneId);
+        if (scene) {
+          const imageUrl = scene.imageSheetUrl || (scene.imageUrls && scene.imageUrls.length > 0 ? scene.imageUrls[0] : undefined);
+          if (imageUrl) {
+            filteredSceneRefs.push({
+              name: scene.name,
+              briefDesc: `场景: ${scene.name}`, // 简要描述
+              imageUrl,
+              imageIndex: 0 // 将在合并后重新编号
+            });
+          }
+        }
+      }
+    }
+
+    // 构建角色和场景名称列表（用于日志）
+    const characterNames = filteredCharacterRefs.slice(0, 10).map(r => r.name);
+    if (filteredSceneRefs.length > 0) {
+      characterNames.push(...filteredSceneRefs.slice(0, Math.max(0, 10 - filteredCharacterRefs.length)).map(r => `[场景]${r.name}`));
+    }
+
+    // 合并角色和场景参考图，NeoDomain API 严格限制最多 10 张参考图
+    const combinedRefs = [...filteredCharacterRefs, ...filteredSceneRefs].slice(0, 10).map((ref, index) => ({
+      ...ref,
+      imageIndex: index + 1
+    }));
 
     return {
       allCharacterRefImages,
-      filteredRefImages: filteredCharacterRefs,
+      filteredRefImages: combinedRefs,
       characterNames,
     };
   };
@@ -2389,7 +2433,7 @@ export async function generateSingleGrid(
   episodeNumber?: number,
   scenes?: SceneRef[],
   artStyleType?: ArtStyleType,
-	onTaskCreated?: (taskCode: string) => void | Promise<void>,
+  onTaskCreated?: (taskCode: string) => void | Promise<void>,
   projectId?: string  // 🆕 项目 ID
 ): Promise<string | null> {
   const GRID_SIZE = 9; // 每张图9个镜头 (3x3)
@@ -2532,16 +2576,16 @@ export async function generateSingleGrid(
   }
 }
 
-	/**
-	 * 构建九宫格提示词 - 让AI直接生成一张包含9个分镜的图
-	 * ⚠️ 为了后续切割：整张图禁止任何文字/数字/标题/页码/水印，仅输出画面内容 + 网格。
-	 * 并强调镜头角度（通过英文摄影术语约束生图）。
- * 风格通过 styleSuffix 附加
- * 角色信息通过 characterRefs 提供外观描述
- * 🆕 episodeNumber 用于匹配角色在该集的正确形态
- * 🆕 sceneSection 提供场景库的视觉描述
- * 🆕 artStyleSection 提供美术风格约束
- */
+/**
+ * 构建九宫格提示词 - 让AI直接生成一张包含9个分镜的图
+ * ⚠️ 为了后续切割：整张图禁止任何文字/数字/标题/页码/水印，仅输出画面内容 + 网格。
+ * 并强调镜头角度（通过英文摄影术语约束生图）。
+* 风格通过 styleSuffix 附加
+* 角色信息通过 characterRefs 提供外观描述
+* 🆕 episodeNumber 用于匹配角色在该集的正确形态
+* 🆕 sceneSection 提供场景库的视觉描述
+* 🆕 artStyleSection 提供美术风格约束
+*/
 function buildNineGridPrompt(
   shots: Shot[],
   pageNum: number,
@@ -2616,24 +2660,24 @@ function buildNineGridPrompt(
     'Worm Eye': '(worm eye view:1.4), camera almost at ground level (80-90° below), looking STRAIGHT UP, (extreme foreshortening:1.3)'
   };
 
-	  // Panel position names (avoid digits like 1-9 to reduce the chance of the model drawing numbers)
-	  const panelPositionNames = [
-	    'top left',
-	    'top center',
-	    'top right',
-	    'middle left',
-	    'center',
-	    'middle right',
-	    'bottom left',
-	    'bottom center',
-	    'bottom right',
-	  ];
-	  const getPanelPositionName = (idx: number) => panelPositionNames[idx] || 'unknown panel';
+  // Panel position names (avoid digits like 1-9 to reduce the chance of the model drawing numbers)
+  const panelPositionNames = [
+    'top left',
+    'top center',
+    'top right',
+    'middle left',
+    'center',
+    'middle right',
+    'bottom left',
+    'bottom center',
+    'bottom right',
+  ];
+  const getPanelPositionName = (idx: number) => panelPositionNames[idx] || 'unknown panel';
 
-	// 构建每个格子的场景描述（注意：此处是“提示词文本”，但为了避免生图把这些编号当作需要画出来的文字，尽量不出现镜号/页码/数字标注）
-	const panelDescriptions = shots.map((shot, idx) => {
-		const panelPos = getPanelPositionName(idx);
-		const isMotion = shot.shotType === '运动';
+  // 构建每个格子的场景描述（注意：此处是“提示词文本”，但为了避免生图把这些编号当作需要画出来的文字，尽量不出现镜号/页码/数字标注）
+  const panelDescriptions = shots.map((shot, idx) => {
+    const panelPos = getPanelPositionName(idx);
+    const isMotion = shot.shotType === '运动';
 
     // 获取角度信息（优先使用结构化字段，其次从文本提取）
     const getAngleLabel = (): { cn: string; en: string; preciseEn: string } => {
@@ -2683,8 +2727,8 @@ function buildNineGridPrompt(
       return { cn: '', en: '', preciseEn: '' };
     };
 
-		const angleLabel = getAngleLabel();
-		// 🆕 使用精确角度描述，防止AI生图误解
+    const angleLabel = getAngleLabel();
+    // 🆕 使用精确角度描述，防止AI生图误解
     const angleInstruction = angleLabel.preciseEn
       ? `[CAMERA ANGLE: ${angleLabel.preciseEn}] ← MUST draw from this EXACT angle!`
       : (angleLabel.en ? `[CAMERA: ${angleLabel.en}] ← MUST draw from this angle!` : '');
@@ -2701,7 +2745,7 @@ function buildNineGridPrompt(
         endFrame = startFrame;  // 使用首帧作为尾帧，保证画面一致性
       }
 
-				return `${panelPos} panel (motion):
+      return `${panelPos} panel (motion):
 	${angleInstruction ? angleInstruction + '\n' : ''}Left half (start frame): ${startFrame}
 	Right half (end frame): ${endFrame}
 	IMPORTANT: Do NOT draw any text, labels, numbers, arrows, or captions inside the panel.`;
@@ -2709,7 +2753,7 @@ function buildNineGridPrompt(
       // 静态镜头：单帧
       const sceneDesc = shot.imagePromptEn || shot.promptEn || shot.promptCn || 'empty scene';
 
-			return `${panelPos} panel (still):
+      return `${panelPos} panel (still):
 	${angleInstruction ? angleInstruction + '\n' : ''}Scene content: ${sceneDesc}
 	IMPORTANT: Do NOT draw any text, labels, numbers, or captions inside the panel.`;
     }
@@ -2718,10 +2762,10 @@ function buildNineGridPrompt(
   // 填充空格子
   const emptyPanels = [];
   for (let i = shots.length; i < 9; i++) {
-			const positionName = getPanelPositionName(i);
-			emptyPanels.push(
-				`${positionName} panel: leave this panel blank with a plain neutral background (e.g., light gray). Absolutely no text.`
-			);
+    const positionName = getPanelPositionName(i);
+    emptyPanels.push(
+      `${positionName} panel: leave this panel blank with a plain neutral background (e.g., light gray). Absolutely no text.`
+    );
   }
 
   const allPanels = panelDescriptions + (emptyPanels.length > 0 ? '\n\n' + emptyPanels.join('\n') : '');
@@ -2734,15 +2778,15 @@ function buildNineGridPrompt(
 【角色设定】请严格按照以下外观描述绘制角色！${episodeNumber ? ` (第${episodeNumber}集形态)` : ''}
 ═══════════════════════════════════════════════════════════════
 ${characterDescriptions.map(c => {
-  const genderLabel = c.gender && c.gender !== '未知' ? `(${c.gender})` : '';
-  const appearanceDesc = c.appearance
-    ? `外观：${c.appearance}`
-    : '请保持外观一致（发型、服装、体型）';
-  // 🆕 如果有参考图，添加 [图N] 标记，让生图模型通过标记关联上传的参考图
-  const refIdx = characterRefImages.findIndex(r => r.name === c.name);
-  const refTag = refIdx >= 0 ? ` → 参考[图${refIdx + 1}]${characterRefImages[refIdx].briefDesc}` : '';
-  return `• ${c.name}${genderLabel}：${appearanceDesc}${refTag}`;
-}).join('\n')}
+      const genderLabel = c.gender && c.gender !== '未知' ? `(${c.gender})` : '';
+      const appearanceDesc = c.appearance
+        ? `外观：${c.appearance}`
+        : '请保持外观一致（发型、服装、体型）';
+      // 🆕 如果有参考图，添加 [图N] 标记，让生图模型通过标记关联上传的参考图
+      const refIdx = characterRefImages.findIndex(r => r.name === c.name);
+      const refTag = refIdx >= 0 ? ` → 参考[图${refIdx + 1}]${characterRefImages[refIdx].briefDesc}` : '';
+      return `• ${c.name}${genderLabel}：${appearanceDesc}${refTag}`;
+    }).join('\n')}
 
 ⚠️ 重要规则：
 - 同一角色在不同镜头中必须可识别为同一个人
@@ -2751,8 +2795,8 @@ ${characterDescriptions.map(c => {
 ${characterRefImages.length > 0 ? '- 请参考上传的角色设定图（[图N]）来绘制对应角色，确保角色外观与设定图一致\n' : ''}`
     : '';
 
-		// ⚠️ 关键：为了后续等分切割，必须禁止任何标题/页码/镜号等文字元素，且要求网格边到边均分。
-		return `Create a professional storyboard sheet as a strict three-by-three grid (nine equal panels) on a single wide landscape canvas.
+  // ⚠️ 关键：为了后续等分切割，必须禁止任何标题/页码/镜号等文字元素，且要求网格边到边均分。
+  return `Create a professional storyboard sheet as a strict three-by-three grid (nine equal panels) on a single wide landscape canvas.
 
 ================================================================================
 LAYOUT (MUST FOLLOW)

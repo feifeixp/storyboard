@@ -179,16 +179,19 @@ export interface SceneRef {
   // 🆕 场景设定图（单张 16:9 设定图，通常为 2×2 四分屏：多角度 + 关键特写）
   imageSheetUrl?: string;
 
+  // 🆕 兼容字段：若未来仍需要保存拆分后的多张独立图，可使用该字段。
+  imageUrls?: string[];
+
   // 🆕 生图元信息（用于追溯使用的模型/风格）
   imageGenerationMeta?: {
     modelName: string;
     styleName: string;
     generatedAt: string; // ISO 时间字符串
 
-		// 🆕 任务编码（用于断网/刷新后重试获取结果）
-		// 说明：任务创建成功后即可写入；当 imageSheetUrl 为空但 taskCode 存在时，可尝试恢复该任务。
-		taskCode?: string;
-		taskCreatedAt?: string; // ISO 时间字符串
+    // 🆕 任务编码（用于断网/刷新后重试获取结果）
+    // 说明：任务创建成功后即可写入；当 imageSheetUrl 为空但 taskCode 存在时，可尝试恢复该任务。
+    taskCode?: string;
+    taskCreatedAt?: string; // ISO 时间字符串
   };
 }
 
@@ -262,7 +265,7 @@ export interface Episode {
   updatedAt: string;
 }
 
-export type EpisodeStatus = 
+export type EpisodeStatus =
   | 'draft'      // 草稿，只有剧本
   | 'cleaned'    // 已清洗
   | 'generated'  // 已生成分镜
@@ -276,7 +279,7 @@ export type EpisodeStatus =
 /**
  * 新建项目向导的步骤
  */
-export type ProjectWizardStep = 
+export type ProjectWizardStep =
   | 'basic-info'      // 基础信息
   | 'upload-scripts'  // 上传剧本
   | 'ai-analyzing'    // AI分析中

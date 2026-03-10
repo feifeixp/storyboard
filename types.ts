@@ -48,6 +48,9 @@ export interface CharacterRef {
   // 说明：仅保存整张设定图的 OSS URL；UI 可直接展示整图。
   imageSheetUrl?: string;
 
+  // 🆕 用户手动上传的参考图 URL（通过 AI 分析长相时保存）
+  referenceImageUrl?: string;
+
   // 🆕 兼容字段：若未来仍需要保存拆分后的多张独立图，可使用该字段。
   // 顺序约定：0=正面全身, 1=侧面全身, 2=背面全身, 3=面部特写
   imageUrls?: string[];
@@ -58,10 +61,10 @@ export interface CharacterRef {
     styleName: string;
     generatedAt: string; // ISO 时间字符串
 
-		// 🆕 任务编码（用于断网/刷新后重试获取结果）
-		// 说明：任务创建成功后即可写入；当 imageSheetUrl 为空但 taskCode 存在时，可尝试恢复该任务。
-		taskCode?: string;
-		taskCreatedAt?: string; // ISO 时间字符串
+    // 🆕 任务编码（用于断网/刷新后重试获取结果）
+    // 说明：任务创建成功后即可写入；当 imageSheetUrl 为空但 taskCode 存在时，可尝试恢复该任务。
+    taskCode?: string;
+    taskCreatedAt?: string; // ISO 时间字符串
   };
 
   // 🆕 角色经典台词/座右铭
@@ -264,6 +267,7 @@ export interface Shot {
   duration: string;         // "3s", "5s"
   shotType: ShotType;       // 静态/运动，决定是否需要首尾帧
   sceneId?: string;         // 🆕 所属场景ID（如 "S1"），用于关联空间布局
+  assignedSceneId?: string; // 🆕 关联或计算出的最终使用的场景ID
 
   // ═══════════ 🆕 视频生成模式（优化版） ═══════════
   // I2V: 图生视频（微动、跟拍运动、呼吸感、氛围）- ≤10秒，只需一张图+视频提示词
@@ -340,15 +344,15 @@ export interface Shot {
   storyboardGridUrl?: string;        // 九宫格图片URL（该镜头所属页）
   storyboardGridCellIndex?: number;  // 该镜头在九宫格中的格子索引（0-8，按行优先）
 
-	// 🆕 九宫格生图任务元信息（用于断网/刷新后自动恢复）
-	// 说明：九宫格生成时会先提交任务并获得 taskCode；我们把它持久化到 shots 内，
-	//      之后即便刷新/断网，也能通过 taskCode 再次轮询拿回永久 image_urls。
-	// 注意：该字段不等同于 storyboardGridUrl（后者是“已应用到分镜表”的最终结果）。
-	storyboardGridGenerationMeta?: {
-		taskCode: string;
-		taskCreatedAt: string; // ISO 时间字符串
-		gridIndex: number;     // 九宫格索引（0-based）
-	};
+  // 🆕 九宫格生图任务元信息（用于断网/刷新后自动恢复）
+  // 说明：九宫格生成时会先提交任务并获得 taskCode；我们把它持久化到 shots 内，
+  //      之后即便刷新/断网，也能通过 taskCode 再次轮询拿回永久 image_urls。
+  // 注意：该字段不等同于 storyboardGridUrl（后者是“已应用到分镜表”的最终结果）。
+  storyboardGridGenerationMeta?: {
+    taskCode: string;
+    taskCreatedAt: string; // ISO 时间字符串
+    gridIndex: number;     // 九宫格索引（0-based）
+  };
 
   status: 'pending' | 'generating' | 'completed' | 'error';
 }
