@@ -2,29 +2,47 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Visionary Storyboard Studio
 
-This contains everything you need to run your app locally.
+AI 驱动的全流程分镜草图生成工具——从剧本到九宫格分镜，一站式完成。
 
-View your app in AI Studio: https://ai.studio/apps/drive/1U6efUJDjnGUDh51zEi9FwJbQmNqptWUs
+## ✨ 核心功能
 
-## Run Locally
+- **项目管理**：多项目/多剧集管理，支持角色库、场景库、剧情大纲
+- **剧本分析**：AI 自动提取角色、场景、剧情节拍
+- **智能分镜**：五阶段思维链（剧本分析 → 视觉策略 → 镜头规划 → 镜头设计 → 质量检查）
+- **角色/场景设定图**：AI 生成多形态角色设定图（正/侧/背 + 面部特写）
+- **九宫格分镜草图**：批量生成 3×3 分镜草图，支持多种美术风格（12种预设 + 自定义）
+- **提示词提取与优化**：自动提取生图提示词，支持自检修复
+- **视觉一致性**：角色/场景参考图自动注入生图上下文，保持外观一致
 
-**Prerequisites:**  Node.js
+## 🚀 快速开始
 
+**环境要求：** Node.js 18+
 
-1. Install dependencies:
-   `npm install`
-2. Set API keys in [.env.local](.env.local):
-   ```
-   VITE_OPENROUTER1_API_KEY=sk-or-v1-...  # OpenRouter API Key (必需)
-   VITE_DEEPSEEK_API_KEY=sk-...            # DeepSeek API Key (可选，用于更便宜的模型)
-   VITE_GEMINI_API_KEY=...                 # Gemini API Key (可选)
-   ```
-3. Run the app:
-   `npm run dev`
+```bash
+# 1. 安装依赖
+npm install
 
-## 支持的模型
+# 2. 配置 API Key
+cp .env.local.example .env.local
+# 编辑 .env.local，填入你的 API Key
+
+# 3. 启动开发服务器
+npm run dev
+```
+
+## ⚙️ 环境变量
+
+在 `.env.local` 中配置：
+
+```
+VITE_OPENROUTER1_API_KEY=sk-or-v1-...  # OpenRouter API Key（必需）
+VITE_DEEPSEEK_API_KEY=sk-...            # DeepSeek API Key（可选）
+VITE_GEMINI_API_KEY=...                 # Gemini API Key（可选）
+```
+
+## 🤖 支持的 LLM 模型
 
 | 模型 | 提供商 | 价格 | 说明 |
 |------|--------|------|------|
@@ -36,27 +54,29 @@ View your app in AI Studio: https://ai.studio/apps/drive/1U6efUJDjnGUDh51zEi9FwJ
 | Gemini 2.5 Pro | OpenRouter | $1.25/M | 高质量 |
 | Claude Sonnet 4.5 | OpenRouter | $3.00/M | 最强 |
 
+## 🎨 支持的生图模型
+
+通过 Neodomain API 动态获取，支持：
+- **Nano Banana 2**（默认）— 高质量分镜草图
+- **Nano Banana Pro** — 专业级生图
+- **Seedream 4.5** — 备选模型
+
+## 🎭 支持的美术风格（12种）
+
+3D国潮动漫 · 水墨写意 · 日式赛璐璐 · 电影超写实 · 3D黏土/盲盒 · 数字艺术厚涂 · 美式漫画 · 低多边形 · 像素艺术 · 2D Q版卡通 · 黑白电影 · 手绘线稿
+
 ## 📚 文档导航
 
-### 项目交付
-- **[项目交付文档](./PROJECT_DELIVERY.md)** - 完整的项目交付说明（功能清单、部署指南、性能指标）
-- **[最终总结](./FINAL_SUMMARY.md)** - 项目成果总结（核心价值、关键指标、未来规划）
+| 文档 | 说明 |
+|------|------|
+| [项目交付文档](./PROJECT_DELIVERY.md) | 功能清单、部署指南、性能指标 |
+| [完整项目文档](./PROJECT.md) | 项目架构、功能说明、使用指南 |
+| [开发日志](./DEVELOPMENT_LOG.md) | 开发历史记录和重大变更 |
+| [功能文档](./docs/) | 功能使用指南和参考资料 |
 
-### 核心文档
-- **[完整项目文档](./PROJECT.md)** - 项目架构、功能说明、使用指南（1500+行完整文档）
-- **[开发日志](./DEVELOPMENT_LOG.md)** - 开发历史记录和重大变更（2800+行）
-- **[功能文档](./docs/)** - 功能使用指南和参考资料
-- **[规则库](./.augment/rules/)** - 核心规则和规范（155KB）
-- **[历史报告](./reports/2024年12月/)** - 项目报告归档
+## 📝 更新日志
 
-## 🎯 快速链接
-
-### 新手入门
-1. 阅读 [完整项目文档](./PROJECT.md) 了解项目全貌
-2. 查看 [智能补充快速开始](./docs/智能补充快速开始.md) 体验核心功能
-3. 参考 [功能验证清单](./docs/功能验证清单.md) 测试功能
-
-### 开发者
-- [规则库索引](./.augment/rules/README.md) - 查看所有开发规则
-- [开发日志](./DEVELOPMENT_LOG.md) - 了解开发历史
-- [参考资料](./docs/references/) - AI工具手册和理论文档
+### 2026-03-10
+- 修复角色设定图引用错误：多形态角色的设定图现在可以被正确识别
+- 默认生图模型切换为 Nano Banana 2
+- 优化九宫格生成时角色参考图的提取逻辑
