@@ -4,7 +4,7 @@ info:
   description: Skills for AI Agents to interact with the Visionary Storyboard engines. Includes character extraction, script cleaning, and advanced video prompt generation.
   version: 1.0.0
 servers:
-  - url: https://api.your-worker.workers.dev
+  - url: https://visionary-storyboard-skill-api.feifeixp.workers.dev
     description: Production Cloudflare Worker
 paths:
   /api/v1/characters/extract:
