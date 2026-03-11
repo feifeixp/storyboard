@@ -1,0 +1,10 @@
+name = "visionary-storyboard-skill-api"
+main = "src/index.ts"
+compatibility_date = "2024-03-01"
+
+# Environment Variables
+# You need to configure these in the Cloudflare Dashboard or using `npx wrangler secret put`
+# [vars]
+# OPENROUTER_API_KEY = "your-key"
+# DEEPSEEK_API_KEY = "your-key"
+# GEMINI_API_KEY = "your-key"

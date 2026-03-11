@@ -1,0 +1,116 @@
+openapi: 3.0.3
+info:
+  title: Visionary Storyboard Skill API
+  description: Skills for AI Agents to interact with the Visionary Storyboard engines. Includes character extraction, script cleaning, and advanced video prompt generation.
+  version: 1.0.0
+servers:
+  - url: https://api.your-worker.workers.dev
+    description: Production Cloudflare Worker
+paths:
+  /api/v1/characters/extract:
+    post:
+      summary: Extract Characters from Script
+      description: Parses raw script text, identifies core characters, and generates detailed, purely visual descriptions for AI image generation.
+      operationId: extractCharacters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scriptContent
+              properties:
+                scriptContent:
+                  type: string
+                  description: The raw movie/animation script snippet.
+                model:
+                  type: string
+                  description: "Optional LLM Model override (default: google/gemini-2.5-pro)"
+      responses:
+        '200':
+          description: Successful Extraction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  characters:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        gender:
+                          type: string
+                        appearance:
+                          type: string
+
+  /api/v1/script/clean:
+    post:
+      summary: Clean and Pre-process Script
+      description: Separates visual content from dialogues and extracts psychological "mood tags" from sound cues. Output evaluates pacing weights per scene.
+      operationId: cleanScript
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scriptContent
+              properties:
+                scriptContent:
+                  type: string
+                  description: The raw script to be preprocessed.
+                model:
+                  type: string
+                  description: "Optional model to use (default: google/gemini-2.5-pro)"
+      responses:
+        '200':
+          description: Cleaned script data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/prompts/generate-video-prompts:
+    post:
+      summary: Generate Machine-Readable Prompts
+      description: Translates a structured Shot list into rigorous, style-agnostic technical Image Generation prompts (Nano Banana Pro / Kling compatible).
+      operationId: generateVideoPrompts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - shots
+              properties:
+                shots:
+                  type: array
+                  description: Array of Storyboard shot objects with technical details (shotSize, angleHeight, lighting, etc.)
+                  items:
+                    type: object
+                model:
+                  type: string
+                  description: "Optional Model (default: google/gemini-2.5-pro)"
+      responses:
+        '200':
+          description: A list of prompts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prompts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        shotNumber:
+                          type: string
+                        imagePromptCn:
+                          type: string
