@@ -3,8 +3,9 @@
  * 显示所有项目，支持创建、选择、删除项目
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Project } from '../types/project';
+import { OpenClawHelpModal } from './OpenClawHelpModal';
 
 interface ProjectListProps {
   projects: Project[];
@@ -19,6 +20,7 @@ export function ProjectList({
   onCreateProject,
   onDeleteProject,
 }: ProjectListProps) {
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -42,10 +44,20 @@ export function ProjectList({
 
   return (
     <div className="p-4 md:p-8 relative z-10">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto relative">
+        {/* 帮助文档按钮 - 右上角 */}
+        <div className="absolute top-0 right-0">
+          <button
+            onClick={() => setShowHelpModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 hover:from-blue-500/20 hover:to-purple-500/20 text-blue-300 border border-blue-500/20 hover:border-blue-500/40 rounded-full transition-all text-sm font-medium shadow-sm backdrop-blur-sm"
+          >
+            <span>⚡️</span> OpenClaw API 接入指南
+          </button>
+        </div>
+
         {/* 标题 */}
         <div className="text-center mb-12">
-          <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 mb-3 drop-shadow-sm">
+          <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 mb-3 drop-shadow-sm mt-8">
             🎬 NeoAI - 导演助手
           </h1>
           <p className="text-gray-400 text-sm md:text-base">
@@ -164,6 +176,10 @@ export function ProjectList({
           </div>
         )}
       </div>
+
+      {showHelpModal && (
+        <OpenClawHelpModal onClose={() => setShowHelpModal(false)} />
+      )}
     </div>
   );
 }
