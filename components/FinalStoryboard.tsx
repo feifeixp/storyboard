@@ -1,9 +1,36 @@
 import React, { useState, useRef, useMemo } from 'react';
+import { Download, RefreshCw, Layers, MapMap, Info, CheckCircle2 } from 'lucide-react';
 import { Shot, CharacterRef, VideoGroup, VideoGroupPrompt } from '../types';
 import { SceneRef } from '../types/project';
+import { generateStoryboardImage } from '../services/storyboardUtils';
+import { getGridCellUrl } from '../services/projectIntegration';
+
+/**
+ * 提取角色的最佳展示图片（包含对多形态的向下兼容）
+ */
+function getCharacterImageUrl(char: CharacterRef | undefined | null): string | null {
+  if (!char) return null;
+  return char.imageSheetUrl ||
+         char.referenceImageUrl ||
+         (char.imageUrls && char.imageUrls[0]) ||
+         (char.forms && char.forms.length > 0 && char.forms[0].imageSheetUrl) ||
+         char.data ||
+         null;
+}
+
+/**
+ * 纯展示用：提取场景的最佳展示图片
+ */
+function getSceneImageUrl(scene: SceneRef | undefined | null): string | null {
+  if (!scene) return null;
+  return scene.imageSheetUrl ||
+         (scene.imageUrls && scene.imageUrls[0]) ||
+         null;
+}
+
 import {
-  groupShotsBySceneAndDuration,
-  generateAllVideoGroupPrompts,
+  groupShotsBySceneAndDuration, // Keep original utility functions
+  generateAllVideoGroupPrompts, // Keep original utility functions
   getShotStoryBeat,
 } from '../src/utils/videoGrouping';
 // 静态导入（避免动态 import chunk 在 Cloudflare Pages 部署时因 MIME 类型错误导致加载失败）
@@ -13,10 +40,12 @@ import { jsPDF } from 'jspdf';
 interface FinalStoryboardProps {
   shots: Shot[];
   characterRefs: CharacterRef[];
-  scenes: SceneRef[];
+  scenes?: SceneRef[]; // 🆕 新增可选项：当前项目中的场景数据
+  setCurrentStep: (step: number) => void;
   episodeNumber: number | null;
-  projectName?: string;
-  onBack: () => void;
+  episodeTitle?: string;
+  script?: string;
+  onBack: () => void; // Keep onBack as it's used in the component
 }
 
 type ViewMode = 'original' | 'grouped';
@@ -28,7 +57,16 @@ type ViewMode = 'original' | 'grouped';
  * - 美观的卡片布局展示
  * - 支持导出 JSON、CSV、MD、PDF
  */
-export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, projectName, onBack }: FinalStoryboardProps) {
+export function FinalStoryboard({
+  shots,
+  characterRefs,
+  scenes = [], // 默认空数组
+  setCurrentStep, // Added as per instruction
+  episodeNumber,
+  episodeTitle, // Added as per instruction
+  script = '', // Added as per instruction
+  onBack, // Kept onBack
+}: FinalStoryboardProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const storyboardRef = useRef<HTMLDivElement>(null);
@@ -40,8 +78,8 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
     return { videoGroups: groups, videoGroupPrompts: prompts };
   }, [shots, scenes]);
 
-  // 检查是否有九宫格数据
-  const hasStoryboardData = shots.some(shot => shot.storyboardGridUrl);
+  // 检查是否有九宫格数据或视频生成提示词
+  const hasStoryboardData = shots.some(shot => shot.storyboardGridUrl || shot.videoPromptCn);
 
   if (!hasStoryboardData) {
     return (
@@ -68,7 +106,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
   const exportJSON = () => {
     const data = {
       meta: {
-        project: projectName || '未命名项目',
+        project: episodeTitle || '未命名项目', // Changed projectName to episodeTitle
         episode: episodeNumber,
         totalShots: shots.length,
         totalGroups: videoGroups.length,
@@ -115,7 +153,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
 
     // 第一部分：摘要信息
     csvContent.push('===== 故事板摘要 =====');
-    csvContent.push(`项目名称,${projectName || '未命名项目'}`);
+    csvContent.push(`项目名称,${episodeTitle || '未命名项目'}`); // Changed projectName to episodeTitle
     csvContent.push(`集数,第${episodeNumber || '?'}集`);
     csvContent.push(`镜头总数,${shots.length}`);
     csvContent.push(`分组数量,${videoGroups.length}`);
@@ -203,7 +241,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
 
   // 导出为 Markdown（按分组组织）
   const exportMarkdown = () => {
-    const title = `# 故事板 - ${projectName || '未命名项目'} - 第${episodeNumber || '?'}集\n\n`;
+    const title = `# 故事板 - ${episodeTitle || '未命名项目'} - 第${episodeNumber || '?'}集\n\n`; // Changed projectName to episodeTitle
     const summary = `## 摘要信息\n\n- **镜头总数**: ${shots.length}\n- **分组数量**: ${videoGroups.length}（每个视频不超过15秒）\n\n---\n\n`;
 
     // 角色设定部分
@@ -408,7 +446,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
               </h1>
             </div>
             <p className="text-sm md:text-base text-gray-400 mt-1">
-              {projectName || '未命名项目'} - 第{episodeNumber || '?'}集 - 共 <span className="text-white font-medium">{shots.length}</span> 个镜头 · <span className="text-white font-medium">{videoGroups.length}</span> 个视频分组
+              {episodeTitle || '未命名项目'} - 第{episodeNumber || '?'}集 - 共 <span className="text-white font-medium">{shots.length}</span> 个镜头 · <span className="text-white font-medium">{videoGroups.length}</span> 个视频分组
             </p>
           </div>
 
@@ -476,9 +514,9 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
         <div ref={storyboardRef} className="bg-[#12141c] p-6 lg:p-8 rounded-2xl border border-white/5 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
           {viewMode === 'original' ? (
             /* 原始视图 */
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
               {shots.map((shot, idx) => (
-                <StoryboardCard key={shot.id} shot={shot} index={idx} />
+                <StoryboardCard key={shot.id} shot={shot} index={idx} characterRefs={characterRefs} scenes={scenes} isExporting={isExporting} />
               ))}
             </div>
           ) : (
@@ -488,10 +526,13 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
                 const prompt = videoGroupPrompts.find(p => p.groupId === group.id);
                 return (
                   <VideoGroupCard
-                    key={group.id}
+                    key={`group-${prompt ? prompt.groupId : groupIdx}`} // Changed key to use groupIdx if prompt is undefined
                     group={group}
                     prompt={prompt}
                     groupIndex={groupIdx}
+                    characterRefs={characterRefs}
+                    scenes={scenes}
+                    isExporting={isExporting}
                   />
                 );
               })}
@@ -506,7 +547,7 @@ export function FinalStoryboard({ shots, characterRefs, scenes, episodeNumber, p
 /**
  * 单个故事板卡片组件 (Premium Style)
  */
-function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
+function StoryboardCard({ shot, index, characterRefs, scenes, isExporting }: { shot: Shot; index: number; characterRefs: CharacterRef[]; scenes?: SceneRef[]; isExporting?: boolean; }) {
   const storyBeat = getShotStoryBeat(shot);
 
   return (
@@ -519,15 +560,83 @@ function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
         SHOT {shot.shotNumber.toString().padStart(3, '0')}
       </div>
 
-      {/* 图片 - 虚拟切割显示 */}
-      <div className="relative bg-black w-full" style={{ paddingTop: '56.25%' }}>
+      {/* 图片 - 虚拟切割/文本 显示 */}
+      <div className={`relative bg-black w-full ${(!isExporting || shot.storyboardGridUrl) ? 'pt-[56.25%]' : 'min-h-[220px]'}`}>
         {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' ? (
           <div className="absolute inset-0 group-hover:scale-[1.02] transition-transform duration-500">
             <GridCellImage gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
             <div className="absolute inset-0 bg-gradient-to-t from-[#1a1d2d]/90 via-transparent to-black/20 pointer-events-none"></div>
           </div>
+        ) : shot.videoPromptCn ? (
+          <div className={`bg-gray-900 border-b border-white/5 p-5 flex flex-col justify-start gap-3 ${isExporting ? 'h-full flex-grow' : 'absolute inset-0 overflow-y-auto custom-scrollbar'}`}>
+            <div className="flex flex-col gap-2 flex-grow">
+              <div className="text-xs text-amber-500/80 font-bold border-b border-amber-500/10 pb-1 inline-block w-max">📖 分镜剧情</div>
+              <div className={`text-sm text-gray-200 leading-relaxed font-medium drop-shadow-md whitespace-pre-wrap`}>
+                {storyBeat}
+              </div>
+            </div>
+            {shot.dialogue && (
+              <div className="flex flex-col gap-1.5 mt-auto">
+                <div className="text-xs text-blue-400/80 font-bold border-b border-blue-500/10 pb-1 inline-block w-max">💬 对话</div>
+                <div className="text-sm text-blue-100/90 italic drop-shadow-md bg-blue-900/20 p-2.5 rounded">
+                  "{shot.dialogue}"
+                </div>
+              </div>
+            )}
+            {(shot.assignedCharacterIds && shot.assignedCharacterIds.length > 0) || (shot.sceneId && scenes && scenes.length > 0) ? (
+              <div className="mt-2 pt-2 border-t border-white/10 flex flex-col gap-2 shrink-0">
+                {shot.assignedCharacterIds && shot.assignedCharacterIds.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-[10px] text-gray-400 flex items-center gap-1">
+                      <span>🎭</span> 参考角色
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {shot.assignedCharacterIds.map(id => {
+                        const char = characterRefs.find(c => c.id === id);
+                        if (!char) return null;
+                        const imgUrl = getCharacterImageUrl(char);
+                        return (
+                          <div key={id} className="relative w-8 h-8 rounded-sm overflow-hidden border border-white/10 group/char shadow-sm" title={char.name}>
+                            {imgUrl ? (
+                              <img src={imgUrl} alt={char.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gray-800 flex items-center justify-center text-[10px] text-gray-400 font-bold">{char.name[0]}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {/* 🆕 渲染场景略缩图 */}
+                {shot.sceneId && scenes && scenes.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-[10px] text-gray-400 flex items-center gap-1">
+                      <span>🏛️</span> 参考场景
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(() => {
+                        const scene = scenes.find(s => s.id === shot.sceneId);
+                        if (!scene) return null;
+                        const sceneImgUrl = getSceneImageUrl(scene);
+                        return (
+                          <div key={scene.id} className="relative h-8 aspect-video rounded-sm overflow-hidden border border-white/10 group/scene shadow-sm" title={scene.name}>
+                            {sceneImgUrl ? (
+                              <img src={sceneImgUrl} alt={scene.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gray-800 flex items-center justify-center text-[8px] text-gray-400 px-1 truncate font-bold">{scene.name}</div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-600 bg-gray-900 border-b border-white/5 text-sm">
+          <div className={`flex items-center justify-center text-gray-600 bg-gray-900 border-b border-white/5 text-sm ${isExporting ? 'h-full min-h-[100px]' : 'absolute inset-0'}`}>
             暂无画面
           </div>
         )}
@@ -535,17 +644,19 @@ function StoryboardCard({ shot, index }: { shot: Shot; index: number }) {
 
       {/* 信息区域 */}
       <div className="p-5 flex flex-col flex-grow relative z-10 -mt-8 pt-6">
-        {/* 剧情与对话 */}
-        <div className="mb-4 flex-grow">
-          <div className="text-sm text-gray-200 leading-relaxed font-medium mb-3 relative z-10">
-            {storyBeat}
-          </div>
-          {shot.dialogue && (
-            <div className="text-sm text-amber-200/90 italic bg-amber-900/20 px-3 py-2 rounded-lg border border-amber-700/30">
-              "{shot.dialogue}"
+        {/* 剧情与对话 只有在有图片的情况下才需要在这个位置重复显示剧情，纯文字模式下已经在画面中间展示过了 */}
+        {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' && (
+          <div className="mb-4 flex-grow">
+            <div className="text-sm text-gray-200 leading-relaxed font-medium mb-3 relative z-10">
+              {storyBeat}
             </div>
-          )}
-        </div>
+            {shot.dialogue && (
+              <div className="text-sm text-amber-200/90 italic bg-amber-900/20 px-3 py-2 rounded-lg border border-amber-700/30">
+                "{shot.dialogue}"
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 底部小 Badge 状态栏 */}
         <div className="flex flex-wrap gap-2 mt-auto pt-4 border-t border-white/5">
@@ -576,12 +687,18 @@ function VideoGroupCard({
   group,
   prompt,
   groupIndex,
+  characterRefs,
+  scenes,
+  isExporting,
 }: {
   group: VideoGroup;
   prompt: VideoGroupPrompt | undefined;
   groupIndex: number;
+  characterRefs: CharacterRef[];
+  scenes?: SceneRef[];
+  isExporting?: boolean;
 }) {
-  const [showPrompt, setShowPrompt] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(true);
 
   return (
     <div className="rounded-2xl overflow-hidden bg-[#161824] border border-white/5 shadow-xl relative ring-1 ring-purple-500/20">
@@ -737,39 +854,96 @@ function VideoGroupCard({
       </div>
 
       {/* 分组内容区 */}
-      <div className="p-6 md:p-8">
-        {/* 视频生成提示词展开区 (Code Editor 质感) */}
+      <div className="p-6 md:p-8 flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
+        {/* 左侧：分组内小镜头瀑布流布局 (放大尺寸版) */}
+        <div className={`flex-1 w-full grid grid-cols-1 md:grid-cols-2 ${prompt && showPrompt ? '2xl:grid-cols-2' : 'lg:grid-cols-2 xl:grid-cols-3'} gap-6 md:gap-8`}>
+          {group.shots.map((shotRange, idx) => (
+            <GroupedShotCard key={shotRange.shot.id} shotRange={shotRange} characterRefs={characterRefs} scenes={scenes} isExporting={isExporting} />
+          ))}
+        </div>
+
+        {/* 右侧：视频生成提示词展开区 (Code Editor 质感) */}
         {prompt && showPrompt && (
-          <div className="mb-8 mt-[-1rem]">
-            <div className="bg-[#0b0d14] border border-white/5 rounded-xl shadow-inner overflow-hidden flex flex-col">
-              <div className="bg-white/5 border-b border-white/5 px-4 py-2 flex items-center justify-between">
-                <div className="flex gap-1.5">
+          <div className="w-full xl:w-[400px] 2xl:w-[480px] flex-shrink-0 xl:sticky xl:top-32 h-fit z-50 flex flex-col gap-4">
+            {/* 顶部的参考图图标陈列区 */}
+            {(() => {
+              // 提取这组脚本里提及的所有角色和场景
+              const scriptText = prompt.timelineScript || '';
+              const matchedChars = characterRefs.filter(c => c.name && scriptText.includes(`@${c.name}`));
+              const matchedScenes = (scenes || []).filter(s => s.name && scriptText.includes(s.name));
+              
+              if (matchedChars.length === 0 && matchedScenes.length === 0) return null;
+
+              return (
+                <div className="flex flex-wrap gap-2 items-center bg-[#0b0d14] p-3 rounded-xl border border-white/5 shadow-inner">
+                  <span className="text-[11px] font-medium text-gray-500 mr-1 uppercase tracking-wider">本组参考:</span>
+                  {matchedChars.map(c => {
+                    const imgUrl = getCharacterImageUrl(c);
+                    return (
+                      <div key={`char-${c.id}`} className="group/ref flex items-center gap-1.5 bg-emerald-900/20 border border-emerald-500/20 rounded-full pr-2 p-1 hover:bg-emerald-800/40 transition-colors cursor-help relative">
+                        {imgUrl ? (
+                          <img src={imgUrl} alt={c.name} className="w-5 h-5 rounded-full object-cover border border-emerald-500/30" />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full bg-emerald-800/50 border border-emerald-500/30 flex items-center justify-center text-[8px] text-emerald-200">?</div>
+                        )}
+                        <span className="text-[11px] text-emerald-300 font-medium">@{c.name}</span>
+                        
+                        {/* 悬浮放大图 */}
+                        {imgUrl && (
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-32 h-32 bg-gray-900 border border-white/20 rounded-lg shadow-[0_15px_50px_rgba(0,0,0,0.9)] overflow-hidden scale-95 opacity-0 group-hover/ref:scale-100 group-hover/ref:opacity-100 translate-y-2 group-hover/ref:translate-y-0 transform origin-top transition-all duration-200 pointer-events-none z-[100]">
+                            <img src={imgUrl} alt={c.name} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {matchedScenes.map(s => {
+                    const imgUrl = getSceneImageUrl(s);
+                    return (
+                      <div key={`scene-${s.id}`} className="group/ref flex items-center gap-1.5 bg-amber-900/20 border border-amber-500/20 rounded-full pr-2 p-1 hover:bg-amber-800/40 transition-colors cursor-help relative">
+                        {imgUrl ? (
+                          <img src={imgUrl} alt={s.name} className="w-6 h-5 rounded object-cover border border-amber-500/30" />
+                        ) : (
+                          <div className="w-6 h-5 rounded bg-amber-800/50 border border-amber-500/30 flex items-center justify-center text-[8px] text-amber-200">?</div>
+                        )}
+                        <span className="text-[11px] text-amber-300 font-medium">{s.name}</span>
+                        
+                         {/* 悬浮放大图 */}
+                         {imgUrl && (
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 aspect-video bg-gray-900 border border-white/20 rounded-lg shadow-[0_15px_50px_rgba(0,0,0,0.9)] overflow-hidden scale-95 opacity-0 group-hover/ref:scale-100 group-hover/ref:opacity-100 translate-y-2 group-hover/ref:translate-y-0 transform origin-top transition-all duration-200 pointer-events-none z-[100]">
+                            <img src={imgUrl} alt={s.name} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="bg-[#0b0d14] border border-white/5 rounded-xl shadow-inner flex flex-col h-full max-h-[80vh]">
+              <div className="bg-white/5 border-b border-white/5 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+                <div className="flex gap-1.5 items-center">
                   <div className="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
                   <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
                   <div className="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
+                  <span className="ml-2 text-xs font-semibold text-gray-400 tracking-wider">SEEDANCE SCRIPT</span>
                 </div>
                 <button
                   onClick={() => navigator.clipboard.writeText(prompt.fullPromptCn)}
-                  className="text-xs text-gray-400 hover:text-white transition-colors"
+                  className="text-xs text-indigo-300 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-1 rounded transition-colors"
                 >
                   📋 复制
                 </button>
               </div>
-              <div className="p-4 overflow-x-auto">
-                <pre className="text-sm font-mono leading-relaxed text-[#c0caf5]">
-                  <code dangerouslySetInnerHTML={{ __html: prompt.timelineScript.replace(/\[镜头\s\d+\]/g, match => `<span class="text-purple-400 font-bold">${match}</span>`).replace(/动作:|场景:|描述:|灯光:|运镜:/g, match => `<span class="text-blue-400">${match}</span>`) }}></code>
+              <div className={`p-5 ${isExporting ? 'whitespace-pre-wrap break-words' : 'overflow-y-auto custom-scrollbar flex-1'} relative`}>
+                <pre className={`text-[13px] font-mono leading-loose text-indigo-100 ${isExporting ? 'whitespace-pre-wrap break-words' : 'whitespace-pre-wrap'}`}>
+                  <InteractivePromptText text={prompt.timelineScript} characterRefs={characterRefs} scenes={scenes} />
                 </pre>
               </div>
             </div>
           </div>
         )}
-
-        {/* 分组内小镜头瀑布流布局优化版 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-          {group.shots.map((shotRange, idx) => (
-            <GroupedShotCard key={shotRange.shot.id} shotRange={shotRange} />
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -778,7 +952,7 @@ function VideoGroupCard({
 /**
  * 分组视图中的单个镜头小卡片 (Premium Style)
  */
-function GroupedShotCard({ shotRange }: { shotRange: { shot: Shot; startSecond: number; endSecond: number; shotNumber: string } }) {
+function GroupedShotCard({ shotRange, characterRefs, scenes, isExporting }: { shotRange: { shot: Shot; startSecond: number; endSecond: number; shotNumber: string }; characterRefs: CharacterRef[]; scenes?: SceneRef[]; isExporting?: boolean; }) {
   const { shot } = shotRange;
   const storyBeat = getShotStoryBeat(shot);
 
@@ -796,11 +970,68 @@ function GroupedShotCard({ shotRange }: { shotRange: { shot: Shot; startSecond: 
         </span>
       </div>
 
-      {/* 强制16:9比例缩略图 */}
-      <div className="relative bg-black w-full" style={{ paddingTop: '56.25%' }}>
+      {/* 强制16:9比例缩略图/文本区 */}
+      <div className={`relative bg-black w-full flex flex-col ${(!isExporting || shot.storyboardGridUrl) ? 'pt-[56.25%]' : 'min-h-[140px]'}`}>
         {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' ? (
           <div className="absolute inset-0">
             <GridCellImage gridUrl={shot.storyboardGridUrl} cellIndex={shot.storyboardGridCellIndex} />
+          </div>
+        ) : shot.videoPromptCn ? (
+          <div className={`bg-gray-900 border-b border-white/5 p-4 flex flex-col justify-start gap-2 ${isExporting ? 'h-full flex-grow' : 'absolute inset-0 overflow-y-auto custom-scrollbar'}`}>
+            <div className="flex flex-col gap-1.5 flex-grow">
+              <div className="text-[10px] text-amber-500/80 font-bold border-b border-amber-500/10 pb-0.5 inline-block w-max">📖 分镜剧情</div>
+              <div className={`text-[12px] text-gray-200 leading-snug font-medium drop-shadow-md ${isExporting ? 'whitespace-pre-wrap' : 'line-clamp-4'}`}>
+                {storyBeat}
+              </div>
+            </div>
+            {shot.dialogue && (
+              <div className="flex flex-col gap-1 mt-auto">
+                <div className="text-[10px] text-blue-400/80 font-bold border-b border-blue-500/10 pb-0.5 inline-block w-max">💬 对话</div>
+                <div className="text-[11px] text-blue-100/90 italic drop-shadow-md bg-blue-900/20 p-1.5 rounded line-clamp-2">
+                  "{shot.dialogue}"
+                </div>
+              </div>
+            )}
+            {(shot.assignedCharacterIds && shot.assignedCharacterIds.length > 0) || (shot.sceneId && scenes && scenes.length > 0) ? (
+              <div className="mt-2 pt-2 border-t border-white/10 flex flex-col gap-1.5 shrink-0">
+                {shot.assignedCharacterIds && shot.assignedCharacterIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                      {shot.assignedCharacterIds.slice(0, 3).map(id => {
+                        const char = characterRefs.find(c => c.id === id);
+                        if (!char) return null;
+                        const imgUrl = getCharacterImageUrl(char);
+                        return (
+                          <div key={id} className="relative w-5 h-5 rounded-sm overflow-hidden border border-white/10 shadow-sm" title={`角色: ${char.name}`}>
+                            {imgUrl ? (
+                              <img src={imgUrl} alt={char.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gray-800 flex items-center justify-center text-[8px] text-gray-400 font-bold">{char.name[0]}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+                {shot.sceneId && scenes && scenes.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(() => {
+                      const scene = scenes.find(s => s.id === shot.sceneId);
+                      if (!scene) return null;
+                      const sceneImgUrl = getSceneImageUrl(scene);
+                      return (
+                        <div key={scene.id} className="relative h-5 aspect-video rounded-sm overflow-hidden border border-white/10 shadow-sm" title={`场景: ${scene.name}`}>
+                          {sceneImgUrl ? (
+                            <img src={sceneImgUrl} alt={scene.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-gray-800 flex items-center justify-center text-[8px] text-gray-400 px-0.5 truncate font-bold">{scene.name}</div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-gray-700 bg-gray-900 border-b border-white/5 text-xs">
@@ -809,17 +1040,19 @@ function GroupedShotCard({ shotRange }: { shotRange: { shot: Shot; startSecond: 
         )}
       </div>
 
-      {/* 内容信息 (叠在图片下半部分) */}
-      <div className="px-3 pb-3 pt-6 -mt-8 relative z-20 flex-grow flex flex-col justify-end">
-        <div className="text-xs text-gray-200 line-clamp-2 leading-snug drop-shadow-md font-medium">
-          {storyBeat}
-        </div>
-        {shot.dialogue && (
-          <div className="mt-1 text-[10px] text-amber-200/90 italic truncate drop-shadow-md">
-            "{shot.dialogue}"
+      {/* 内容信息 (叠在图片下半部分) 只有在有图片的情况下才需要在这个位置重复显示剧情，如果是纯文字模式它已经在上面展示过了 */}
+      {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' && (
+        <div className="px-3 pb-3 pt-6 -mt-8 relative z-20 flex-grow flex flex-col justify-end">
+          <div className="text-xs text-gray-200 line-clamp-2 leading-snug drop-shadow-md font-medium">
+            {storyBeat}
           </div>
-        )}
-      </div>
+          {shot.dialogue && (
+            <div className="mt-1 text-[10px] text-amber-200/90 italic truncate drop-shadow-md pb-1">
+              "{shot.dialogue}"
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -866,5 +1099,104 @@ function GridCellImage({ gridUrl, cellIndex }: { gridUrl: string; cellIndex: num
         onError={handleError}
       />
     </div>
+  );
+}
+
+/**
+ * 带有交互悬浮能力的提示词文本组件
+ */
+function InteractivePromptText({ text, characterRefs, scenes }: { text: string; characterRefs: CharacterRef[]; scenes?: SceneRef[] }) {
+  const escapeRegExp = (string: string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
+
+  const charNames = characterRefs.map(c => c.name).filter(Boolean).sort((a, b) => b.length - a.length);
+  const sceneNames = scenes?.map(s => s.name).filter(Boolean).sort((a, b) => b.length - a.length) || [];
+
+  const shotRegex = `\\[镜头\\s\\d+\\]`;
+  const keywordRegex = `动作:|场景:|描述:|灯光:|运镜:`;
+  const charRegex = charNames.length > 0 ? charNames.map(n => `@${escapeRegExp(n)}`).join('|') : '(?!)';
+  const sceneRegex = sceneNames.length > 0 ? sceneNames.map(n => escapeRegExp(n)).join('|') : '(?!)';
+
+  // group 1: shot, group 2: keyword, group 3: character, group 4: scene
+  const masterRegex = new RegExp(`(${shotRegex})|(${keywordRegex})|(${charRegex})|(${sceneRegex})`, 'g');
+
+  const parts: { type: string; content: string }[] = [];
+  let lastIndex = 0;
+  let match;
+
+  masterRegex.lastIndex = 0;
+
+  while ((match = masterRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+    }
+
+    const matchedString = match[0];
+    if (match[1]) {
+      parts.push({ type: 'shot', content: matchedString });
+    } else if (match[2]) {
+      parts.push({ type: 'keyword', content: matchedString });
+    } else if (match[3]) {
+      parts.push({ type: 'character', content: matchedString });
+    } else if (match[4]) {
+      parts.push({ type: 'scene', content: matchedString });
+    }
+
+    lastIndex = masterRegex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', content: text.substring(lastIndex) });
+  }
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.type === 'text') {
+          return <span key={i}>{part.content}</span>;
+        } else if (part.type === 'shot') {
+          return <span key={i} className="text-purple-300 font-bold bg-purple-900/40 px-1 rounded-sm shadow-sm">{part.content}</span>;
+        } else if (part.type === 'keyword') {
+          return <span key={i} className="text-blue-300 font-bold drop-shadow-sm">{part.content}</span>;
+        } else if (part.type === 'character') {
+          const charName = part.content.substring(1); // remove '@'
+          const charInfo = characterRefs.find(c => c.name === charName);
+          const imgUrl = getCharacterImageUrl(charInfo);
+          
+          return (
+            <span key={i} className="relative inline-block group/hoverchar cursor-help text-emerald-300 font-bold bg-emerald-900/30 px-1 rounded border border-emerald-500/20 hover:bg-emerald-800/50 hover:border-emerald-400/50 transition-all z-10 hover:z-50 shadow-sm mx-0.5">
+              {part.content}
+              {imgUrl && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 w-36 h-36 bg-gray-900 border border-white/20 rounded-lg shadow-[0_15px_50px_rgba(0,0,0,0.9)] overflow-hidden scale-95 opacity-0 group-hover/hoverchar:scale-100 group-hover/hoverchar:opacity-100 group-hover/hoverchar:-translate-y-1 origin-bottom transition-all duration-200 pointer-events-none flex flex-col z-[100]">
+                  <img src={imgUrl} alt={charName} className="w-full h-full object-cover" />
+                  <div className="absolute bottom-0 inset-x-0 bg-black/70 backdrop-blur-md px-2 py-1.5 text-center text-[11px] text-white font-bold truncate border-t border-white/10">
+                    {charName}
+                  </div>
+                </div>
+              )}
+            </span>
+          );
+        } else if (part.type === 'scene') {
+          const sceneInfo = scenes?.find(s => s.name === part.content);
+          const imgUrl = getSceneImageUrl(sceneInfo);
+          
+          return (
+             <span key={i} className="relative inline-block group/hoverscene cursor-help text-amber-300 font-bold bg-amber-900/30 px-1 rounded border border-amber-500/20 hover:bg-amber-800/50 hover:border-amber-400/50 transition-all z-10 hover:z-50 shadow-sm mx-0.5">
+              {part.content}
+              {imgUrl && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 w-56 aspect-video bg-gray-900 border border-white/20 rounded-lg shadow-[0_15px_50px_rgba(0,0,0,0.9)] overflow-hidden scale-95 opacity-0 group-hover/hoverscene:scale-100 group-hover/hoverscene:opacity-100 group-hover/hoverscene:-translate-y-1 origin-bottom transition-all duration-200 pointer-events-none flex flex-col z-[100]">
+                  <img src={imgUrl} alt={part.content} className="w-full h-full object-cover" />
+                  <div className="absolute bottom-0 inset-x-0 bg-black/70 backdrop-blur-md px-2 py-1.5 text-center text-[11px] text-white font-bold truncate border-t border-white/10">
+                    {part.content}
+                  </div>
+                </div>
+              )}
+            </span>
+          );
+        }
+        return null;
+      })}
+    </>
   );
 }

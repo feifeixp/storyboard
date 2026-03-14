@@ -4,7 +4,7 @@
 
 export { ScriptInputPage } from './ScriptInputPage';
 export { ScriptCleaningPage } from './ScriptCleaningPage';
-export { ShotGenerationPage } from './ShotGenerationPage';
-export { PromptExtractionPage } from './PromptExtractionPage';
-export { ImageGenerationPage } from './ImageGenerationPage';
-
+export * from './ShotGenerationPage';
+export * from './PromptExtractionPage';
+export * from './VideoPromptExtractionPage'; // 🆕 新增分支2页面
+export * from './ImageGenerationPage';

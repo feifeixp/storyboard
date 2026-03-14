@@ -433,7 +433,8 @@ export enum AppStep {
   GENERATE_LIST = 2,
   REVIEW_OPTIMIZE = 3,
   MANUAL_EDIT = 4,        // 手动编辑/AI对话精修
-  EXTRACT_PROMPTS = 5,    // 提取AI提示词
+  EXTRACT_PROMPTS = 5,    // 提取AI图片提示词（分支1：九宫格生成）
+  EXTRACT_VIDEO_PROMPTS = 8, // 🆕 提取AI视频提示词（分支2：Seedance 2.0生成）
   GENERATE_IMAGES = 6,
   FINAL_STORYBOARD = 7    // 🆕 最终故事板预览
 }

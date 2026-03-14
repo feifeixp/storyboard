@@ -1775,9 +1775,102 @@ export async function* extractImagePromptsStream(
 
   let fullText = '';
   for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content || '';
-    fullText += content;
     yield fullText;
+  }
+}
+
+/**
+ * 🆕 生成AI视频提示词 (Seedance 2.0 规范)
+ * 返回流式JSON数据，格式为: [{ shotNumber, videoPromptCn }]
+ */
+export async function* extractVideoPromptsStream(
+  shots: Shot[],
+  model: string = DEFAULT_MODEL
+): AsyncGenerator<string, string, unknown> {
+  const prompt = `
+你是一个专业的AI视频提示词工程师，精通 Seedance 2.0 和类似的主流 AI 视频模型提示词规范。
+你的任务是根据分镜脚本和提供的【登场角色数据】，为每个镜头生成高质量的“视频生成提示词”。
+
+【核心任务】
+请阅读每一个分镜，提取其核心的画面内容（场景、角色外貌、动作、情感、运镜），并将其转化为一段符合 Seedance 2.0 规范的中文提示词。
+对于运动镜头，如果是同一场景内且时间很短，只需写一段连续的描述即可。
+
+【提示词结构规范（重要！）】
+每个镜头的视频提示词应尽量遵循以下结构：
+1. [素材@定义] (如果有参考图或角色，请使用 @角色名 语法，例如 "@林溪 走在街上")
+2. [整体风格与画质基调] (简要说明风格，如"电影质感、高画质精美")
+3. [时间轴：画面主体与动作描述] (包含景别、角度、光影等技术参数)
+4. [运镜描述] (如"镜头缓缓向右平移")
+
+【关键要求】
+1. **角色一致性**：当剧本中出现已命名的角色时（如林溪、晋安），必须在提示词中使用 \`@角色名\` 语法（如：@林溪 正在奔跑）。
+2. **纯画面描述**：不要包含非画面的心理活动或画外音。所有的动作必须是视觉可见的。
+3. **格式化输出**：必须且只需输出一个合法的 JSON 数组，包含每个镜头的 \`shotNumber\` 和 \`videoPromptCn\`。
+4. 🔴 **完整性要求（超级重要）**：当前共有 **${shots.length}** 个分镜需要处理。你必须为这 ${shots.length} 个分镜**全部**生成对应的提示词。绝对不能半途而废，不能省略，不能合并，直到最后一个镜头处理完毕。
+5. **绝对禁止**：不要输出任何 markdown 代码块（如 \`\`\`json）或解释性文字，只输出纯 JSON 数组。
+
+【输入：共 ${shots.length} 个分镜脚本】
+${JSON.stringify(
+    shots.map(s => ({
+      shotNumber: s.shotNumber,
+      shotType: s.shotType,
+      duration: s.duration,
+      storyBeat: typeof s.storyBeat === 'string' ? s.storyBeat : s.storyBeat.event,
+      shotSize: s.shotSize,
+      cameraMove: s.cameraMove,
+      angleDirection: s.angleDirection,
+      angleHeight: s.angleHeight,
+      lighting: s.lighting,
+      foreground: s.foreground,
+      midground: s.midground,
+      background: s.background,
+      startFrame: s.startFrame,
+      endFrame: s.endFrame,
+      assignedCharacterIds: s.assignedCharacterIds,
+    })),
+    null,
+    2
+  )}
+
+【期望的 JSON 输出格式】
+[
+  {
+    "shotNumber": "01",
+    "videoPromptCn": "@角色名(如果有) 身穿... 在... [场景描述]，[动作流描述]，[运镜：镜头缓缓推近]..."
+  }
+]
+`;
+
+  console.log('[DEBUG] 开始调用 extractVideoPromptsStream API...');
+  
+  try {
+    const client = getOpenRouterDirectClient();
+    const stream = await client.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: Number(process.env.VITE_OPENROUTER1_MAX_TOKENS) || 16384,
+      stream: true,
+    });
+
+    let fullText = '';
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        fullText += content;
+        yield fullText;
+      }
+    }
+
+    return fullText;
+  } catch (error) {
+    logApiError('extractVideoPromptsStream', error);
+    throw error;
   }
 }
 

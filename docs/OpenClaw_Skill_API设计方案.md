@@ -81,8 +81,8 @@ app.post('/api/v1/characters/extract', async (c) => {
   const { scriptContent } = await c.req.json();
   const prompt = buildExtractCharactersPrompt(scriptContent);
   
-  // 在这里发起对 OpenRouter 的请求 (取代原来的纯前端请求)
-  const llmResponse = await fetchOpenRouterAPI(prompt, c.env.OPENROUTER_API_KEY);
+  // 在这里发起对您的自定义大模型接口的请求
+  const llmResponse = await fetchOpenRouterAPI(prompt, c.env.VITE_OPENROUTER1_API_KEY);
   
   // 将结果打平为 JSON 返回给 OpenClaw
   return c.json(JSON.parse(llmResponse));
@@ -94,7 +94,7 @@ export default app
 ### 第三步：为 OpenClaw 编写 Skill 描述文件 (openapi.yaml)
 OpenClaw 框架加载 Skill 时，依赖一份包含了所有输入输出结构的 yaml 文件。你只需把前面设计的 API 定义写成标准 `openapi.yaml`。
 然后在 OpenClaw 中配置：
-- **Server URL**: `https://api.your-worker.workers.dev`
+- **Server URL**: `https://visionary-storyboard-skill-api.feifeixp.workers.dev`
 - **API Header**: 可以加入简单的 Token 鉴权（在 Worker 中拦截）。
 
 ---

@@ -236,10 +236,23 @@ export async function getUserPoints(): Promise<PointsInfo> {
     },
   });
 
+  if (response.status === 401) {
+    logout();
+    throw new Error('登录凭证已过期，请重新登录');
+  }
+
   const result: ApiResponse<PointsInfo> = await response.json();
 
   if (!result.success || !result.data) {
-    throw new Error(result.errMessage || '获取积分信息失败');
+    const errStr = result.errMessage || '';
+    if (errStr.includes('Token has been revoked') || errStr.includes('token') || errStr.includes('未登录') || errStr.includes('过期')) {
+      logout();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth-expired'));
+      }
+      throw new Error('登录凭证已过期，请重新登录');
+    }
+    throw new Error(errStr || '获取积分信息失败');
   }
 
   return result.data;

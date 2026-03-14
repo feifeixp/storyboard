@@ -20,12 +20,17 @@ import { patchProject, saveProject } from '../services/d1Storage';
 import { uploadToOSS, generateOSSPath } from '../services/oss';
 import { analyzeCharacterImage, mergeAnalysisToCharacter } from '../services/characterImageAnalysis';
 import mammoth from 'mammoth';
+import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 
 interface ProjectDashboardProps {
   project: Project;
   onSelectEpisode: (episode: Episode) => void;
   onUpdateProject: (project: Project, options?: { persist?: boolean }) => void | Promise<void>;
   onBack: () => void;
+  initialTab?: TabType;
+  pendingGenerations?: { characters: string[], scenes: string[] };
+  clearPendingGenerations?: () => void;
 }
 
 type TabType = 'overview' | 'characters' | 'scenes';  // 🔧 移除 'episodes'，合并到 overview
@@ -36,9 +41,19 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   onSelectEpisode,
   onUpdateProject,
   onBack,
+  initialTab,
+  pendingGenerations,
+  clearPendingGenerations,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'overview');
   const [expandedCharacter, setExpandedCharacter] = useState<string | null>(null);
+
+  // Sync activeTab when initialTab prop changes
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // 🔧 使用 ref 保存最新的 project 状态（避免并发更新时覆盖数据）
   const projectRef = useRef<Project>(project);
@@ -72,8 +87,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [genProgressMap, setGenProgressMap] = useState<Map<string, { stage: string; percent: number }>>(new Map());
 
-  const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
-  const [sceneGenProgress, setSceneGenProgress] = useState<{ stage: string; percent: number } | null>(null);
+  const [generatingSceneIds, setGeneratingSceneIds] = useState<Set<string>>(new Set());
+  const [sceneGenProgressMap, setSceneGenProgressMap] = useState<Map<string, { stage: string; percent: number }>>(new Map());
 
   // 🆕 批量生成状态
   const [isBatchGeneratingCharacters, setIsBatchGeneratingCharacters] = useState(false);
@@ -81,6 +96,114 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
   const [isBatchGeneratingScenes, setIsBatchGeneratingScenes] = useState(false);
   const [batchSceneProgress, setBatchSceneProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // 🆕 监听未完成的生图队列（通常从剧本页面跳转回来时带状）
+  useEffect(() => {
+    if (!pendingGenerations) return;
+
+    const processPendingAssets = async () => {
+      // 处理角色
+      if (pendingGenerations.characters.length > 0) {
+        // 先清理消费掉的信号，避免循环
+        clearPendingGenerations?.();
+        
+        let confirmMsg = `接收到 ${pendingGenerations.characters.length} 个角色的生成请求。马上开始后台排队...\n\n注意：如果需要生成场景，请等待第一波角色任务开始后再处理。`;
+        // 不显式确认，直接在UI反馈即可（已在上一页确认）
+
+        const charsToGenerate = (project.characters || []).filter(c => pendingGenerations.characters.includes(c.id));
+        if (charsToGenerate.length > 0) {
+           setIsBatchGeneratingCharacters(true);
+           setBatchCharacterProgress({ current: 0, total: charsToGenerate.length });
+           
+           // 直接服用 batchGenerate 的 while 循环逻辑
+           const CONCURRENCY_LIMIT = 4;
+           let completedTasks = 0;
+           const pendingChars = [...charsToGenerate];
+           const runningChars = new Set<string>();
+
+           const processChar = async (charId: string, charName: string) => {
+             try {
+               await handleGenerateCharacterImageSheet(charId, true);
+               await new Promise(resolve => setTimeout(resolve, 1000));
+             } catch (error) {
+               console.error(`自动生成角色 ${charName} 失败:`, error);
+             } finally {
+               runningChars.delete(charId);
+               completedTasks++;
+               setBatchCharacterProgress({ current: completedTasks, total: charsToGenerate.length });
+             }
+           };
+
+           while (pendingChars.length > 0 || runningChars.size > 0) {
+             while (
+               pendingChars.length > 0 &&
+               runningChars.size < CONCURRENCY_LIMIT &&
+               (generatingIds.size + generatingSceneIds.size) < 4
+             ) {
+               const char = pendingChars.shift()!;
+               runningChars.add(char.id);
+               processChar(char.id, char.name).catch(console.error);
+             }
+             if (runningChars.size > 0) {
+               await new Promise(resolve => setTimeout(resolve, 500));
+             }
+           }
+           setIsBatchGeneratingCharacters(false);
+           setBatchCharacterProgress(null);
+        }
+      }
+
+      // 处理场景
+      if (pendingGenerations.scenes.length > 0) {
+        clearPendingGenerations?.();
+        
+        const scenesToGenerate = (project.scenes || []).filter(s => pendingGenerations.scenes.includes(s.id));
+        if (scenesToGenerate.length > 0) {
+           setIsBatchGeneratingScenes(true);
+           setBatchSceneProgress({ current: 0, total: scenesToGenerate.length });
+           
+           const CONCURRENCY_LIMIT = 4;
+           let completedTasks = 0;
+           const pendingScenes = [...scenesToGenerate];
+           const runningScenes = new Set<string>();
+
+           const processScene = async (sceneId: string, sceneName: string) => {
+             try {
+               await handleGenerateSceneImageSheet(sceneId, true);
+               await new Promise(resolve => setTimeout(resolve, 1000));
+             } catch (error) {
+               console.error(`自动生成场景 ${sceneName} 失败:`, error);
+             } finally {
+               runningScenes.delete(sceneId);
+               completedTasks++;
+               setBatchSceneProgress({ current: completedTasks, total: scenesToGenerate.length });
+             }
+           };
+
+           while (pendingScenes.length > 0 || runningScenes.size > 0) {
+             while (
+               pendingScenes.length > 0 &&
+               runningScenes.size < CONCURRENCY_LIMIT &&
+               (generatingIds.size + generatingSceneIds.size) < 4
+             ) {
+               const scene = pendingScenes.shift()!;
+               runningScenes.add(scene.id);
+               processScene(scene.id, scene.name).catch(console.error);
+             }
+             if (runningScenes.size > 0) {
+               await new Promise(resolve => setTimeout(resolve, 500));
+             }
+           }
+           setIsBatchGeneratingScenes(false);
+           setBatchSceneProgress(null);
+        }
+      }
+    };
+
+    if (pendingGenerations.characters.length > 0 || pendingGenerations.scenes.length > 0) {
+        processPendingAssets();
+    }
+  }, [pendingGenerations]);
 
   // 🆕 剧集上传相关状态
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +215,19 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const [uploadImageUrl, setUploadImageUrl] = useState('');
   const [uploadImageFile, setUploadImageFile] = useState<File | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+
+  // 🆕 头像裁剪状态
+  const [activeUploadTab, setActiveUploadTab] = useState<'generate_upload' | 'crop_gallery'>('generate_upload');
+  const [selectedGalleryImage, setSelectedGalleryImage] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Crop>({
+    unit: '%', // Can be 'px' or '%'
+    x: 25,
+    y: 25,
+    width: 50,
+    height: 50
+  });
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   // =============================
   // 🆕 生图任务恢复（自动续跑）
@@ -254,6 +390,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     // 检查该角色/形态是否已在生成中（允许不同角色并发）
     if (generatingIds.has(genKey)) { alert('该角色/形态正在生成中，请稍后'); return; }
 
+    // 全局并发数量限制：最多允许4个并发生成任务
+    if (generatingIds.size + generatingSceneIds.size >= 4) {
+      alert('同时进行的生图任务最多为 4 个，请等待其中一些完成。');
+      return;
+    }
+
     // 查找目标形态
     const targetForm = formId ? character.forms?.find(f => f.id === formId) : null;
     if (formId && !targetForm) { alert('未找到指定形态'); return; }
@@ -298,6 +440,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           projectVisualStyle ? `项目视觉风格：${projectVisualStyle}` : '',
         ].filter(Boolean).join('；');
       }
+
+      // 简单过滤一些可能在描述中触发国内敏感词审核的词汇（血腥、暴力、色情等相关词汇的常见误杀）
+      baseInfoCn = baseInfoCn
+        .replace(/血|死|杀|暴|裸|胸|臀|性感|诱惑/g, ' ')
+        .replace(/blood|kill|death|violence|nude|naked|sexy/gi, ' ');
 
       const prompt = [
         baseInfoCn,
@@ -423,6 +570,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setUploadCharacterImageDialogOpen(true);
     setUploadImageUrl('');
     setUploadImageFile(null);
+    setActiveUploadTab('generate_upload');
+    setSelectedGalleryImage(null);
+    setCompletedCrop(null);
   };
 
   const [isGeneratingAvatar, setIsGeneratingAvatar] = useState(false);
@@ -549,6 +699,90 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     } finally {
       setIsGeneratingAvatar(false);
       setAvatarGenProgress(0);
+    }
+  };
+  const getCroppedImg = async (image: HTMLImageElement, crop: PixelCrop): Promise<Blob> => {
+    const canvas = document.createElement('canvas');
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+    canvas.width = crop.width;
+    canvas.height = crop.height;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('No 2d context');
+    }
+
+    ctx.drawImage(
+      image,
+      crop.x * scaleX,
+      crop.y * scaleY,
+      crop.width * scaleX,
+      crop.height * scaleY,
+      0,
+      0,
+      crop.width,
+      crop.height
+    );
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Canvas is empty'));
+          return;
+        }
+        resolve(blob);
+      }, 'image/jpeg', 0.9);
+    });
+  };
+
+  const handleConfirmCrop = async () => {
+    if (!uploadingCharacterId || !imgRef.current || !completedCrop) return;
+    const character = (project.characters || []).find(c => c.id === uploadingCharacterId);
+    if (!character) return;
+
+    try {
+      setIsAnalyzingImage(true);
+      const blob = await getCroppedImg(imgRef.current, completedCrop);
+      const file = new File([blob], `avatar_crop_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      
+      const ossPath = generateOSSPath(
+        project.id,
+        `character_${character.id}_avatar_crop_${Date.now()}`,
+        'image',
+        'jpg'
+      );
+      const imageUrl = await uploadToOSS(file, ossPath);
+
+      const latestProject = projectRef.current;
+      const updatedProject: Project = {
+        ...latestProject,
+        updatedAt: new Date().toISOString(),
+        characters: (latestProject.characters || []).map(c =>
+          c.id === uploadingCharacterId ? { ...c, data: imageUrl, referenceImageUrl: imageUrl } : c
+        ),
+      };
+
+      try {
+        await patchProject(project.id, { characters: updatedProject.characters });
+      } catch (err) {
+        console.warn('[ProjectDashboard] patchProject 失败:', err);
+        await saveProject(updatedProject);
+      }
+
+      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+
+      setUploadCharacterImageDialogOpen(false);
+      setUploadingCharacterId(null);
+      setSelectedGalleryImage(null);
+      setCompletedCrop(null);
+      
+      alert('✅ 头像裁剪并保存成功！');
+    } catch (e: any) {
+      console.error('裁剪头像失败:', e);
+      alert(`❌ 裁剪失败: ${e.message || '未知错误'}`);
+    } finally {
+      setIsAnalyzingImage(false);
     }
   };
 
@@ -721,8 +955,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     let successCount = 0;
     let failCount = 0;
 
-    // 🔧 并发控制：最多同时生成 5 个任务
-    const CONCURRENCY_LIMIT = 5;
+    const CONCURRENCY_LIMIT = 4;
     let completedTasks = 0;
     const pendingTasks = [...allTasks];
     const runningTasks = new Set<string>();
@@ -793,8 +1026,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
     // 并发处理任务
     while (pendingTasks.length > 0 || runningTasks.size > 0) {
-      // 启动新任务直到达到并发限制
-      while (pendingTasks.length > 0 && runningTasks.size < CONCURRENCY_LIMIT) {
+        // 全局并发控制：包括场景并发和角色并发不能超过4个
+        while (
+          pendingTasks.length > 0 && 
+          runningTasks.size < CONCURRENCY_LIMIT && 
+          (generatingIds.size + generatingSceneIds.size + runningTasks.size) < 4
+        ) {
         const task = pendingTasks.shift()!;
         // 如果是子形象且主形象还未开始，暂时跳过
         if (dependsOnMainForm(task)) {
@@ -844,8 +1081,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       return;
     }
 
-    if (generatingSceneId) {
-      alert('正在生成其他场景图片，请稍后');
+    if (generatingSceneIds.has(sceneId)) {
+      alert('该场景正在生成中，请稍后');
+      return;
+    }
+
+    if (generatingIds.size + generatingSceneIds.size >= 4) {
+      alert('同时进行的生图任务最多为 4 个，请等待其中一些完成。');
       return;
     }
 
@@ -856,8 +1098,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       if (!confirmGenerate) return;
     }
 
-    setGeneratingSceneId(sceneId);
-    setSceneGenProgress({ stage: '准备中', percent: 0 });
+    setGeneratingSceneIds(prev => new Set(prev).add(sceneId));
+    setSceneGenProgressMap(prev => { const m = new Map(prev); m.set(sceneId, { stage: '准备中', percent: 0 }); return m; });
 
     try {
       let createdTaskCode: string | null = null;
@@ -866,7 +1108,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       const styleSuffix = sceneStyle?.promptSuffix || '';
       const projectVisualStyle = latestProject.settings?.visualStyle || '';
 
-      const baseInfoCn = [
+      let baseInfoCn = [
         `场景设定图`,
         `场景：${scene.name}`,
         scene.description ? `描述：${scene.description}` : '',
@@ -874,6 +1116,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         scene.atmosphere ? `氛围：${scene.atmosphere}` : '',
         projectVisualStyle ? `项目视觉风格：${projectVisualStyle}` : '',
       ].filter(Boolean).join('；');
+
+      // 简单过滤一些可能在描述中触发国内敏感词审核的词汇（血腥、暴力、色情等相关词汇的常见误杀）
+      baseInfoCn = baseInfoCn
+        .replace(/血|死|杀|暴|裸|胸|臀|性感|诱惑/g, ' ')
+        .replace(/blood|kill|death|violence|nude|naked|sexy/gi, ' ');
 
       const prompt = [
         baseInfoCn,
@@ -894,11 +1141,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         },
         latestProject.id,
         `scene_sheet_${sceneId}`,
-        (stage, percent) => setSceneGenProgress({ stage, percent }),
+        (stage, percent) => setSceneGenProgressMap(prev => { const m = new Map(prev); m.set(sceneId, { stage, percent }); return m; }),
         async (taskCode) => {
           createdTaskCode = taskCode;
           createdTaskAt = new Date().toISOString();
-          setSceneGenProgress({ stage: '保存任务信息', percent: 15 });
+          setSceneGenProgressMap(prev => { const m = new Map(prev); m.set(sceneId, { stage: '保存任务信息', percent: 15 }); return m; });
 
           // 🔧 使用 projectRef.current 获取最新状态，避免覆盖其他已保存场景的数据
           const p = projectRef.current;
@@ -972,8 +1219,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       console.error('生成场景设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
     } finally {
-      setGeneratingSceneId(null);
-      setSceneGenProgress(null);
+      setGeneratingSceneIds(prev => { const s = new Set(prev); s.delete(sceneId); return s; });
+      setSceneGenProgressMap(prev => { const m = new Map(prev); m.delete(sceneId); return m; });
     }
   };
 
@@ -1007,23 +1254,41 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     let failCount = 0;
     const failedScenes: string[] = [];
 
-    for (let i = 0; i < scenesToGenerate.length; i++) {
-      const scene = scenesToGenerate[i];
-      setBatchSceneProgress({ current: i + 1, total: scenesToGenerate.length });
+    const CONCURRENCY_LIMIT = 4;
+    let completedTasks = 0;
+    const pendingScenes = [...scenesToGenerate];
+    const runningScenes = new Set<string>();
 
+    const processScene = async (sceneId: string, sceneName: string) => {
       try {
-        // 调用单个场景生成函数（跳过单次确认框，批量已统一确认）
-        await handleGenerateSceneImageSheet(scene.id, true);
+        await handleGenerateSceneImageSheet(sceneId, true);
         successCount++;
-
         // 等待一小段时间，避免请求过快
-        if (i < scenesToGenerate.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
-        console.error(`生成场景 ${scene.name} 失败:`, error);
+        console.error(`生成场景 ${sceneName} 失败:`, error);
         failCount++;
-        failedScenes.push(scene.name);
+        failedScenes.push(sceneName);
+      } finally {
+        runningScenes.delete(sceneId);
+        completedTasks++;
+        setBatchSceneProgress({ current: completedTasks, total: scenesToGenerate.length });
+      }
+    };
+
+    while (pendingScenes.length > 0 || runningScenes.size > 0) {
+      while (
+        pendingScenes.length > 0 &&
+        runningScenes.size < CONCURRENCY_LIMIT &&
+        (generatingIds.size + generatingSceneIds.size) < 4
+      ) {
+        const scene = pendingScenes.shift()!;
+        runningScenes.add(scene.id);
+        processScene(scene.id, scene.name).catch(err => console.error(err));
+      }
+
+      if (runningScenes.size > 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
@@ -1126,20 +1391,20 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       return;
     }
 
-    if (generatingSceneId && generatingSceneId !== sceneId) {
+    if (generatingSceneIds.has(sceneId)) {
       if (!silent) alert('正在恢复/生成其他场景图片，请稍后');
       return;
     }
 
-    setGeneratingSceneId(sceneId);
-    setSceneGenProgress({ stage: '恢复任务中', percent: 0 });
+    setGeneratingSceneIds(prev => new Set(prev).add(sceneId));
+    setSceneGenProgressMap(prev => { const m = new Map(prev); m.set(sceneId, { stage: '恢复任务中', percent: 0 }); return m; });
 
     try {
       const imageUrls = await pollAndUploadFromTask(
         taskCode,
         project.id,
         `scene_sheet_${sceneId}`,
-        (stage, percent) => setSceneGenProgress({ stage, percent }),
+        (stage, percent) => setSceneGenProgressMap(prev => { const m = new Map(prev); m.set(sceneId, { stage, percent }); return m; }),
         // S3：恢复时同样跳过 OSS，直接拿 Neodomain 永久链接
         { skipOSSUpload: true }
       );
@@ -1183,8 +1448,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         alert(`❌ 恢复失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
       }
     } finally {
-      setGeneratingSceneId(null);
-      setSceneGenProgress(null);
+      setGeneratingSceneIds(prev => { const s = new Set(prev); s.delete(sceneId); return s; });
+      setSceneGenProgressMap(prev => { const m = new Map(prev); m.delete(sceneId); return m; });
     }
   };
 
@@ -1775,8 +2040,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             sceneStyleId={sceneStyleId}
             onChangeSceneStyleId={setSceneStyleId}
             onGenerateSceneImageSheet={handleGenerateSceneImageSheet}
-            generatingSceneId={generatingSceneId}
-            generationProgress={sceneGenProgress}
+            generatingSceneIds={Array.from(generatingSceneIds)}
+            sceneGenProgressMap={Object.fromEntries(sceneGenProgressMap)}
             onBatchGenerateScenes={handleBatchGenerateScenes}
             isBatchGeneratingScenes={isBatchGeneratingScenes}
             batchSceneProgress={batchSceneProgress}
@@ -1795,122 +2060,245 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       />
 
       {/* 🆕 角色图片上传对话框 */}
-      {uploadCharacterImageDialogOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">📤 上传或生成角色图片</h3>
+      {uploadCharacterImageDialogOpen && (() => {
+        const character = (project.characters || []).find(c => c.id === uploadingCharacterId);
+        const galleryImages: string[] = [];
+        if (character) {
+          if (character.imageSheetUrl) galleryImages.push(character.imageSheetUrl);
+          if (character.forms) {
+            character.forms.forEach(f => {
+              if (f.imageSheetUrl) galleryImages.push(f.imageSheetUrl);
+            });
+          }
+        }
 
-            {/* 新增：一键 AI 生成 */}
-            <div className="mb-6 p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-xl relative overflow-hidden">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-purple-400 mb-1 flex items-center gap-1.5">
-                    ✨ AI 一键生成专属头像
-                  </h4>
-                  <p className="text-xs text-[var(--color-text-secondary)] pr-4 leading-relaxed">
-                    根据角色的外貌描述、身份演变以及项目整体统调，由顶尖大模型自动为您绘制一张 1:1 的高解析度概念设定图。
-                  </p>
+        return (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+              {/* Header & Tabs */}
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-[var(--color-text-primary)]">🖼️ 设置角色头像</h3>
+                <div className="flex bg-[var(--color-bg)] rounded-lg p-1 border border-[var(--color-border)]">
+                  <button
+                    onClick={() => setActiveUploadTab('generate_upload')}
+                    className={`px-4 py-1.5 rounded-md text-sm transition-colors ${activeUploadTab === 'generate_upload' ? 'bg-[var(--color-surface)] shadow text-[var(--color-primary)] font-medium' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                  >
+                    AI 生成 / 本地上传
+                  </button>
+                  <button
+                    onClick={() => setActiveUploadTab('crop_gallery')}
+                    className={`px-4 py-1.5 rounded-md text-sm transition-colors ${activeUploadTab === 'crop_gallery' ? 'bg-[var(--color-surface)] shadow text-[var(--color-primary)] font-medium' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                  >
+                    从已有设定图裁剪
+                  </button>
                 </div>
-                <button
-                  onClick={handleGenerateAvatar}
-                  disabled={isGeneratingAvatar || isAnalyzingImage}
-                  className="shrink-0 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg text-sm font-bold shadow-lg hover:shadow-purple-500/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingAvatar ? '绘制中...' : '一键生成'}
-                </button>
               </div>
 
-              {/* 进度条 */}
-              {isGeneratingAvatar && (
-                <div className="mt-3">
-                  <div className="flex justify-between text-[10px] text-purple-400 mb-1">
-                    <span>正在连接画师大模型...</span>
-                    <span>{avatarGenProgress}%</span>
+              {activeUploadTab === 'generate_upload' ? (
+                <>
+                  {/* 新增：一键 AI 生成 */}
+                  <div className="mb-6 p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-xl relative overflow-hidden">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-purple-400 mb-1 flex items-center gap-1.5">
+                          ✨ AI 一键生成专属头像
+                        </h4>
+                        <p className="text-xs text-[var(--color-text-secondary)] pr-4 leading-relaxed">
+                          根据角色的外貌描述、身份演变以及项目整体统调，由顶尖大模型自动为您绘制一张 1:1 的高解析度概念设定图。
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleGenerateAvatar}
+                        disabled={isGeneratingAvatar || isAnalyzingImage}
+                        className="shrink-0 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg text-sm font-bold shadow-lg hover:shadow-purple-500/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed"
+                      >
+                        {isGeneratingAvatar ? '绘制中...' : '一键生成'}
+                      </button>
+                    </div>
+
+                    {/* 进度条 */}
+                    {isGeneratingAvatar && (
+                      <div className="mt-3">
+                        <div className="flex justify-between text-[10px] text-purple-400 mb-1">
+                          <span>正在连接画师大模型...</span>
+                          <span>{avatarGenProgress}%</span>
+                        </div>
+                        <div className="h-1.5 bg-[var(--color-bg)] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300"
+                            style={{ width: `${avatarGenProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="h-1.5 bg-[var(--color-bg)] rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300"
-                      style={{ width: `${avatarGenProgress}%` }}
+
+                  {/* 分隔线 */}
+                  <div className="flex items-center gap-3 my-5">
+                    <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+                    <span className="text-xs text-[var(--color-text-tertiary)] uppercase tracking-widest">OR 自定义上传</span>
+                    <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+                  </div>
+
+                  {/* URL 输入 */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">图片 URL</label>
+                    <input
+                      type="text"
+                      value={uploadImageUrl}
+                      onChange={(e) => setUploadImageUrl(e.target.value)}
+                      placeholder="https://example.com/character.jpg"
+                      className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-colors"
                     />
                   </div>
+
+                  {/* 分隔线 */}
+                  <div className="flex items-center gap-3 my-4">
+                    <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+                    <span className="text-sm text-[var(--color-text-tertiary)]">或</span>
+                    <div className="flex-1 h-px bg-[var(--color-border)]"></div>
+                  </div>
+
+                  {/* 本地文件上传 */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">本地文件</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setUploadImageFile(e.target.files?.[0] || null)}
+                      className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[var(--color-primary)] file:text-white hover:file:bg-[var(--color-primary-hover)] transition-colors"
+                    />
+                    {uploadImageFile && (
+                      <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                        已选择: {uploadImageFile.name}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 提示信息 */}
+                  <div className="mb-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                    <p className="text-sm text-blue-400">
+                      💡 上传后，AI 将自动分析图片并优化角色描述（外貌、服装、气质等）
+                    </p>
+                  </div>
+
+                  {/* 按钮 */}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setUploadCharacterImageDialogOpen(false);
+                        setUploadingCharacterId(null);
+                        setUploadImageUrl('');
+                        setUploadImageFile(null);
+                      }}
+                      disabled={isAnalyzingImage}
+                      className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleConfirmUploadCharacterImage}
+                      disabled={isAnalyzingImage || (!uploadImageUrl && !uploadImageFile)}
+                      className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      {isAnalyzingImage ? '⏳ 分析中...' : '确认上传'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {!selectedGalleryImage ? (
+                    <div>
+                      <h4 className="text-sm font-medium text-[var(--color-text-secondary)] mb-3">选择要裁剪的设定图</h4>
+                      {galleryImages.length === 0 ? (
+                        <div className="text-center py-8 text-[var(--color-text-tertiary)] bg-[var(--color-bg)] rounded-lg border border-dashed border-[var(--color-border)]">没有任何设定图，请先关闭弹窗并为角色生成设定图。</div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                          {galleryImages.map((img, i) => (
+                            <img 
+                              key={i} 
+                              src={img} 
+                              alt={`Gallery Reference ${i}`} 
+                              className="w-full object-cover rounded-lg cursor-pointer hover:ring-2 hover:ring-[var(--color-primary)] transition-all shadow-md" 
+                              onClick={() => setSelectedGalleryImage(img)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {/* Cancel Button for Gallery Selection */}
+                      <div className="mt-6 flex justify-end">
+                        <button
+                          onClick={() => {
+                            setUploadCharacterImageDialogOpen(false);
+                            setUploadingCharacterId(null);
+                          }}
+                          className="px-6 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-[var(--color-text-secondary)]">拖动选取头像区域</h4>
+                        <button 
+                          onClick={() => { setSelectedGalleryImage(null); setCompletedCrop(null); }} 
+                          className="text-sm font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors"
+                        >
+                          重新选择图片
+                        </button>
+                      </div>
+                      
+                      <div className="bg-black/30 rounded-xl overflow-hidden flex items-center justify-center p-4 mb-4 border border-[var(--color-border)]">
+                        <ReactCrop
+                          crop={crop}
+                          onChange={(c) => setCrop(c)}
+                          onComplete={(c) => setCompletedCrop(c)}
+                          aspect={1}
+                          circularCrop
+                          className="max-h-[50vh]"
+                        >
+                          <img 
+                            ref={imgRef}
+                            src={selectedGalleryImage} 
+                            alt="Crop source"
+                            style={{ maxHeight: '50vh', objectFit: 'contain' }}
+                            crossOrigin="anonymous"
+                          />
+                        </ReactCrop>
+                      </div>
+                      
+                      {/* Buttons */}
+                      <div className="flex gap-3 mt-4">
+                        <button
+                          onClick={() => {
+                            setUploadCharacterImageDialogOpen(false);
+                            setUploadingCharacterId(null);
+                            setSelectedGalleryImage(null);
+                            setCompletedCrop(null);
+                          }}
+                          disabled={isAnalyzingImage}
+                          className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={handleConfirmCrop}
+                          disabled={isAnalyzingImage || !completedCrop || completedCrop.width === 0}
+                          className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex justify-center items-center gap-2"
+                        >
+                          {isAnalyzingImage ? '⏳ 保存裁剪...' : '✨ 确认裁剪为头像'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-
-            {/* 分隔线 */}
-            <div className="flex items-center gap-3 my-5">
-              <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-              <span className="text-xs text-[var(--color-text-tertiary)] uppercase tracking-widest">OR 自定义上传</span>
-              <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-            </div>
-
-            {/* URL 输入 */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">图片 URL</label>
-              <input
-                type="text"
-                value={uploadImageUrl}
-                onChange={(e) => setUploadImageUrl(e.target.value)}
-                placeholder="https://example.com/character.jpg"
-                className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-colors"
-              />
-            </div>
-
-            {/* 分隔线 */}
-            <div className="flex items-center gap-3 my-4">
-              <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-              <span className="text-sm text-[var(--color-text-tertiary)]">或</span>
-              <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-            </div>
-
-            {/* 本地文件上传 */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">本地文件</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setUploadImageFile(e.target.files?.[0] || null)}
-                className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[var(--color-primary)] file:text-white hover:file:bg-[var(--color-primary-hover)] transition-colors"
-              />
-              {uploadImageFile && (
-                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                  已选择: {uploadImageFile.name}
-                </p>
-              )}
-            </div>
-
-            {/* 提示信息 */}
-            <div className="mb-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-              <p className="text-sm text-blue-400">
-                💡 上传后，AI 将自动分析图片并优化角色描述（外貌、服装、气质等）
-              </p>
-            </div>
-
-            {/* 按钮 */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setUploadCharacterImageDialogOpen(false);
-                  setUploadingCharacterId(null);
-                  setUploadImageUrl('');
-                  setUploadImageFile(null);
-                }}
-                disabled={isAnalyzingImage}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleConfirmUploadCharacterImage}
-                disabled={isAnalyzingImage || (!uploadImageUrl && !uploadImageFile)}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                {isAnalyzingImage ? '⏳ 分析中...' : '确认上传'}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
@@ -2388,8 +2776,8 @@ const ScenesTab: React.FC<{
   sceneStyleId: string;
   onChangeSceneStyleId: (styleId: string) => void;
   onGenerateSceneImageSheet: (sceneId: string) => void;
-  generatingSceneId: string | null;
-  generationProgress: { stage: string; percent: number } | null;
+  generatingSceneIds: string[];
+  sceneGenProgressMap: Record<string, { stage: string; percent: number }>;
   onBatchGenerateScenes?: () => void;
   isBatchGeneratingScenes?: boolean;
   batchSceneProgress?: { current: number; total: number } | null;
@@ -2407,8 +2795,8 @@ const ScenesTab: React.FC<{
   sceneStyleId,
   onChangeSceneStyleId,
   onGenerateSceneImageSheet,
-  generatingSceneId,
-  generationProgress,
+  generatingSceneIds,
+  sceneGenProgressMap,
   onBatchGenerateScenes,
   isBatchGeneratingScenes,
   batchSceneProgress,
@@ -2514,11 +2902,11 @@ const ScenesTab: React.FC<{
                         e.stopPropagation();
                         onGenerateSceneImageSheet(scene.id);
                       }}
-                      disabled={generatingSceneId === scene.id}
+                      disabled={generatingSceneIds.includes(scene.id)}
                       className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-2.5 py-1.5 rounded-lg text-[12px] font-medium disabled:cursor-not-allowed transition-colors"
                       title={scene.imageSheetUrl ? '重新生成场景设定图' : '生成场景设定图'}
                     >
-                      {generatingSceneId === scene.id ? '⏳ 生成中...' : (scene.imageSheetUrl ? '🔄 重新生成' : '🎨 生成设定图')}
+                      {generatingSceneIds.includes(scene.id) ? '⏳ 生成中...' : (scene.imageSheetUrl ? '🔄 重新生成' : '🎨 生成设定图')}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); onEditScene(scene); }}
@@ -2535,16 +2923,16 @@ const ScenesTab: React.FC<{
                 </p>
 
                 {/* 生成进度（仅当前场景显示） */}
-                {generatingSceneId === scene.id && generationProgress && (
+                {generatingSceneIds.includes(scene.id) && sceneGenProgressMap[scene.id] && (
                   <div className="mt-3 text-[11px] text-[var(--color-text-secondary)]">
                     <div className="flex items-center justify-between gap-2">
-                      <span>⏳ {generationProgress.stage}</span>
-                      <span className="text-[var(--color-text-tertiary)]">{Math.round(generationProgress.percent)}%</span>
+                      <span>⏳ {sceneGenProgressMap[scene.id].stage}</span>
+                      <span className="text-[var(--color-text-tertiary)]">{Math.round(sceneGenProgressMap[scene.id].percent)}%</span>
                     </div>
                     <div className="mt-1.5 h-1.5 bg-[var(--color-surface)] rounded overflow-hidden">
                       <div
                         className="h-full bg-[var(--color-accent-green)]"
-                        style={{ width: `${Math.max(0, Math.min(100, generationProgress.percent))}%` }}
+                        style={{ width: `${Math.max(0, Math.min(100, sceneGenProgressMap[scene.id].percent))}%` }}
                       />
                     </div>
                   </div>

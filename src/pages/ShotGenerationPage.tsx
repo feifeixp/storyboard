@@ -7,10 +7,12 @@ import {
   ShotDesign,
   QualityCheck,
 } from '../../prompts/chain-of-thought/types';
-import type { GeneratedEpisodeSummary } from '../../types/project';
+import type { GeneratedEpisodeSummary, Project } from '../../types/project';
 import { MODEL_NAMES } from '../../services/openrouter';
 
 interface ShotGenerationPageProps {
+  project: Project;
+  onMissingAssetsConfirm: (missingChars: string[], missingScenes: string[]) => void;
   // Tab 状态
   currentTab: 'generate' | 'review' | 'manual';
   handleTabChange: (tab: 'generate' | 'review' | 'manual') => void;
@@ -605,7 +607,61 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
   renderShotTable,
   editModel,
   setEditModel,
+  project,
+  onMissingAssetsConfirm,
+  shots, // 需要访问全体分镜来统计缺漏
 }) => {
+  
+  // 🆕 前置验证逻辑：检查是否有引用的角色或场景缺失了生图
+  const handleProceedToGeneration = (targetStep: number) => {
+    // 1. 收集被引用的所有角色ID和场景ID (去重)
+    const requiredCharacterIds = new Set<string>();
+    const requiredSceneIds = new Set<string>();
+    
+    shots.forEach(s => {
+      s.assignedCharacterIds?.forEach(id => requiredCharacterIds.add(id));
+      if (s.assignedSceneId) {
+        requiredSceneIds.add(s.assignedSceneId);
+      } else if (s.sceneId) {
+        requiredSceneIds.add(s.sceneId);
+      }
+    });
+
+    // 2. 检查哪些引用的实体没有生成图片
+    const missingChars: string[] = [];
+    requiredCharacterIds.forEach(id => {
+      const char = project.characters?.find(c => c.id === id) as any;
+      // 如果使用了替身形态，则认为其已经生成过了，此处检查相对宽松，如果 avatarUrl 存在，或者主体/形态有 imageSheetUrl
+      const hasImage = char?.avatarUrl || char?.imageSheetUrl || char?.forms?.some((f: any) => f.imageSheetUrl);
+      if (char && !hasImage) {
+        missingChars.push(char.id);
+      }
+    });
+
+    const missingScenes: string[] = [];
+    requiredSceneIds.forEach(id => {
+      const sn = project.scenes?.find(s => s.id === id);
+      if (sn && !sn.imageSheetUrl) {
+        missingScenes.push(sn.id);
+      }
+    });
+
+    // 3. 弹窗确认
+    if (missingChars.length > 0 || missingScenes.length > 0) {
+      const totalMissing = missingChars.length + missingScenes.length;
+      const confirmMsg = `检测到分镜中引用的 ${missingChars.length}个角色 和 ${missingScenes.length}个场景 尚未生成设定图（这会导致后续无法识别画面主体）。\n\n是否先帮您跳转到设定界面补全（将自动排队生成）？`;
+      
+      if (window.confirm(confirmMsg)) {
+        onMissingAssetsConfirm(missingChars, missingScenes);
+        return; // 中断，等待生成完毕
+      }
+      // 如果用户取消弹窗（拒绝补充），则强行继续（不推荐但允许）
+    }
+
+    // 通过检查（或强行忽略），正常前进
+    setCurrentStep(targetStep);
+  };
+
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">
       {/* TOP: Chat Agent - 增加高度到280px */}
@@ -722,12 +778,20 @@ const ManualEditTab: React.FC<ShotGenerationPageProps> = ({
               📄 导出TXT
             </button>
           </div>
-          <button
-            onClick={() => setCurrentStep(5)} // AppStep.EXTRACT_PROMPTS
-            className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-md font-bold text-sm transition-all"
-          >
-            下一步: 提取AI提示词 →
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleProceedToGeneration(5)} // AppStep.EXTRACT_PROMPTS
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md font-bold text-sm transition-all"
+            >
+              分支1: 九宫格图片生成 →
+            </button>
+            <button
+              onClick={() => handleProceedToGeneration(8)} // AppStep.EXTRACT_VIDEO_PROMPTS
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-md font-bold text-sm transition-all"
+            >
+              分支2: 直接生成Seedance视频 →
+            </button>
+          </div>
         </div>
         {/* 分镜表格全页显示，不使用滚动条 */}
         {renderShotTable(true, true)}

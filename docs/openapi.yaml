@@ -6,12 +6,133 @@ info:
 servers:
   - url: https://visionary-storyboard-skill-api.feifeixp.workers.dev
     description: Production Cloudflare Worker
-paths:
+  /api/v1/auth/send-code:
+    post:
+      summary: Send Login Verification Code
+      description: Sends an SMS or Email verification code to the user based on their contact information. Use this FIRST to initiate login.
+      operationId: sendCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - contact
+              properties:
+                contact:
+                  type: string
+                  description: The user's phone number or email address.
+      responses:
+        '200':
+          description: Code sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/characters/generate-reference:
+    post:
+      summary: Generate Character Reference Sheet
+      description: Generates a visual reference sheet (turnaround + 3-views + headshot avatar) for a character based on their extracted appearance. Blocks and waits for the image generation to complete.
+      operationId: generateCharacterReference
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: The long JWT accessToken string obtained from the Login endpoint.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - appearance
+              properties:
+                name:
+                  type: string
+                  description: The name of the character.
+                appearance:
+                  type: string
+                  description: The detailed visual appearance of the character.
+      responses:
+        '200':
+          description: Sheet Generated Successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  imageUrls:
+                    type: array
+                    items:
+                      type: string
+                      description: URL to the generated image
+
+                properties:
+                  success:
+                    type: boolean
+                  errMessage:
+                    type: string
+
+  /api/v1/auth/login:
+    post:
+      summary: Login with Verification Code
+      description: Logs the user in using the code they received. Returns the `accessToken` (under `data.authorization`) which MUST be passed to all other endpoints in the Headers.
+      operationId: unifiedLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - contact
+                - code
+              properties:
+                contact:
+                  type: string
+                  description: The user's phone number or email address.
+                code:
+                  type: string
+                  description: The 6-digit verification code.
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      authorization:
+                        type: string
+                        description: The Bearer Token (accessToken) to use for subsequent API calls.
+                  errMessage:
+                    type: string
+
   /api/v1/characters/extract:
     post:
       summary: Extract Characters from Script
       description: Parses raw script text, identifies core characters, and generates detailed, purely visual descriptions for AI image generation.
       operationId: extractCharacters
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: The long JWT accessToken string obtained from the Login endpoint.
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -52,6 +173,13 @@ paths:
       summary: Clean and Pre-process Script
       description: Separates visual content from dialogues and extracts psychological "mood tags" from sound cues. Output evaluates pacing weights per scene.
       operationId: cleanScript
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: The long JWT accessToken string obtained from the Login endpoint.
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -80,6 +208,13 @@ paths:
       summary: Generate Machine-Readable Prompts
       description: Translates a structured Shot list into rigorous, style-agnostic technical Image Generation prompts (Nano Banana Pro / Kling compatible).
       operationId: generateVideoPrompts
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: The long JWT accessToken string obtained from the Login endpoint.
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -114,3 +249,110 @@ paths:
                           type: string
                         imagePromptCn:
                           type: string
+  /api/v1/storyboard/generate-grid:
+    post:
+      summary: Generate 9-Grid Storyboard Sheet
+      description: Generates a 3x3 storyboard grid image containing up to 9 shots. Blocks and waits for the image generation to complete.
+      operationId: generateStoryboardGrid
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: JWT accessToken obtained from Login.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - shots
+              properties:
+                shots:
+                  type: array
+                  description: Array of up to 9 shots to draw in the grid
+                  items:
+                    type: object
+                    properties:
+                      description:
+                        type: string
+                      cameraAngle:
+                        type: string
+                styleName:
+                  type: string
+                  description: Name of the visual style (e.g. "Rough Sketch")
+                styleSuffix:
+                  type: string
+                  description: Prompt tags for the art style
+                characterSection:
+                  type: string
+                  description: Prefix text defining the characters
+                sceneSection:
+                  type: string
+                  description: Prefix text defining the scenes
+      responses:
+        '200':
+          description: Grid generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  imageUrls:
+                    type: array
+                    items:
+                      type: string
+
+  /api/v1/storyboard/export-pdf:
+    post:
+      summary: Export Storyboard as PDF
+      description: Takes a list of generated shots with image URLs and descriptions, and compiles them into a clean A4 PDF storyboard document. Uploads to OSS and returns the public link.
+      operationId: exportStoryboardPdf
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: JWT accessToken obtained from Login.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - shots
+              properties:
+                title:
+                  type: string
+                  description: Document Title
+                shots:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      shotNumber:
+                        type: string
+                      shotSize:
+                        type: string
+                      description:
+                        type: string
+                      imageUrl:
+                        type: string
+      responses:
+        '200':
+          description: PDF link returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  pdfUrl:
+                    type: string

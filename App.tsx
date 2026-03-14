@@ -20,6 +20,7 @@ import {
   ScriptCleaningPage,
   ShotGenerationPage,
   PromptExtractionPage,
+  VideoPromptExtractionPage, // 🆕 新增
   ImageGenerationPage,
 } from './src/pages';
 // 使用 OpenRouter 统一 API（支持多模型切换）
@@ -31,6 +32,7 @@ import {
   chatWithDirectorStream,
   generateMergedStoryboardSheet,
   extractImagePromptsStream,
+  extractVideoPromptsStream, // 🆕 新增
   optimizeImagePromptsStream,
   cleanScriptStream,
   extractCharactersFromScript,
@@ -232,18 +234,32 @@ const App: React.FC = () => {
 
   // 🆕 获取用户积分信息（登录时初始化）
   useEffect(() => {
-    if (!loggedIn) return;
-
-    const fetchPoints = async () => {
-      try {
-        const points = await getUserPoints();
-        setUserPoints(points);
-      } catch (error) {
-        console.error('[App] 获取积分信息失败:', error);
-      }
+    // 监听全局凭证过期事件
+    const handleAuthExpired = () => {
+      setLoggedIn(false);
+      setUserPoints(null);
+      alert('登录凭证已过期,请重新登录');
     };
+    window.addEventListener('auth-expired', handleAuthExpired);
 
-    fetchPoints();
+    if (loggedIn) {
+      const fetchPoints = async () => {
+        try {
+          const points = await getUserPoints();
+          setUserPoints(points);
+        } catch (error: any) {
+          console.error('[App] 获取积分信息失败:', error);
+          if (error.message?.includes('凭证过期') || error.message?.includes('Token has been revoked')) {
+            handleAuthExpired();
+          }
+        }
+      };
+      fetchPoints();
+    }
+
+    return () => {
+      window.removeEventListener('auth-expired', handleAuthExpired);
+    };
   }, [loggedIn]);
 
   // ═══════════════════════════════════════════════════════════════
@@ -256,6 +272,10 @@ const App: React.FC = () => {
   const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState<number | null>(() =>
     loadFromStorage(STORAGE_KEYS.CURRENT_EPISODE_NUMBER, null)  // 🔧 从 localStorage 恢复
   );
+
+  // 🆕 Dashboard 快捷导航状态
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'characters' | 'scenes'>('overview');
+  const [pendingGenerations, setPendingGenerations] = useState<{ characters: string[], scenes: string[] }>({ characters: [], scenes: [] });
 
   // 🆕 加载项目列表和当前项目（仅在登录后执行）
   useEffect(() => {
@@ -1393,9 +1413,7 @@ const App: React.FC = () => {
         ? AppStep.INPUT_SCRIPT
         : hasStoryboard
           ? AppStep.FINAL_STORYBOARD
-          : hasExtractedPrompts
-            ? AppStep.EXTRACT_PROMPTS
-            : AppStep.MANUAL_EDIT;
+          : AppStep.MANUAL_EDIT;
 
       setCurrentStep(targetStep);
       console.log(`[handleSelectEpisode] ✅ 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
@@ -1453,9 +1471,7 @@ const App: React.FC = () => {
         ? AppStep.INPUT_SCRIPT
         : hasStoryboard
           ? AppStep.FINAL_STORYBOARD
-          : hasExtractedPrompts
-            ? AppStep.EXTRACT_PROMPTS
-            : AppStep.MANUAL_EDIT;
+          : AppStep.MANUAL_EDIT;
 
       setCurrentStep(targetStep);
       console.log(`[handleSelectEpisode] ✅ (fallback) 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);
@@ -4176,6 +4192,30 @@ const App: React.FC = () => {
           </div>
           <h1 className="text-xl font-bold tracking-tight text-white">Director Studio</h1>
           <div className="flex items-center gap-2">
+            {/* 🆕 脚本分析过程中的快捷导航面包屑 */}
+            {currentStep > AppStep.PROJECT_DASHBOARD && currentProject && (
+              <div className="flex items-center gap-1.5 mr-4 bg-gray-800/50 p-1 rounded-lg border border-gray-700/50">
+                <button
+                  onClick={() => { setDashboardTab('overview'); setCurrentStep(AppStep.PROJECT_DASHBOARD); }}
+                  className="px-2.5 py-1 text-xs text-gray-300 hover:bg-gray-700 rounded transition-colors"
+                >
+                  ← 概览
+                </button>
+                <button
+                  onClick={() => { setDashboardTab('characters'); setCurrentStep(AppStep.PROJECT_DASHBOARD); }}
+                  className="px-2.5 py-1 text-xs text-blue-300 hover:bg-gray-700 rounded transition-colors flex items-center gap-1"
+                >
+                  🎭 角色
+                </button>
+                <button
+                  onClick={() => { setDashboardTab('scenes'); setCurrentStep(AppStep.PROJECT_DASHBOARD); }}
+                  className="px-2.5 py-1 text-xs text-emerald-300 hover:bg-gray-700 rounded transition-colors flex items-center gap-1"
+                >
+                  🏛️ 场景
+                </button>
+              </div>
+            )}
+            
             <button
               onClick={goToProjectList}
               className="px-3 py-1.5 bg-gray-800 text-blue-400 border border-gray-700 rounded-md text-xs font-medium hover:bg-gray-700 transition-all flex items-center gap-1.5"
@@ -4236,6 +4276,9 @@ const App: React.FC = () => {
             onSelectEpisode={handleSelectEpisode}
             onUpdateProject={handleUpdateProject}
             onBack={goToProjectList}
+            initialTab={dashboardTab}
+            pendingGenerations={pendingGenerations}
+            clearPendingGenerations={() => setPendingGenerations({ characters: [], scenes: [] })}
           />
         )}
 
@@ -4415,7 +4458,10 @@ const App: React.FC = () => {
         {/* 原有流程 - 只在非项目管理页面显示 */}
         {currentStep !== AppStep.PROJECT_LIST && currentStep !== AppStep.PROJECT_WIZARD && currentStep !== AppStep.PROJECT_DASHBOARD && currentStep !== AppStep.REANALYZE_PROJECT && (
           <>
-            <StepTracker currentStep={currentStep} />
+            <StepTracker 
+              currentStep={currentStep} 
+              branch={(currentStep === AppStep.EXTRACT_VIDEO_PROMPTS || (currentStep === AppStep.FINAL_STORYBOARD && !shots.some(s => s.storyboardGridUrl) && shots.some(s => s.videoPromptCn))) ? 'video' : 'image'} 
+            />
 
             <main className="max-w-[1600px] mx-auto mt-4">
               {/* 项目信息栏 */}
@@ -4524,6 +4570,12 @@ const App: React.FC = () => {
                   setCurrentStep={setCurrentStep}
                   renderShotTable={renderShotTable}
                   episodeSummary={episodeSummary}
+                  project={currentProject!}
+                  onMissingAssetsConfirm={(missingChars, missingScenes) => {
+                    setPendingGenerations({ characters: missingChars, scenes: missingScenes });
+                    setDashboardTab(missingChars.length > 0 ? 'characters' : 'scenes');
+                    setCurrentStep(AppStep.PROJECT_DASHBOARD);
+                  }}
                 />
               )}
 
@@ -4550,6 +4602,26 @@ const App: React.FC = () => {
                   script={script}
                   saveEpisode={saveEpisode}
                   characterRefs={characterRefs}
+                />
+              )}
+
+              {/* 🆕 分支2: 直接生成视频提示词 (Seedance 2.0) */}
+              {currentStep === AppStep.EXTRACT_VIDEO_PROMPTS && (
+                <VideoPromptExtractionPage
+                  shots={shots}
+                  setShots={setShots}
+                  characterRefs={characterRefs}
+                  isExtracting={isExtracting}
+                  setIsExtracting={setIsExtracting}
+                  extractProgress={extractProgress}
+                  setExtractProgress={setExtractProgress}
+                  extractVideoPromptsStream={extractVideoPromptsStream}
+                  setCurrentStep={setCurrentStep}
+                  currentProject={currentProject}
+                  setCurrentProject={setCurrentProject}
+                  currentEpisodeNumber={currentEpisodeNumber}
+                  script={script}
+                  saveEpisode={saveEpisode}
                 />
               )}
 
@@ -4600,7 +4672,14 @@ const App: React.FC = () => {
                   scenes={currentProject?.scenes || []}
                   episodeNumber={currentEpisodeNumber}
                   projectName={currentProject?.name}
-                  onBack={() => setCurrentStep(AppStep.GENERATE_IMAGES)}
+                  onBack={() => {
+                    // 如果有视频提示词且没有九宫格图片，返回视频提取页
+                    if (!shots.some(s => s.storyboardGridUrl) && shots.some(s => s.videoPromptCn)) {
+                      setCurrentStep(AppStep.EXTRACT_VIDEO_PROMPTS);
+                    } else {
+                      setCurrentStep(AppStep.GENERATE_IMAGES);
+                    }
+                  }}
                 />
               )}
             </main>

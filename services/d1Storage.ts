@@ -4,7 +4,7 @@
  */
 
 import { Project, Episode } from '../types/project';
-import { getAccessToken } from './auth';
+import { getAccessToken, logout } from './auth';
 
 // API 基础 URL（根据环境切换）
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.yourdomain.com';
@@ -40,6 +40,11 @@ async function apiRequest<T>(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        if (response.status === 401) {
+          console.warn('[API请求] Token expired or unauthorized, automatically logging out...');
+          logout();
+          throw new Error('登录凭证已过期，请重新登录');
+        }
         const error = await response.json().catch(() => ({ error: 'Request failed' }));
         throw new Error(error.error || `HTTP ${response.status}`);
       }

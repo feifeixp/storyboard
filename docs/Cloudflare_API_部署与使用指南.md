@@ -15,12 +15,12 @@
    *这会自动在您的浏览器中弹出一个授权页面，点击 "Allow All" 完成身份验证。*
 
 2. **注入机密 API Key (非常重要)**  
-   您的 Hono 后端代码需要调用大模型，因此必须向 Cloudflare 安全环境中注入 OpenRouter 的 API Key，这样就能避免明文把密码写进代码里。
+   您的 Hono 后端代码需要调用大模型，因此必须向 Cloudflare 安全环境中注入 API Key，这样就能避免明文把密码写进代码里。
    执行以下命令：
    ```bash
-   npx wrangler secret put OPENROUTER_API_KEY
+   npx wrangler secret put VITE_OPENROUTER1_API_KEY
    ```
-   *当控制台提示 `Enter a secret value:` 时，粘贴您的 OpenRouter API Key 并回车。*(如果同时使用 Gemini 等，也可重复运行此命令并替换为 `GEMINI_API_KEY`)
+   *当控制台提示 `Enter a secret value:` 时，粘贴您的自定义接口 API Key 并回车。*(如果同时使用 Gemini 等，也可重复运行此命令并替换为相应的 Key)
 
 ## 二、 正式发布上线
 
@@ -31,16 +31,16 @@ npm run deploy
 npx wrangler deploy
 ```
 
-发布成功后，Wrangler 控制台会打印出您的公网 API 域名，格式类似于：
-`https://visionary-storyboard-skill-api.<您的账户名前缀>.workers.dev`
+发布成功并绑定自定义域名后，您的公网 API 域名将是：
+`https://storyboard.neodomain.ai`
 
 ## 三、 更新 OpenAPI 配置文件
 
-复制上面控制台输出的链接，打开项目根目录下的 `docs/openapi.yaml` 文件，找到 `servers` 节点：
+复制您的自定义域名，打开项目根目录下的 `docs/openapi.yaml` 文件，找到 `servers` 节点：
 ```yaml
 servers:
-  - url: https://api.your-worker.workers.dev # <--- 替换成您真实的部署链接
-    description: Production Cloudflare Worker
+  - url: https://storyboard.neodomain.ai # <--- 替换成您真实的部署链接或自定义域名
+    description: Production Environment
 ```
 
 ## 四、 本地与联调测试
@@ -49,7 +49,7 @@ servers:
 ```bash
 # 1. 在 `api` 目录下新建一个名为 `.dev.vars` 的文本文件
 # 2. 里面写入您的测试 Key:
-OPENROUTER_API_KEY="sk-or-v1-xxxxx..."
+VITE_OPENROUTER1_API_KEY="sk-xxxx..."
 
 # 3. 启动本地服务
 npx wrangler dev

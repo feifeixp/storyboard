@@ -7,7 +7,7 @@ const app = new Hono<Env>()
 
 app.post('/generate-video-prompts', async (c) => {
     try {
-        const { shots, model = 'google/gemini-2.5-pro' } = await c.req.json()
+        const { shots, model = 'gemini-2.5-flash' } = await c.req.json()
 
         if (!shots || !Array.isArray(shots)) {
             return c.json({ error: 'shots array is required' }, 400)
@@ -17,13 +17,13 @@ app.post('/generate-video-prompts', async (c) => {
         const prompt = buildExtractImagePromptsPrompt(shots as any)
 
         // 2. Call the LLM
-        const apiKey = c.env.OPENROUTER_API_KEY
+        const apiKey = c.env.VITE_OPENROUTER1_API_KEY
         if (!apiKey) {
-            return c.json({ error: 'Server missing OPENROUTER_API_KEY' }, 500)
+            return c.json({ error: 'Server missing VITE_OPENROUTER1_API_KEY' }, 500)
         }
 
         const responseContent = await callOpenAICompatibleAPI(
-            'https://openrouter.ai/api/v1/chat/completions',
+            'https://ai-api.neodomain.cn/v1/chat/completions',
             apiKey,
             model,
             prompt
