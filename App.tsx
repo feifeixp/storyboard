@@ -2,14 +2,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppStep, Shot, ReviewSuggestion, CharacterRef, CharacterForm, STORYBOARD_STYLES, StoryboardStyle, createCustomStyle, ScriptCleaningResult, EditTab, AngleDirection, AngleHeight, EpisodeSplit } from './types';
 import { StepTracker } from './components/StepTracker';
+import { UploadGridModal } from './src/components/UploadGridModal';
 import Login from './components/Login';
 import { isLoggedIn, logout, getUserInfo, getUserPoints, type PointsInfo } from './services/auth';
+
+// 🆕 导入工具函数
+import { normalizeCleaningResult } from './src/utils/helpers';
+import { STORAGE_KEYS, loadFromStorage, saveToStorage } from './src/utils/storage';
+import { exportToJSON as utilsExportToJSON, exportToExcel as utilsExportToExcel, exportPromptsChineseCSV, exportPromptsEnglishCSV, exportPromptsToJSON, downloadScriptText } from './src/utils/exportDefinitions';
+
 // 🆕 导入自定义 Hooks
 import {
+  useAuth,
+  useAppProjects,
   useScriptManagement,
   useCharacterManagement,
   useShotGeneration,
   useImageGeneration,
+  useScriptAnalysis,
   useProjectManagement,
   detectAndSplitEpisodes,  // 🆕 剧集拆分函数
 } from './src/hooks';
@@ -114,242 +124,14 @@ interface ChatMessage {
   content: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 清洗结果规范化工具（与模型无关，统一在数据层处理不稳定输出）
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * 将任意值规范化为字符串
- * 适用于 LLM 返回格式不稳定（对象、数组混入）的 string[] 字段
- */
-function _normalizeToString(value: unknown): string {
-  if (value == null) return '';
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) {
-    return value.map(_normalizeToString).filter(Boolean).join(' / ');
-  }
-  if (typeof value === 'object') {
-    try {
-      const vals = Object.values(value as object).filter(v => v != null && v !== '');
-      return vals.length > 0 ? (vals as string[]).join(' / ') : JSON.stringify(value);
-    } catch {
-      return JSON.stringify(value);
-    }
-  }
-  return String(value);
-}
-
-/** 将任意值规范化为 string[]，过滤空值 */
-function _normalizeStringArray(arr: unknown): string[] {
-  if (!Array.isArray(arr)) return typeof arr === 'string' ? [arr] : [];
-  return arr.map(_normalizeToString).filter(Boolean);
-}
-
-/**
- * 规范化清洗结果：确保所有 string[] 字段中的每个元素都是字符串
- * 防止不同模型返回对象/嵌套结构导致 React 渲染崩溃
- */
-function normalizeCleaningResult(result: ScriptCleaningResult): ScriptCleaningResult {
-  return {
-    ...result,
-    cleanedScenes: (result.cleanedScenes || []).map(scene => ({
-      ...scene,
-      dialogues: _normalizeStringArray(scene.dialogues),
-      uiElements: _normalizeStringArray(scene.uiElements),
-      moodTags: _normalizeStringArray(scene.moodTags),
-    })),
-    audioEffects: _normalizeStringArray(result.audioEffects),
-    musicCues: _normalizeStringArray(result.musicCues),
-    timeCodes: _normalizeStringArray(result.timeCodes),
-    cameraSuggestions: _normalizeStringArray(result.cameraSuggestions),
-  };
-}
-
-// 🆕 localStorage 持久化 Key
-const STORAGE_KEYS = {
-  CURRENT_STEP: 'storyboard_current_step',
-  CURRENT_EPISODE_NUMBER: 'storyboard_current_episode_number',  // 🔧 新增：当前剧集编号
-  SCRIPT: 'storyboard_script',
-  SHOTS: 'storyboard_shots',
-  CHARACTER_REFS: 'storyboard_character_refs',
-  CHAT_HISTORY: 'storyboard_chat_history',
-  SELECTED_STYLE: 'storyboard_selected_style',
-  CUSTOM_STYLE_PROMPT: 'storyboard_custom_style_prompt',
-  HQ_URLS: 'storyboard_hq_urls',
-  // 思维链状态
-  COT_STAGE1: 'storyboard_cot_stage1',
-  COT_STAGE2: 'storyboard_cot_stage2',
-  COT_STAGE3: 'storyboard_cot_stage3',
-  COT_STAGE4: 'storyboard_cot_stage4',
-  COT_STAGE5: 'storyboard_cot_stage5',
-  // 🆕 剧本清洗状态
-  CLEANING_RESULT: 'storyboard_cleaning_result',
-  CLEANING_PROGRESS: 'storyboard_cleaning_progress',
-};
-
-// 🆕 从 localStorage 安全读取数据
-const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
-  try {
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.warn(`[localStorage] 读取失败: ${key}`, e);
-  }
-  return defaultValue;
-};
-
-// 🆕 保存到 localStorage
-const saveToStorage = (key: string, value: any) => {
-  try {
-    const jsonString = JSON.stringify(value);
-
-    // 🆕 检查数据大小（localStorage 限制通常为 5-10MB）
-    const sizeInMB = new Blob([jsonString]).size / (1024 * 1024);
-
-    if (sizeInMB > 5) {
-      console.warn(`[localStorage] 数据过大 (${sizeInMB.toFixed(2)}MB)，跳过保存: ${key}`);
-      console.warn(`[localStorage] 建议：不要将大量图片数据存储到 localStorage`);
-      return;
-    }
-
-    localStorage.setItem(key, jsonString);
-  } catch (e) {
-    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-      console.warn(`[localStorage] 存储空间不足，跳过保存: ${key}`);
-      console.warn(`[localStorage] 建议：清理旧数据或使用 IndexedDB`);
-    } else {
-      console.warn(`[localStorage] 保存失败: ${key}`, e);
-    }
-  }
-};
 
 const App: React.FC = () => {
   // ═══════════════════════════════════════════════════════════════
   // 🆕 用户认证检查
   // ═══════════════════════════════════════════════════════════════
-  const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
-  const [userPoints, setUserPoints] = useState<PointsInfo | null>(null);
+  const { loggedIn, setLoggedIn, userPoints, setUserPoints } = useAuth();
 
-  // 🆕 获取用户积分信息（登录时初始化）
-  useEffect(() => {
-    // 监听全局凭证过期事件
-    const handleAuthExpired = () => {
-      setLoggedIn(false);
-      setUserPoints(null);
-      alert('登录凭证已过期,请重新登录');
-    };
-    window.addEventListener('auth-expired', handleAuthExpired);
 
-    if (loggedIn) {
-      const fetchPoints = async () => {
-        try {
-          const points = await getUserPoints();
-          setUserPoints(points);
-        } catch (error: any) {
-          console.error('[App] 获取积分信息失败:', error);
-          if (error.message?.includes('凭证过期') || error.message?.includes('Token has been revoked')) {
-            handleAuthExpired();
-          }
-        }
-      };
-      fetchPoints();
-    }
-
-    return () => {
-      window.removeEventListener('auth-expired', handleAuthExpired);
-    };
-  }, [loggedIn]);
-
-  // ═══════════════════════════════════════════════════════════════
-  // 🆕 项目管理状态
-  // ═══════════════════════════════════════════════════════════════
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  // 🆕 projectRef：用于在异步闭包中访问最新的 project 状态（避免闭包旧值）
-  const projectRef = useRef<Project | null>(null);
-  const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState<number | null>(() =>
-    loadFromStorage(STORAGE_KEYS.CURRENT_EPISODE_NUMBER, null)  // 🔧 从 localStorage 恢复
-  );
-
-  // 🆕 Dashboard 快捷导航状态
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'characters' | 'scenes'>('overview');
-  const [pendingGenerations, setPendingGenerations] = useState<{ characters: string[], scenes: string[] }>({ characters: [], scenes: [] });
-
-  // 🆕 加载项目列表和当前项目（仅在登录后执行）
-  useEffect(() => {
-    if (!loggedIn) return;  // 🆕 只在登录后加载
-
-    const loadProjects = async () => {
-      const allProjects = await getAllProjects();
-      setProjects(allProjects);
-
-      // 加载当前项目
-      const id = getCurrentProjectId();
-      if (id) {
-        const project = await getProject(id);
-
-        // 🔧 如果项目不存在（404），清除当前项目ID并返回项目列表
-        if (!project) {
-          console.warn(`[App] 项目 ${id} 不存在，清除当前项目ID`);
-          setCurrentProjectId(null);
-          setCurrentProject(null);
-          setCurrentStep(AppStep.PROJECT_LIST);
-          alert('项目不存在或已被删除，请重新选择项目');
-          return;
-        }
-
-        setCurrentProject(project);
-      }
-    };
-
-    loadProjects();
-  }, [loggedIn]);  // 🆕 依赖 loggedIn 状态
-
-  // 🆕 监听图片生成完成事件，自动刷新左上角积分余额
-  // 🆕 监听批量生成完成事件，刷新项目数据以确保图片显示正确
-  useEffect(() => {
-    if (!loggedIn) return;
-
-    const handleImageGenerated = async () => {
-      try {
-        const points = await getUserPoints();
-        setUserPoints(points);
-      } catch (error) {
-        console.error('[App] 刷新积分信息失败:', error);
-      }
-    };
-
-    const handleBatchGenerationComplete = async (event: CustomEvent) => {
-      const { type } = event.detail || {};
-      if (type !== 'character') return;
-
-      try {
-        // 重新获取当前项目的数据
-        if (currentProject) {
-          const updatedProject = await getProject(currentProject.id);
-          if (updatedProject) {
-            setCurrentProject(updatedProject);
-            // 同步角色库
-            if (updatedProject.characters) {
-              setCharacterRefs(updatedProject.characters);
-            }
-            console.log('[App] 批量生成完成，已刷新项目数据');
-          }
-        }
-      } catch (error) {
-        console.error('[App] 刷新项目数据失败:', error);
-      }
-    };
-
-    window.addEventListener('neodomain:image-generated', handleImageGenerated);
-    window.addEventListener('neodomain:batch-generation-complete', handleBatchGenerationComplete);
-    return () => {
-      window.removeEventListener('neodomain:image-generated', handleImageGenerated);
-      window.removeEventListener('neodomain:batch-generation-complete', handleBatchGenerationComplete);
-    };
-  }, [loggedIn, currentProject]);
 
   // ═══════════════════════════════════════════════════════════════
   // 原有状态
@@ -392,6 +174,22 @@ const App: React.FC = () => {
   const [characterRefs, setCharacterRefs] = useState<CharacterRef[]>(() =>
     loadFromStorage(STORAGE_KEYS.CHARACTER_REFS, DEFAULT_CHARACTERS)
   );
+
+  // ═══════════════════════════════════════════════════════════════
+  // 🆕 项目管理状态 (Hook)
+  // ═══════════════════════════════════════════════════════════════
+  const {
+    projects, setProjects,
+    currentProject, setCurrentProject, projectRef,
+    currentEpisodeNumber, setCurrentEpisodeNumber,
+    dashboardTab, setDashboardTab,
+    pendingGenerations, setPendingGenerations
+  } = useAppProjects(loggedIn, setCurrentStep, setCharacterRefs);
+
+  // 🆕 模型选择相关
+  const [reviewModel, setReviewModel] = useState<string>(MODELS.GEMINI_2_5_FLASH);
+  const [editModel, setEditModel] = useState<string>(MODELS.GEMINI_2_5_FLASH);
+
   const [shots, setShots] = useState<Shot[]>(() =>
     loadFromStorage(STORAGE_KEYS.SHOTS, [])
   );
@@ -421,13 +219,8 @@ const App: React.FC = () => {
   // State for Step 4 Images
   // 🆕 不再从 localStorage 加载 hqUrls（图片数据太大）
   // hqUrls 是临时数据，每次生成时重新获取
-  const [hqUrls, setHqUrls] = useState<string[]>([]);
 
   // 🆕 九宫格上传对话框状态
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [uploadGridIndex, setUploadGridIndex] = useState<number | null>(null);
-  const [uploadUrl, setUploadUrl] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   // 🆕 生图模型选择（动态从 Neodomain API 获取）
   const [imageModel, setImageModel] = useState<string>('nanobanana-2');
@@ -435,13 +228,8 @@ const App: React.FC = () => {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
 
   // 🆕 分镜草图风格选择
-  const [selectedStyle, setSelectedStyle] = useState<StoryboardStyle>(STORYBOARD_STYLES[0]);
-  const [customStylePrompt, setCustomStylePrompt] = useState('');
-  const [showStyleCards, setShowStyleCards] = useState(false);
 
   // 🆕 提示词提取状态
-  const [extractProgress, setExtractProgress] = useState('');
-  const [isExtracting, setIsExtracting] = useState(false);
 
   // 🆕 提示词自检状态
   const [promptValidationResults, setPromptValidationResults] = useState<ReviewSuggestion[]>([]);
@@ -473,18 +261,41 @@ const App: React.FC = () => {
     loadFromStorage(STORAGE_KEYS.SCRIPT, '')
   );
 
-  // 🆕 思维链模式状态
-  const [generationMode, setGenerationMode] = useState<'traditional' | 'chain-of-thought'>('chain-of-thought');
-  const [cotCurrentStage, setCotCurrentStage] = useState<1 | 2 | 3 | 4 | 5 | null>(null);
-  const [cotStage1, setCotStage1] = useState<ScriptAnalysis | null>(null);
-  const [cotStage2, setCotStage2] = useState<VisualStrategy | null>(null);
-  const [cotStage3, setCotStage3] = useState<ShotPlanning | null>(null);
-  const [cotStage4, setCotStage4] = useState<ShotDesign[] | null>(null);
-  const [cotStage5, setCotStage5] = useState<QualityCheck | null>(null);
-  const [cotRawOutput, setCotRawOutput] = useState<string>('');
-
   // 🆕 本集概述状态（从思维链结果生成）
   const [episodeSummary, setEpisodeSummary] = useState<import('./types/project').GeneratedEpisodeSummary | null>(null);
+
+  // 🆕 图像生成相关状态 (Hook)
+  const {
+    hqUrls, setHqUrls,
+    selectedStyle, setSelectedStyle,
+    customStylePrompt, setCustomStylePrompt,
+    showStyleCards, setShowStyleCards,
+    uploadDialogOpen, setUploadDialogOpen,
+    uploadGridIndex, setUploadGridIndex,
+    uploadUrl, setUploadUrl,
+    uploadFile, setUploadFile,
+    extractProgress, setExtractProgress,
+    isExtracting, setIsExtracting,
+    abortController, setAbortController,
+    generateHQ, stopGeneration, regenerateSingleGrid,
+    handleUploadGrid, handleRefreshGrid, applyGridsToShots
+  } = useImageGeneration({
+    currentProject, currentEpisodeNumber,
+    shots, setShots, characterRefs, imageModel,
+    setIsLoading, setProgressMsg, setCurrentStep
+  });
+
+  // 🆕 思维链分析相关状态 (Hook)
+  const {
+    generationMode, setGenerationMode,
+    cotCurrentStage, setCotCurrentStage,
+    cotStage1, setCotStage1, cotStage2, setCotStage2, cotStage3, setCotStage3, cotStage4, setCotStage4, cotStage5, setCotStage5,
+    cotRawOutput, setCotRawOutput,
+    startChainOfThoughtGeneration
+  } = useScriptAnalysis({
+    script, currentProject, currentEpisodeNumber, shots, setShots, 
+    setProgressMsg, setStreamText, setIsLoading, setCurrentStep, setEpisodeSummary
+  });
 
   // 🆕 Tab切换逻辑：当currentStep改变时，自动更新currentTab
   useEffect(() => {
@@ -1392,26 +1203,18 @@ const App: React.FC = () => {
 
 
       // ✅ 根据剧集完成进度，跳转到最远的已完成步骤
-      // 优先级：最终故事板(九宫格已回填到 shots) > 提示词 > 精修 > 导入
+      // 优先级：最终故事板(九宫格已回填到 shots) > 提示词(Seedance已提取) > 精修 > 导入
       const hasShots = Array.isArray(fullEpisode.shots) && fullEpisode.shots.length > 0;
       const hasStoryboard =
         hasShots &&
         fullEpisode.shots!.some(s => typeof s.storyboardGridUrl === 'string' && s.storyboardGridUrl.trim());
-      const hasExtractedPrompts =
+      const hasVideoPrompts =
         hasShots &&
-        fullEpisode.shots!.some(s =>
-          Boolean(
-            (s.imagePromptCn && s.imagePromptCn.trim()) ||
-            (s.imagePromptEn && s.imagePromptEn.trim()) ||
-            (s.endImagePromptCn && s.endImagePromptCn.trim()) ||
-            (s.endImagePromptEn && s.endImagePromptEn.trim()) ||
-            (s.videoGenPrompt && s.videoGenPrompt.trim())
-          )
-        );
+        fullEpisode.shots!.some(s => typeof s.videoPromptCn === 'string' && s.videoPromptCn.trim());
 
       const targetStep = !hasShots
         ? AppStep.INPUT_SCRIPT
-        : hasStoryboard
+        : (hasStoryboard || hasVideoPrompts)
           ? AppStep.FINAL_STORYBOARD
           : AppStep.MANUAL_EDIT;
 
@@ -1455,21 +1258,13 @@ const App: React.FC = () => {
       const hasStoryboard =
         hasShots &&
         episode.shots!.some(s => typeof s.storyboardGridUrl === 'string' && s.storyboardGridUrl.trim());
-      const hasExtractedPrompts =
+      const hasVideoPrompts =
         hasShots &&
-        episode.shots!.some(s =>
-          Boolean(
-            (s.imagePromptCn && s.imagePromptCn.trim()) ||
-            (s.imagePromptEn && s.imagePromptEn.trim()) ||
-            (s.endImagePromptCn && s.endImagePromptCn.trim()) ||
-            (s.endImagePromptEn && s.endImagePromptEn.trim()) ||
-            (s.videoGenPrompt && s.videoGenPrompt.trim())
-          )
-        );
+        episode.shots!.some(s => typeof s.videoPromptCn === 'string' && s.videoPromptCn.trim());
 
       const targetStep = !hasShots
         ? AppStep.INPUT_SCRIPT
-        : hasStoryboard
+        : (hasStoryboard || hasVideoPrompts)
           ? AppStep.FINAL_STORYBOARD
           : AppStep.MANUAL_EDIT;
 
@@ -1676,129 +1471,7 @@ const App: React.FC = () => {
   };
 
   const downloadScript = () => {
-    // 🆕 提取本集出现的角色信息
-    const characterIdsInEpisode = new Set<string>();
-    shots.forEach(shot => {
-      if (shot.assignedCharacterIds) {
-        shot.assignedCharacterIds.forEach(id => characterIdsInEpisode.add(id));
-      }
-    });
-
-    // 🆕 修复：从 characterRefs 中筛选本集角色（而不是 currentProject.characters）
-    const episodeCharacters = characterRefs.filter(char =>
-      characterIdsInEpisode.has(char.id)
-    );
-
-    // 生成角色信息部分
-    let characterSection = '';
-    if (episodeCharacters.length > 0) {
-      const characterTexts = episodeCharacters.map(char => {
-        const parts = [`👤 ${char.name}`];
-
-        if (char.gender) {
-          parts.push(`   性别: ${char.gender}`);
-        }
-
-        if (char.appearance) {
-          parts.push(`   外貌: ${char.appearance}`);
-        }
-
-        if (char.identityEvolution) {
-          parts.push(`   身份: ${char.identityEvolution}`);
-        }
-
-        if (char.quote) {
-          parts.push(`   台词: ${char.quote}`);
-        }
-
-        if (char.abilities && char.abilities.length > 0) {
-          parts.push(`   能力: ${char.abilities.join('、')}`);
-        }
-
-        return parts.join('\n');
-      });
-
-      characterSection = [
-        ``,
-        `╔═══════════════════════════════════════════════════════════════════╗`,
-        `║                       本 集 角 色 信 息                           ║`,
-        `╚═══════════════════════════════════════════════════════════════════╝`,
-        ``,
-        characterTexts.join('\n\n'),
-        ``,
-        `═══════════════════════════════════════════════════════════════════`,
-        ``,
-        ``
-      ].join('\n');
-    }
-
-    const content = shots.map(s => {
-      const isMotion = s.shotType === '运动';
-      const lines = [
-        `═══════════════════════════════════════════════════════════════════`,
-        `[#${s.shotNumber}] ${s.duration || '—'} | ${s.shotType || '静态'} | ${s.shotSize || '—'}`,
-        `═══════════════════════════════════════════════════════════════════`,
-        ``,
-        `📖 故事: ${s.storyBeat || '—'}`,
-        `💬 台词: ${s.dialogue || '—'}`,
-        ``,
-        `───────────────────────────────────────────────────────────────────`,
-        `📐 角度: ${s.angleDirection || '—'} + ${s.angleHeight || '—'}`,
-        `🎬 运镜: ${s.cameraMove || '—'} ${s.cameraMoveDetail ? `| ${s.cameraMoveDetail}` : ''}`,
-        ``,
-        `🖼️ 构图:`,
-        `   FG: ${s.foreground || '—'}`,
-        `   MG: ${s.midground || '—'}`,
-        `   BG: ${s.background || '—'}`,
-        ``,
-        `💡 光影: ${s.lighting || '—'}`,
-      ];
-
-      // 🆕 添加镜头中的角色信息
-      if (s.assignedCharacterIds && s.assignedCharacterIds.length > 0) {
-        const characterNames = s.assignedCharacterIds
-          .map(id => {
-            const char = characterRefs.find(c => c.id === id);
-            return char ? char.name : id;
-          })
-          .join('、');
-        lines.push(`👥 角色: ${characterNames}`);
-      }
-
-      if (isMotion) {
-        lines.push(
-          ``,
-          `───────────────────────────────────────────────────────────────────`,
-          `🟢 首帧: ${s.startFrame || '—'}`,
-          `🟠 尾帧: ${s.endFrame || '—'}`,
-          `🏃 动线: ${s.motionPath || '—'}`
-        );
-      }
-
-      // 🆕 不再导出 AI 提示词内容
-
-      return lines.join('\n');
-    }).join('\n\n\n');
-
-    // 添加头部信息
-    const header = [
-      `╔═══════════════════════════════════════════════════════════════════╗`,
-      `║                       分 镜 脚 本 导 出                           ║`,
-      `╠═══════════════════════════════════════════════════════════════════╣`,
-      `║  镜头总数: ${shots.length.toString().padEnd(10)}                                       ║`,
-      `║  角色数量: ${episodeCharacters.length.toString().padEnd(10)}                                       ║`,
-      `║  导出时间: ${new Date().toLocaleString().padEnd(22)}                      ║`,
-      `╚═══════════════════════════════════════════════════════════════════╝`,
-      ``,
-      ``
-    ].join('\n');
-
-    const blob = new Blob([header + characterSection + content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = "storyboard_script.txt";
-    link.click();
+    downloadScriptText(shots, characterRefs);
   };
 
   // 🆕 清洗剧本
@@ -1875,7 +1548,11 @@ const App: React.FC = () => {
             sceneWeights: [],
             originalScript: scriptToClean,
             rawOutput: lastText,
-            parseError: true
+            parseError: true,
+            audioEffects: [],
+            musicCues: [],
+            timeCodes: [],
+            cameraSuggestions: []
           });
         }
       }
@@ -1921,625 +1598,6 @@ const App: React.FC = () => {
     } catch (error) {
       console.error(error);
       alert("生成中断，请检查网络");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 🆕 思维链5阶段生成
-  const startChainOfThoughtGeneration = async () => {
-    setShots([]);
-    setStreamText('');
-    setSuggestions([]);
-    setCotRawOutput('');
-    setCotCurrentStage(null);
-    setCotStage1(null);
-    setCotStage2(null);
-    setCotStage3(null);
-    setCotStage4(null);
-    setCotStage5(null);
-    setCurrentStep(AppStep.GENERATE_LIST);
-    setIsLoading(true);
-
-    try {
-      // ========== 阶段1：剧本分析 ==========
-      setCotCurrentStage(1);
-      setProgressMsg("【阶段1/5】剧本分析中...");
-      let stage1Text = '';
-      let stage1Result: any = null;
-
-      // 🆕 添加重试机制
-      const maxRetries = 3;
-      let retryCount = 0;
-
-      while (retryCount < maxRetries) {
-        try {
-          stage1Text = '';
-          const stage1Gen = generateStage1Analysis(script);
-          for await (const chunk of stage1Gen) {
-            stage1Text += chunk;
-            setCotRawOutput(stage1Text);
-            setStreamText(`【阶段1】剧本分析\n\n${stage1Text}`);
-          }
-
-          // 尝试解析结果
-          stage1Result = parseStage1Output(stage1Text);
-          setCotStage1(stage1Result);
-          setStreamText(prev => prev + '\n\n✅ 阶段1完成！');
-          break; // 成功则跳出重试循环
-
-        } catch (error: any) {
-          retryCount++;
-          console.warn(`[WARN] 阶段1失败 (重试 ${retryCount}/${maxRetries}):`, error.message);
-
-          if (retryCount >= maxRetries) {
-            // 超过最大重试次数，提供更友好的错误提示
-            throw new Error(
-              `阶段1剧本分析失败（已重试${maxRetries}次）\n\n` +
-              `可能原因：\n` +
-              `1. 网络连接不稳定 - 请检查网络连接\n` +
-              `2. API服务暂时不可用 - 请稍后重试\n` +
-              `3. 剧本内容过长 - 请尝试缩短剧本\n\n` +
-              `原始错误：${error.message}`
-            );
-          }
-
-          // 等待2秒后重试
-          setProgressMsg(`【阶段1/5】网络错误，${2}秒后重试 (${retryCount}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-
-      // ========== 阶段2：视觉策略 ==========
-      setCotCurrentStage(2);
-      setProgressMsg("【阶段2/5】视觉策略规划中...");
-      let stage2Text = '';
-      let stage2Result: any = null;
-
-      retryCount = 0;
-      while (retryCount < maxRetries) {
-        try {
-          stage2Text = '';
-          const stage2Gen = generateStage2Analysis(stage1Result);
-          for await (const chunk of stage2Gen) {
-            stage2Text += chunk;
-            setCotRawOutput(stage2Text);
-            setStreamText(`【阶段2】视觉策略\n\n${stage2Text}`);
-          }
-
-          stage2Result = parseStage2Output(stage2Text);
-          setCotStage2(stage2Result);
-          setStreamText(prev => prev + '\n\n✅ 阶段2完成！');
-          break;
-
-        } catch (error: any) {
-          retryCount++;
-          console.warn(`[WARN] 阶段2失败 (重试 ${retryCount}/${maxRetries}):`, error.message);
-
-          if (retryCount >= maxRetries) {
-            throw new Error(`阶段2视觉策略规划失败（已重试${maxRetries}次）\n原始错误：${error.message}`);
-          }
-
-          setProgressMsg(`【阶段2/5】网络错误，${2}秒后重试 (${retryCount}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-
-      // ========== 阶段3：镜头分配 ==========
-      setCotCurrentStage(3);
-      setProgressMsg("【阶段3/5】镜头分配中...");
-      let stage3Text = '';
-      let stage3Result: any = null;
-
-      retryCount = 0;
-      while (retryCount < maxRetries) {
-        try {
-          stage3Text = '';
-          const stage3Gen = generateStage3Analysis(script, stage1Result, stage2Result);
-          for await (const chunk of stage3Gen) {
-            stage3Text += chunk;
-            setCotRawOutput(stage3Text);
-            setStreamText(`【阶段3】镜头分配\n\n${stage3Text}`);
-          }
-
-          stage3Result = parseStage3Output(stage3Text);
-          setCotStage3(stage3Result);
-          setStreamText(prev => prev + '\n\n✅ 阶段3完成！');
-          break;
-
-        } catch (error: any) {
-          retryCount++;
-          console.warn(`[WARN] 阶段3失败 (重试 ${retryCount}/${maxRetries}):`, error.message);
-
-          if (retryCount >= maxRetries) {
-            throw new Error(`阶段3镜头分配失败（已重试${maxRetries}次）\n原始错误：${error.message}`);
-          }
-
-          setProgressMsg(`【阶段3/5】网络错误，${2}秒后重试 (${retryCount}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-
-      // ========== 阶段4：逐镜设计 ==========
-      setCotCurrentStage(4);
-      const shotList = stage3Result.shotList || [];
-      const allDesignedShots: ShotDesign[] = [];
-
-      // 🆕 辅助函数：将设计结果转换为Shot格式（用于实时显示）
-      const convertDesignToShot = (rawDesign: any, idx: number): Shot => {
-        const design = rawDesign.design || rawDesign;
-        const comp = design.composition || {};
-        const lightingData = design.lighting || {};
-        const camera = design.camera || {};
-        const characters = design.characters || {};
-        const aiPrompt = rawDesign.aiPrompt || {};
-        const storyBeatData = rawDesign.storyBeat || {};
-
-        // 🆕 改进：从多个可能的字段路径提取角度信息
-        const shotSize = comp.shotSize || design.shotSize || rawDesign.shotSize || 'MS';
-        const cameraAngle = comp.cameraAngle || design.cameraAngle || rawDesign.cameraAngle || '轻微仰拍(Mild Low)';
-        const cameraDirection = comp.cameraDirection || design.cameraDirection || rawDesign.cameraDirection || '3/4正面(3/4 Front)';
-
-        // 🆕 调试日志：记录 LLM 返回的数据结构
-        if (idx === 0) {
-          console.log('[convertDesignToShot] 第一个镜头的数据结构:', {
-            shotNumber: rawDesign.shotNumber,
-            shotSize: { comp: comp.shotSize, design: design.shotSize, raw: rawDesign.shotSize, final: shotSize },
-            cameraAngle: { comp: comp.cameraAngle, design: design.cameraAngle, raw: rawDesign.cameraAngle, final: cameraAngle },
-            cameraDirection: { comp: comp.cameraDirection, design: design.cameraDirection, raw: rawDesign.cameraDirection, final: cameraDirection }
-          });
-        }
-
-        const depthLayers = comp.depthLayers || {};
-        const fg = depthLayers.foreground || comp.foreground || '';
-        const mg = depthLayers.midground || comp.midground || '';
-        const bg = depthLayers.background || comp.background || '';
-
-        const lightingDesc = lightingData.description || lightingData.mood ||
-          (lightingData.keyLight ? `主光:${lightingData.keyLight}` : '');
-
-        const cameraMovement = camera.movement || '固定';
-        const cameraSpeed = camera.speed || '';
-
-        const visualDesignText = [
-          `【景别】${shotSize}`,
-          `【角度】${cameraAngle} + ${cameraDirection}`,
-          `【透视】${comp.perspective || '标准透视'}`,
-          `【构图】${comp.framing || ''}`,
-          `  FG: ${fg}`,
-          `  MG: ${mg}`,
-          `  BG: ${bg}`,
-          `【光影】${lightingDesc}`,
-          cameraMovement && cameraMovement !== '固定' ? `【运镜】${cameraMovement}${cameraSpeed ? ` (${cameraSpeed})` : ''}` : ''
-        ].filter(Boolean).join('\n');
-
-        const storyEvent = storyBeatData.event ||
-          characters.actions ||
-          shotList[idx]?.briefDescription ||
-          `镜头${idx + 1}`;
-
-        const dialogue = storyBeatData.dialogue || '';
-
-        const isMoving = cameraMovement && cameraMovement !== '固定' && cameraMovement !== 'static' && cameraMovement !== 'Static';
-
-        // 🆕 解析videoMode - 如果LLM返回了，直接使用；否则根据规则自动判定
-        // 🆕 使用 determineVideoMode 函数进行代码级校验
-        let videoMode: 'I2V' | 'Keyframe' | undefined;
-        const llmVideoMode = rawDesign.videoMode?.toLowerCase();
-
-        if (llmVideoMode === 'keyframe') {
-          videoMode = 'Keyframe';
-        } else if (llmVideoMode === 'i2v' || llmVideoMode === 'static') {
-          videoMode = 'I2V'; // Static 已废弃，归入 I2V
-        } else if (isMoving) {
-          // LLM 未指定时，使用 determineVideoMode 进行自动判断
-          const durationNum = parseInt(rawDesign.duration || '5', 10) || 5;
-          const hasSignificantChange = camera.startFrame && camera.endFrame &&
-            camera.startFrame !== '—' && camera.endFrame !== '—' &&
-            camera.startFrame !== camera.endFrame;
-          const decision = determineVideoMode(
-            storyEvent,
-            durationNum,
-            !!hasSignificantChange,
-            isMoving ? '运动' : '静态',
-            cameraMovement
-          );
-          videoMode = decision.mode === 'Keyframe' ? 'Keyframe' : 'I2V';
-        } else {
-          videoMode = 'I2V'; // 静态镜头默认使用 I2V
-        }
-
-        const shotSizeMap: Record<string, string> = {
-          'ELS': '大远景(ELS)', 'LS': '远景(LS)', 'MLS': '中全景(MLS)',
-          'MS': '中景(MS)', 'MCU': '中近景(MCU)', 'CU': '近景(CU)',
-          'ECU': '特写(ECU)', 'Macro': '微距(Macro)'
-        };
-        const normalizedShotSize = shotSizeMap[shotSize] || shotSize;
-
-        const angleDirectionMap: Record<string, string> = {
-          'front': '正面(Front)', 'front view': '正面(Front)',
-          '3/4 front': '3/4正面(3/4 Front)', '3/4 front view': '3/4正面(3/4 Front)',
-          'side': '正侧面(Full Side)', 'side view': '正侧面(Full Side)', 'profile': '正侧面(Full Side)',
-          'back': '背面(Back)', 'back view': '背面(Back)',
-          '正面': '正面(Front)', '侧面': '正侧面(Full Side)', '背面': '背面(Back)'
-        };
-        const normalizedAngleDirection = angleDirectionMap[cameraDirection.toLowerCase()] || cameraDirection;
-
-        const angleHeightMap: Record<string, string> = {
-          'eye level': '平视(Eye Level)', 'eye-level': '平视(Eye Level)',
-          'low angle': '仰拍(Low Angle)', 'low': '仰拍(Low Angle)',
-          'mild low angle': '轻微仰拍(Mild Low)', 'slight low angle': '轻微仰拍(Mild Low)',
-          'high angle': '俯拍(High Angle)', 'high': '俯拍(High Angle)',
-          'mild high angle': '轻微俯拍(Mild High)', 'slight high angle': '轻微俯拍(Mild High)',
-          'extreme high angle': '鸟瞰(Extreme High)', 'top-down': '鸟瞰(Extreme High)',
-          'extreme low angle': '蚁视(Extreme Low)',
-          '平视': '平视(Eye Level)', '俯拍': '俯拍(High Angle)', '仰拍': '仰拍(Low Angle)'
-        };
-        const normalizedAngleHeight = angleHeightMap[cameraAngle.toLowerCase()] || cameraAngle;
-
-        const cameraMoveMap: Record<string, string> = {
-          'static': '固定(Static)', '固定': '固定(Static)',
-          'push in': '推进(Push In)', 'push': '推进(Push In)',
-          'pull out': '拉远(Pull Out)', 'pull': '拉远(Pull Out)',
-          'pan': '横摇(Pan)', 'pan left': '横摇(Pan)', 'pan right': '横摇(Pan)',
-          'tilt': '竖摇(Tilt)', 'tilt up': '竖摇(Tilt)', 'tilt down': '竖摇(Tilt)',
-          'track': '跟随(Track)', 'tracking': '跟随(Track)', 'follow': '跟随(Track)',
-          'crane': '升降(Crane)', 'crane up': '升降(Crane)', 'crane down': '升降(Crane)',
-          'dolly': '移动(Dolly)', 'dolly in': '移动(Dolly)', 'dolly out': '移动(Dolly)',
-          'handheld': '手持(Handheld)', 'shake': '手持(Handheld)',
-          'arc': '环绕(Arc)', 'orbit': '环绕(Arc)', '360': '环绕(Arc)',
-          'zoom': '变焦(Zoom)'
-        };
-        const normalizedCameraMove = cameraMoveMap[cameraMovement.toLowerCase()] || cameraMovement;
-
-        return {
-          id: `shot-cot-${idx}`,
-          shotNumber: rawDesign.shotNumber?.replace('#', '') || String(idx + 1).padStart(2, '0'),
-          duration: rawDesign.duration || `${shotList[idx]?.duration || 4}s`,
-          shotType: isMoving ? '运动' : '静态',
-          // 🆕 场景ID（用于关联空间布局）
-          sceneId: rawDesign.sceneId || shotList[idx]?.sceneId || '',
-          // 🆕 视频生成模式
-          videoMode: videoMode,
-          storyBeat: storyEvent,
-          dialogue: dialogue,
-          shotSize: normalizedShotSize as any,
-          angleDirection: normalizedAngleDirection as any,
-          angleHeight: normalizedAngleHeight as any,
-          dutchAngle: comp.dutchAngle || '',
-          foreground: fg,
-          midground: mg,
-          background: bg,
-          lighting: lightingDesc,
-          cameraMove: normalizedCameraMove as any,
-          cameraMoveDetail: cameraSpeed || camera.description || '',
-          motionPath: comp.blocking || characters.positions || '',
-          // 🆕 改进：从多个可能的字段路径提取首帧/尾帧描述
-          startFrame: camera.startFrame || rawDesign.startFrame || '',
-          endFrame: camera.endFrame || rawDesign.endFrame || '',
-          // 🆕 视频提示词（从aiPrompt.videoPrompt/videoPromptCn获取）
-          videoPromptCn: aiPrompt.videoPromptCn || '',
-          videoPrompt: aiPrompt.videoPrompt || '',
-          // 🆕 导演意图与技术备注
-          directorNote: rawDesign.directorNote || '',
-          technicalNote: rawDesign.technicalNote || '',
-          // 思维链阶段不自动写入提示词，由后续专门的提示词生成能力或用户手动填充
-          promptCn: '',
-          promptEn: '',
-          endFramePromptCn: '',
-          endFramePromptEn: '',
-          // 理论依据
-          theory: rawDesign.theory || '',
-          status: 'pending'
-        };
-      };
-
-      // Helper: limit full front-view shots to at most 2 across the whole sequence
-      const applyFrontViewLimit = (inputShots: Shot[]): Shot[] => {
-        let frontCount = 0;
-        return inputShots.map((shot) => {
-          if (shot.angleDirection === '正面(Front)') {
-            frontCount += 1;
-            if (frontCount > 2) {
-              const downgradedDirection = '3/4正面(3/4 Front)' as Shot['angleDirection'];
-              return {
-                ...shot,
-                angleDirection: downgradedDirection,
-              };
-            }
-          }
-          return shot;
-        });
-      };
-
-      // 🆕 Helper: enforce angle diversity, limit static shots, ensure dutch angle usage
-      const applyAngleDiversityLimit = (inputShots: Shot[]): Shot[] => {
-        const totalShots = inputShots.length;
-        const maxThreeQuarterFront = Math.max(3, Math.floor(totalShots * 0.25)); // 最多25%
-        const maxStaticShots = 2; // 一集最多1-2个完全固定镜头
-        let threeQuarterCount = 0;
-        let staticCount = 0;
-
-        // 用于替换过多3/4正面的备选角度
-        const alternativeDirections: Shot['angleDirection'][] = [
-          '正侧面(Full Side)',
-          '1/3侧面(1/3 Side)',
-          '3/4背面(3/4 Back)',
-          '1/3背面(1/3 Back)'
-        ];
-        // 用于替换固定镜头的运镜（使用正确的CameraMove类型）
-        const alternativeMoves: Shot['cameraMove'][] = [
-          '推镜(Dolly In)',
-          '拉镜(Dolly Out)',
-          '左摇(Pan Left)',
-          '右摇(Pan Right)'
-        ];
-        let altDirIdx = 0;
-        let altMoveIdx = 0;
-
-        return inputShots.map((shot, idx) => {
-          let modifiedShot = { ...shot };
-
-          // 1. 限制3/4正面占比
-          if (modifiedShot.angleDirection === '3/4正面(3/4 Front)') {
-            threeQuarterCount += 1;
-            if (threeQuarterCount > maxThreeQuarterFront) {
-              const newDirection = alternativeDirections[altDirIdx % alternativeDirections.length];
-              altDirIdx += 1;
-              console.log(`[角度多样化] 镜头#${modifiedShot.shotNumber}: 3/4正面(${threeQuarterCount}个) → ${newDirection}`);
-              modifiedShot = { ...modifiedShot, angleDirection: newDirection };
-            }
-          }
-
-          // 2. 限制固定镜头数量（固定镜头改为轻微运动）
-          if (modifiedShot.cameraMove === '固定(Static)') {
-            staticCount += 1;
-            if (staticCount > maxStaticShots) {
-              const newMove = alternativeMoves[altMoveIdx % alternativeMoves.length];
-              altMoveIdx += 1;
-              console.log(`[运镜多样化] 镜头#${modifiedShot.shotNumber}: 固定(${staticCount}个) → ${newMove}（轻微缓慢）`);
-              modifiedShot = {
-                ...modifiedShot,
-                cameraMove: newMove,
-                cameraMoveDetail: (modifiedShot.cameraMoveDetail || '') + '（轻微缓慢）'
-              };
-            }
-          }
-
-          return modifiedShot;
-        });
-      };
-
-      // 分批处理（每批6个镜头）
-      const batchSize = 6;
-      const totalBatches = Math.ceil(shotList.length / batchSize);
-      let completedShotCount = 0;
-
-      for (let i = 0; i < shotList.length; i += batchSize) {
-        const batch = shotList.slice(i, i + batchSize) as ShotListItem[];
-        const batchNum = Math.floor(i / batchSize) + 1;
-
-        setProgressMsg(`【阶段4/5】逐镜设计 ${batchNum}/${totalBatches}...`);
-
-        // 🆕 添加重试机制
-        let stage4Text = '';
-        let retryCount = 0;
-        const maxRetries = 3;
-
-        while (retryCount < maxRetries) {
-          try {
-            stage4Text = '';
-            const stage4Gen = generateStage4Analysis(script, stage1Result, stage2Result, stage3Result, batch);
-            for await (const chunk of stage4Gen) {
-              stage4Text += chunk;
-              setCotRawOutput(stage4Text);
-              setStreamText(`【阶段4】逐镜设计 (批次 ${batchNum}/${totalBatches})\n\n${stage4Text}`);
-            }
-            break; // 成功则跳出重试循环
-          } catch (error: any) {
-            retryCount++;
-            console.warn(`[WARN] 阶段4批次${batchNum}失败 (重试 ${retryCount}/${maxRetries}):`, error.message);
-            if (retryCount >= maxRetries) {
-              throw error; // 超过最大重试次数则抛出错误
-            }
-            // 等待2秒后重试
-            setProgressMsg(`【阶段4/5】网络错误，${2}秒后重试 (${retryCount}/${maxRetries})...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-        }
-
-        const stage4Result = parseStage4Output(stage4Text);
-        allDesignedShots.push(...(stage4Result.shots || []));
-
-        // 🆕 实时更新分镜表格显示（同时应用正面视角使用上限和角度多样化）
-        const convertedShots = allDesignedShots.map((design, idx) => convertDesignToShot(design, idx));
-        const currentShots = applyAngleDiversityLimit(applyFrontViewLimit(convertedShots));
-        setShots(currentShots);
-        completedShotCount = currentShots.length;
-
-        setStreamText(prev => `【阶段4】逐镜设计 (批次 ${batchNum}/${totalBatches})\n\n${stage4Text}\n\n✅ 已完成 ${completedShotCount} 个镜头`);
-      }
-
-      setCotStage4(allDesignedShots);
-      setStreamText(prev => prev + `\n\n✅ 阶段4完成！共设计 ${allDesignedShots.length} 个镜头`);
-
-      // ========== 阶段5：质量自检 ==========
-      setCotCurrentStage(5);
-      setProgressMsg("【阶段5/5】质量自检与优化...");
-      setStreamText(prev => prev + `\n\n【阶段5】质量自检与优化\n\n正在审核所有镜头设计...`);
-
-      console.log('[DEBUG] 开始调用阶段5 API...');
-      console.log('[DEBUG] 待审核镜头数:', allDesignedShots.length);
-
-      // 🔧 转换 ShotDesign[] 为 ShotDesignResult[]
-      const shotDesignResults = allDesignedShots.map(design => ({
-        shotNumber: design.shotNumber,
-        design: {
-          composition: design.composition,
-          lighting: {
-            // 从 cameraAngle 或其他字段推断光照信息
-            description: design.theory || '',
-            direction: design.continuityCheck?.lightDirection || 'unknown'
-          },
-          camera: {
-            angle: design.cameraAngle,
-            size: design.shotSize,
-            reason: design.reason
-          },
-          characters: {
-            // 从 storyBeat 提取角色信息
-            emotion: design.storyBeat.emotion,
-            dialogue: design.storyBeat.dialogue,
-            event: design.storyBeat.event
-          }
-        },
-        aiPrompt: {
-          visual: design.aiPromptCn,
-          motion: design.videoPromptCn,
-          style: design.theory || '',
-          negative: ''
-        }
-      }));
-
-      let stage5Text = '';
-      for await (const chunk of generateStage5Review(stage1Result, stage2Result, shotDesignResults)) {
-        stage5Text += chunk;
-        setCotRawOutput(stage5Text);
-        setStreamText(`【阶段5】质量自检与优化\n\n${stage5Text}`);
-      }
-
-      console.log('[DEBUG] 阶段5流式数据接收完成');
-
-      const stage5Result = parseStage5Output(stage5Text);
-      setCotStage5(stage5Result);
-
-      console.log('[解析成功] 阶段5质量检查结果:', stage5Result);
-      setStreamText(prev => prev + `\n\n✅ 阶段5完成！质量评分: ${stage5Result.overallScore}/100 (${stage5Result.rating})`);
-
-      // 显示质量检查结果
-      const allIssues = [
-        ...(stage5Result.perspectiveCheck?.issues || []).map(i => ({ type: '透视', ...i })),
-        ...(stage5Result.angleCheck?.issues || []).map(i => ({ type: '角度', ...i })),
-        ...(stage5Result.continuityCheck?.issues || []).map(i => ({ type: '连续性', ...i })),
-        ...(stage5Result.emotionCheck?.issues || []).map(i => ({ type: '情绪', ...i }))
-      ];
-
-      if (allIssues.length > 0) {
-        console.warn('⚠️ 质量检查发现问题：');
-        allIssues.forEach(issue => {
-          console.warn(`⚠️ [${issue.type}] ${issue.problem}`);
-        });
-        setStreamText(prev => prev + `\n\n⚠️ 发现 ${allIssues.length} 个问题，详见控制台`);
-      } else {
-        setStreamText(prev => prev + `\n\n✅ 质量检查通过，未发现问题`);
-      }
-
-      // 确保最终的shots已设置，并应用正面视角上限和角度多样化规则
-      const finalConverted = allDesignedShots.map((design, idx) => convertDesignToShot(design, idx));
-      let finalShots = applyAngleDiversityLimit(applyFrontViewLimit(finalConverted));
-
-      // 🆕 P0修复：提示词后处理（移除角度值和权重参数）
-      console.log('\n[后处理] 开始提示词规范化...');
-      finalShots = finalShots.map(shot => {
-        // 移除角度值标注（如 (0°), (15-45°)），但保持类型有效性
-        const cleanAngleDirection = shot.angleDirection?.replace(/\(\d+°\)/g, '').replace(/\(\d+-\d+°\)/g, '').trim();
-        const cleanAngleHeight = shot.angleHeight?.replace(/\(\d+°\)/g, '').replace(/\(\d+-\d+°\)/g, '').trim();
-
-        return {
-          ...shot,
-          angleDirection: cleanAngleDirection as typeof shot.angleDirection,
-          angleHeight: cleanAngleHeight as typeof shot.angleHeight,
-
-          // 移除英文提示词中的权重参数格式（如 (extreme long shot:1.3)）
-          imagePromptEn: shot.imagePromptEn?.replace(/\([^)]+:\d+\.\d+\)/g, ''),
-          endImagePromptEn: shot.endImagePromptEn?.replace(/\([^)]+:\d+\.\d+\)/g, ''),
-          videoGenPrompt: shot.videoGenPrompt?.replace(/\([^)]+:\d+\.\d+\)/g, ''),
-        };
-      });
-      console.log('✅ 提示词规范化完成');
-
-      setShots(finalShots);
-
-      // 🆕 生成本集概述（从思维链结果提取信息）
-      if (currentProject && currentEpisodeNumber !== null) {
-        const currentEpisode = currentProject.episodes?.find(ep => ep.episodeNumber === currentEpisodeNumber);
-        const episodeTitle = currentEpisode?.title || `第${currentEpisodeNumber}集`;
-
-        const summary = generateEpisodeSummary(
-          currentEpisodeNumber,
-          episodeTitle,
-          stage1Result,
-          stage2Result,
-          stage3Result,
-          finalShots
-        );
-
-        setEpisodeSummary(summary);
-        console.log('✅ 本集概述已生成:', summary);
-      }
-
-      // 🆕 步骤7：角度分布校验
-      console.log('\n[阶段7] 角度分布校验...');
-      setProgressMsg('正在校验角度分布...');
-
-      const angleReport = validateAngleDistribution(finalShots);
-      const angleReportText = generateAngleDistributionReport(finalShots);
-
-      console.log('\n' + angleReportText);
-
-      // 如果角度分布不符合规则，提示用户
-      if (!angleReport.overall.isValid) {
-        const errorMsg = angleReport.overall.errors.join('\n');
-        const warningMsg = angleReport.overall.warnings.join('\n');
-
-        console.warn('⚠️ 角度分布存在问题：');
-        console.warn(errorMsg);
-        if (warningMsg) {
-          console.warn(warningMsg);
-        }
-
-        // 显示提示（不阻断流程）
-        alert(`⚠️ 角度分布校验发现问题：\n\n${errorMsg}\n\n${warningMsg}\n\n建议：\n1. 使用"质量自检"功能查看详细建议\n2. 手动调整不符合规则的镜头\n3. 或重新生成分镜`);
-      } else {
-        console.log('✅ 角度分布完全符合规则！');
-      }
-
-      setCotCurrentStage(null);
-      setProgressMsg(`✅ 思维链生成完成！共 ${finalShots.length} 个镜头`);
-
-      // 🔧 核心修复：保存当前剧集的分镜数据到后端
-      if (currentProject && currentEpisodeNumber !== null) {
-        const currentEpisode = currentProject.episodes?.find(ep => ep.episodeNumber === currentEpisodeNumber);
-        if (currentEpisode) {
-          // 🔧 验证项目ID和剧集ID是否匹配
-          console.log(`[D1存储] 准备保存分镜 - 项目: ${currentProject.name} (${currentProject.id}), 剧集: 第${currentEpisodeNumber}集 (${currentEpisode.id})`);
-          console.log(`[D1存储] 分镜数量: ${finalShots.length}, 第1个镜头: ${typeof finalShots[0]?.storyBeat === 'string' ? finalShots[0].storyBeat : finalShots[0]?.storyBeat?.event || '未知'}`);
-
-          const updatedEpisode: Episode = {
-            ...currentEpisode,
-            shots: finalShots,
-            status: 'generated',
-            updatedAt: new Date().toISOString(),
-          };
-
-          try {
-            await saveEpisode(currentProject.id, updatedEpisode);
-            console.log(`[D1存储] ✅ 第${currentEpisodeNumber}集分镜保存成功`);
-          } catch (error) {
-            console.error('[D1存储] ❌ 保存剧集失败:', error);
-            // 不阻断用户操作，只记录错误
-          }
-        } else {
-          console.warn(`[D1存储] ⚠️ 未找到第${currentEpisodeNumber}集的元信息，跳过保存`);
-        }
-      } else {
-        console.warn(`[D1存储] ⚠️ 缺少项目或剧集信息，跳过保存 - currentProject: ${!!currentProject}, currentEpisodeNumber: ${currentEpisodeNumber}`);
-      }
-
-    } catch (error) {
-      console.error('思维链生成失败:', error);
-      setStreamText(prev => prev + `\n\n❌ 错误: ${error}`);
-      alert(`思维链生成失败: ${error}`);
     } finally {
       setIsLoading(false);
     }
@@ -3146,471 +2204,6 @@ const App: React.FC = () => {
    * 🆕 单独重新生成某一张九宫格图片
    * @param gridIndex 九宫格索引（从0开始）
    */
-  const regenerateSingleGrid = async (gridIndex: number) => {
-    const totalGrids = Math.ceil(shots.length / 9);
-
-    // 验证索引
-    if (gridIndex < 0 || gridIndex >= totalGrids) {
-      alert(`无效的九宫格索引: ${gridIndex + 1}`);
-      return;
-    }
-
-    // 🔧 验证项目和剧集信息
-    if (!currentProject) {
-      alert('⚠️ 未选择项目，无法重新生成九宫格');
-      return;
-    }
-
-    if (currentEpisodeNumber === null) {
-      alert('⚠️ 未选择剧集，无法重新生成九宫格');
-      return;
-    }
-
-    const currentEpisode = currentProject.episodes?.find(
-      ep => ep.episodeNumber === currentEpisodeNumber
-    );
-
-    if (!currentEpisode) {
-      alert('⚠️ 未找到当前剧集信息，无法重新生成九宫格');
-      return;
-    }
-
-    const episodeId = currentEpisode.id;
-    const projectId = currentProject.id;
-
-    setIsLoading(true);
-    setProgressMsg(`正在重新生成第 ${gridIndex + 1} 张九宫格...`);
-
-    // 🔧 记录重新生成信息
-    console.log(`[九宫格重绘] 项目: ${currentProject.name} (${projectId}), 剧集: 第${currentEpisodeNumber}集 (${episodeId}), grid#${gridIndex + 1}`);
-
-    try {
-      // 🆕 单格重绘：任务创建后立即持久化 taskCode，便于断网/刷新后自动恢复
-      // 获取美术风格
-      const artStyle = detectArtStyleType(currentProject.settings.genre, currentProject.settings.visualStyle);
-
-      // 调用单独生成函数
-      const { generateSingleGrid } = await import('./services/openrouter');
-      const imageUrl = await generateSingleGrid(
-        gridIndex,
-        shots,
-        characterRefs,
-        imageModel,
-        selectedStyle,
-        currentEpisodeNumber,
-        currentProject.scenes || [],
-        artStyle,
-        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
-        async (taskCode) => {
-          console.log(`[九宫格重绘] taskCode创建: grid#${gridIndex + 1}, taskCode=${taskCode}`);
-          const taskCreatedAt = new Date().toISOString();
-          const GRID_SIZE = 9;
-          const startIdx = gridIndex * GRID_SIZE;
-          setShots(prev => {
-            if (startIdx < 0 || startIdx >= prev.length) return prev;
-            // 约定：将 meta 写在该 grid 的第一个 shot 上即可（恢复逻辑按 gridIndex 聚合）
-            const next = prev.map((s, idx) => {
-              if (idx !== startIdx) return s;
-              return {
-                ...s,
-                storyboardGridGenerationMeta: {
-                  taskCode,
-                  taskCreatedAt,
-                  gridIndex,
-                },
-              };
-            });
-
-            void patchEpisode(episodeId, { shots: next }).catch(err => {
-              console.error('[D1存储] 九宫格 taskCode 持久化失败', err);
-            });
-            return next;
-          });
-        },
-        projectId  // 🔧 传入项目 ID（已验证），用于上传到 OSS
-      );
-
-      if (imageUrl) {
-        // 更新该九宫格的URL
-        setHqUrls(prev => {
-          const newUrls = [...prev];
-          newUrls[gridIndex] = imageUrl;
-          return newUrls;
-        });
-        setProgressMsg(`✅ 第 ${gridIndex + 1} 张九宫格重新生成成功！`);
-      } else {
-        setProgressMsg(`❌ 第 ${gridIndex + 1} 张九宫格生成失败`);
-        alert(`第 ${gridIndex + 1} 张九宫格生成失败，请重试`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("重新生成失败: " + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * 🆕 上传九宫格图片（URL或本地文件）
-   */
-  const handleUploadGrid = async () => {
-    if (uploadGridIndex === null) return;
-
-    try {
-      setIsLoading(true);
-      let imageUrl = '';
-
-      if (uploadUrl.trim()) {
-        // 使用URL
-        imageUrl = uploadUrl.trim();
-      } else if (uploadFile) {
-        // 上传本地文件到OSS
-        if (!currentProject) {
-          alert('⚠️ 未选择项目，无法上传图片');
-          return;
-        }
-
-        setProgressMsg('正在上传图片到云端...');
-        const { uploadToOSS } = await import('./services/oss');
-        const ossUrl = await uploadToOSS(
-          uploadFile,
-          `projects/${currentProject.id}/storyboard/grid_${uploadGridIndex + 1}_${Date.now()}.png`
-        );
-        imageUrl = ossUrl;
-      } else {
-        alert('请输入URL或选择文件');
-        return;
-      }
-
-      // 更新九宫格URL
-      setHqUrls(prev => {
-        const newUrls = [...prev];
-        newUrls[uploadGridIndex] = imageUrl;
-        return newUrls;
-      });
-
-      setProgressMsg(`✅ 第 ${uploadGridIndex + 1} 张九宫格上传成功！`);
-
-      // 关闭对话框并重置状态
-      setUploadDialogOpen(false);
-      setUploadGridIndex(null);
-      setUploadUrl('');
-      setUploadFile(null);
-    } catch (err) {
-      console.error(err);
-      alert('上传失败: ' + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * 🆕 手动刷新九宫格任务（从已保存的taskCode恢复）
-   */
-  const handleRefreshGrid = async (gridIndex: number) => {
-    const GRID_SIZE = 9;
-    const startIdx = gridIndex * GRID_SIZE;
-
-    if (startIdx >= shots.length) {
-      alert('无效的九宫格索引');
-      return;
-    }
-
-    const meta = shots[startIdx]?.storyboardGridGenerationMeta;
-    if (!meta?.taskCode) {
-      alert('该九宫格没有保存的任务信息，无法刷新');
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setProgressMsg(`正在刷新第 ${gridIndex + 1} 张九宫格任务...`);
-
-      const { pollGenerationResult, TaskStatus } = await import('./services/aiImageGeneration');
-      const result = await pollGenerationResult(meta.taskCode);
-
-      if (result.status === TaskStatus.SUCCESS && result.image_urls && result.image_urls.length > 0) {
-        // 更新九宫格URL
-        setHqUrls(prev => {
-          const newUrls = [...prev];
-          newUrls[gridIndex] = result.image_urls![0];
-          return newUrls;
-        });
-        setProgressMsg(`✅ 第 ${gridIndex + 1} 张九宫格刷新成功！`);
-      } else if (result.status === TaskStatus.FAILED) {
-        alert(`任务失败: ${result.failure_reason || '未知错误'}`);
-      } else {
-        alert('任务仍在处理中，请稍后再试');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('刷新失败: ' + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 🆕 九宫格生成控制器（用于停止生成）
-  const [abortController, setAbortController] = React.useState<AbortController | null>(null);
-
-  // 🆕 九宫格生成时间跟踪
-  const [gridGenerationStartTime, setGridGenerationStartTime] = React.useState<number | null>(null);
-  const [currentGeneratingGrid, setCurrentGeneratingGrid] = React.useState<number | null>(null);
-
-  const generateHQ = async () => {
-    setIsLoading(true);
-    setHqUrls([]);
-    const totalGrids = Math.ceil(shots.length / 9);
-    setProgressMsg(`正在使用「${selectedStyle.name}」风格绘制 ${totalGrids} 张九宫格...`);
-
-    // 🆕 创建 AbortController
-    const controller = new AbortController();
-    setAbortController(controller);
-
-    // 🆕 重置生成时间跟踪
-    setGridGenerationStartTime(Date.now());
-    setCurrentGeneratingGrid(0);
-
-    try {
-      // 🔧 验证项目和剧集信息
-      if (!currentProject) {
-        alert('⚠️ 未选择项目，无法生成九宫格');
-        setIsLoading(false);
-        return;
-      }
-
-      if (currentEpisodeNumber === null) {
-        alert('⚠️ 未选择剧集，无法生成九宫格');
-        setIsLoading(false);
-        return;
-      }
-
-      const currentEpisode = currentProject.episodes?.find(
-        ep => ep.episodeNumber === currentEpisodeNumber
-      );
-
-      if (!currentEpisode) {
-        alert('⚠️ 未找到当前剧集信息，无法生成九宫格');
-        setIsLoading(false);
-        return;
-      }
-
-      const episodeId = currentEpisode.id;
-      const projectId = currentProject.id;
-
-      // 🔧 记录生成信息
-      console.log(`[九宫格生成] 项目: ${currentProject.name} (${projectId}), 剧集: 第${currentEpisodeNumber}集 (${episodeId})`);
-      console.log(`[九宫格生成] 镜头数量: ${shots.length}, 第1个镜头: ${typeof shots[0]?.storyBeat === 'string' ? shots[0].storyBeat : shots[0]?.storyBeat?.event || '未知'}`);
-
-      // 使用选中的图像模型和风格生成分镜图
-      // 生成一张就显示一张
-      // 🆕 传入当前集数、场景库和美术风格，用于匹配角色形态、场景描述和风格约束
-      const artStyle = detectArtStyleType(currentProject.settings.genre, currentProject.settings.visualStyle);
-      const results = await generateMergedStoryboardSheet(
-        shots,
-        characterRefs,
-        'hq',
-        imageModel,
-        selectedStyle,
-        // 进度回调
-        (current, total, info) => {
-          setProgressMsg(`正在生成 ${info} (${current}/${total}) - ${selectedStyle.name}`);
-          // 🆕 更新当前生成的九宫格索引
-          setCurrentGeneratingGrid(current - 1);
-          setGridGenerationStartTime(Date.now());
-        },
-        // 单张完成回调 - 生成一张显示一张
-        (gridIndex, imageUrl) => {
-          console.log(`[九宫格生成] ✅ 第${gridIndex + 1}张完成，URL: ${imageUrl.substring(0, 80)}...`);
-          setHqUrls(prev => {
-            const newUrls = [...prev];
-            newUrls[gridIndex] = imageUrl;
-            return newUrls;
-          });
-          // 🆕 完成后重置当前生成索引
-          setCurrentGeneratingGrid(null);
-        },
-        // 🆕 taskCode 创建后立即写入 D1（shots.storyboardGridGenerationMeta），便于断网/刷新后恢复
-        async (taskCode, gridIndex) => {
-          console.log(`[九宫格生成] taskCode创建: grid#${gridIndex + 1}, taskCode=${taskCode}`);
-          const taskCreatedAt = new Date().toISOString();
-          const GRID_SIZE = 9;
-          const startIdx = gridIndex * GRID_SIZE;
-          setShots(prev => {
-            if (startIdx < 0 || startIdx >= prev.length) return prev;
-            const next = prev.map((s, idx) => {
-              if (idx !== startIdx) return s;
-              return {
-                ...s,
-                storyboardGridGenerationMeta: {
-                  taskCode,
-                  taskCreatedAt,
-                  gridIndex,
-                },
-              };
-            });
-            void patchEpisode(episodeId, { shots: next }).catch(err => {
-              console.error('[D1存储] 九宫格 taskCode 持久化失败', err);
-            });
-            return next;
-          });
-        },
-        currentEpisodeNumber,               // 🆕 传入当前集数
-        currentProject.scenes || [],        // 🆕 传入场景库
-        artStyle,                           // 🆕 传入美术风格类型
-        projectId,                          // 🔧 传入项目 ID（已验证），用于上传到 OSS
-        controller.signal,                  // 🆕 传入取消信号
-        // 🆕 单张失败时通过 setProgressMsg 给用户明确提示（而非静默丢失）
-        (gridIndex, reason) => {
-          setProgressMsg(`❌ 第 ${gridIndex + 1} 张九宫格生成失败：${reason}`);
-        }
-      );
-
-      // 🆕 检查是否被用户停止
-      if (controller.signal.aborted) {
-        const successCount = results.filter(r => r).length;
-        setProgressMsg(`⏸️ 生成已停止：${successCount}/${totalGrids} 张已完成`);
-        setHqUrls(results);
-      } else {
-        // 确保最终结果完整（处理失败的情况）
-        setHqUrls(results);
-        const successCount = results.filter(r => r).length;
-        if (successCount === totalGrids) {
-          setProgressMsg(`✅ 九宫格生成完成！共 ${totalGrids} 张`);
-        } else {
-          setProgressMsg(`⚠️ 生成完成：${successCount}/${totalGrids} 张成功`);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      if (err instanceof Error && err.name === 'AbortError') {
-        setProgressMsg('⏸️ 生成已被用户停止');
-      } else {
-        alert("渲染失败: " + (err instanceof Error ? err.message : String(err)));
-      }
-    } finally {
-      setIsLoading(false);
-      setAbortController(null);
-      setGridGenerationStartTime(null);
-      setCurrentGeneratingGrid(null);
-    }
-  };
-
-  // 🆕 停止九宫格生成
-  const stopGeneration = () => {
-    if (abortController) {
-      abortController.abort();
-      console.log('[九宫格] 用户请求停止生成');
-    }
-  };
-
-  // 🆕 计算当前九宫格生成耗时
-  const [generationElapsedTime, setGenerationElapsedTime] = React.useState<number>(0);
-
-  React.useEffect(() => {
-    if (!gridGenerationStartTime || currentGeneratingGrid === null) {
-      setGenerationElapsedTime(0);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - gridGenerationStartTime) / 1000);
-      setGenerationElapsedTime(elapsed);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [gridGenerationStartTime, currentGeneratingGrid]);
-
-  /**
-   * 🎨 B1：将“九宫格图片URL”按序映射到每个镜头（虚拟切割，不生成独立小图文件）
-   * - 映射规则：每 9 个镜头对应一张九宫格；cellIndex = idx % 9
-   * - 显示规则：在分镜表新增“草图”列，通过 CSS 平移实现裁切
-   * - 持久化：将 mapping 写入 shots 并 saveEpisode 落库到 D1，便于下次恢复
-   */
-  const applyGridsToShots = async () => {
-    const availableCount = hqUrls.filter(Boolean).length;
-    if (availableCount === 0) {
-      alert('⚠️ 当前没有可用的九宫格图片，请先生成完成后再应用。');
-      return;
-    }
-
-    const GRID_SIZE = 9;
-    const updatedShots = shots.map((shot, idx) => {
-      const gridIndex = Math.floor(idx / GRID_SIZE);
-      const cellIndex = idx % GRID_SIZE;
-      const gridUrl = hqUrls[gridIndex];
-
-      if (!gridUrl) return shot;
-      return {
-        ...shot,
-        storyboardGridUrl: gridUrl,
-        storyboardGridCellIndex: cellIndex,
-        // 🧹 清理九宫格生成任务元信息（已应用到 storyboardGridUrl，无需继续保留 taskCode）
-        storyboardGridGenerationMeta: undefined,
-      };
-    });
-
-    setShots(updatedShots);
-
-    // 保存到 D1（跨设备/跨成员可恢复）
-    if (!currentProject || currentEpisodeNumber === null) {
-      alert('⚠️ 未选择项目/剧集，已在本地应用草图映射，但无法保存到云端。');
-      return;
-    }
-
-    const currentEpisode = currentProject.episodes?.find(
-      ep => ep.episodeNumber === currentEpisodeNumber
-    );
-    if (!currentEpisode) {
-      alert('⚠️ 未找到当前剧集元信息，已在本地应用草图映射，但无法保存到云端。');
-      return;
-    }
-
-    setIsLoading(true);
-    setProgressMsg('正在将九宫格草图应用到分镜表并保存到云端...');
-    try {
-      if (currentEpisode.id) {
-        // 🔧 保存到云端（patchEpisode 内部会自动优化数据）
-        await patchEpisode(currentEpisode.id, {
-          shots: updatedShots,
-        });
-      } else {
-        // fallback：缺少 episodeId 时使用 saveEpisode（兼容旧数据/异常情况）
-        console.warn('[D1存储] 未找到 episodeId，使用 saveEpisode fallback');
-        await saveEpisode(currentProject.id, {
-          ...currentEpisode,
-          script: script || '',
-          shots: updatedShots,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-      setProgressMsg('✅ 九宫格草图已应用到分镜表，并已保存到云端。');
-
-      // 🆕 成功保存后自动跳转到故事板预览页面
-      setTimeout(() => {
-        setCurrentStep(AppStep.FINAL_STORYBOARD);
-      }, 500); // 延迟500ms，让用户看到成功提示
-    } catch (error) {
-      console.error('[D1存储] 保存九宫格草图映射失败:', error);
-
-      // 🔧 提供更详细的错误信息
-      let errorMsg = '❌ 已应用到本地分镜表，但保存到云端失败。';
-      if (error instanceof Error) {
-        if (error.message.includes('Load failed') || error.message.includes('Failed to fetch')) {
-          errorMsg += '\n\n可能原因：\n1. 网络连接问题\n2. 数据量过大（已自动优化，如仍失败请减少镜头数量）\n3. API 服务暂时不可用\n\n请查看浏览器控制台了解详细信息。';
-        } else if (error.message.includes('timeout')) {
-          errorMsg += '\n\n原因：请求超时（已延长至60秒），请检查网络连接。';
-        } else {
-          errorMsg += `\n\n错误详情：${error.message}`;
-        }
-      }
-
-      alert(errorMsg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const downloadImage = (url: string, filename: string) => {
     const link = document.createElement('a');
     link.download = filename;
@@ -3673,204 +2266,19 @@ const App: React.FC = () => {
   // ═══════════ 导出功能 ═══════════
 
   // 导出为JSON
-  const exportToJSON = () => {
-    const exportData = {
-      exportTime: new Date().toISOString(),
-      totalShots: shots.length,
-      shots: shots.map(shot => ({
-        shotNumber: shot.shotNumber,
-        duration: shot.duration,
-        shotType: shot.shotType,
-        storyBeat: shot.storyBeat,
-        dialogue: shot.dialogue,
-        // 🆕 导演意图与技术备注
-        directorNote: shot.directorNote,
-        technicalNote: shot.technicalNote,
-        // 视觉设计
-        shotSize: shot.shotSize,
-        angleDirection: shot.angleDirection,
-        angleHeight: shot.angleHeight,
-        dutchAngle: shot.dutchAngle,
-        foreground: shot.foreground,
-        midground: shot.midground,
-        background: shot.background,
-        lighting: shot.lighting,
-        cameraMove: shot.cameraMove,
-        cameraMoveDetail: shot.cameraMoveDetail,
-        motionPath: shot.motionPath,
-        startFrame: shot.startFrame,
-        endFrame: shot.endFrame,
-        promptCn: shot.promptCn,
-        promptEn: shot.promptEn,
-        endFramePromptCn: shot.endFramePromptCn,
-        endFramePromptEn: shot.endFramePromptEn,
-        videoPromptCn: shot.videoPromptCn,
-        videoPrompt: shot.videoPrompt,
-        theory: shot.theory
-      }))
-    };
-
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `分镜脚本_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.json`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const exportToJSON = () => utilsExportToJSON(shots);
 
   // 导出为CSV（Excel兼容）- 紧凑5列布局（不含提示词）
-  const exportToExcel = () => {
-    // CSV头部
-    const headers = ['#', '故事', '视觉设计', '首帧', '尾帧'];
-
-    // 转义CSV字段
-    const escapeCSV = (str: string | undefined) => {
-      if (!str) return '';
-      if (str.includes(',') || str.includes('\n') || str.includes('"')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
-    // 数据行
-    const rows = shots.map(shot => {
-      const isMotion = shot.shotType === '运动';
-
-      // 列1: # 编号·时长·类型（紧凑）
-      const col1 = `#${shot.shotNumber}·${shot.duration || '—'}·${shot.shotType || '静态'}`;
-
-      // 列2: 故事（节拍 + 对白/导演/备注，有内容才追加）
-      const col2Parts = [shot.storyBeat || ''];
-      if (shot.dialogue) col2Parts.push(`对白: ${shot.dialogue}`);
-      if (shot.directorNote) col2Parts.push(`导演: ${shot.directorNote}`);
-      if (shot.technicalNote) col2Parts.push(`备注: ${shot.technicalNote}`);
-      const col2 = col2Parts.filter(Boolean).join('\n');
-
-      // 列3: 视觉设计（紧凑，构图合并为一行）
-      const angleStr = [shot.angleDirection, shot.angleHeight, shot.dutchAngle].filter(Boolean).join('/');
-      const compositionStr = [
-        shot.foreground ? `FG:${shot.foreground}` : '',
-        shot.midground ? `MG:${shot.midground}` : '',
-        shot.background ? `BG:${shot.background}` : '',
-      ].filter(Boolean).join(' · ');
-      const col3Parts = [
-        `景:${shot.shotSize || '—'}`,
-        `角:${angleStr || '—'}`,
-        compositionStr || '',
-        `光:${shot.lighting || '—'}`,
-        `运:${shot.cameraMove || '—'}${shot.cameraMoveDetail ? `·${shot.cameraMoveDetail}` : ''}`,
-        isMotion && shot.motionPath ? `动线:${shot.motionPath}` : '',
-      ];
-      const col3 = col3Parts.filter(Boolean).join(' | ');
-
-      // 列4: 首帧
-      const col4 = shot.startFrame || (isMotion ? '—' : '');
-
-      // 列5: 尾帧
-      const col5 = shot.endFrame || (isMotion ? '—' : '');
-
-      return [
-        escapeCSV(col1),
-        escapeCSV(col2),
-        escapeCSV(col3),
-        escapeCSV(col4),
-        escapeCSV(col5)
-      ];
-    });
-
-    // 组合CSV内容（添加BOM以支持中文）
-    const BOM = '\uFEFF';
-    const csvContent = BOM + headers.join(',') + '\n' + rows.map(row => row.join(',')).join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `分镜脚本_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const exportToExcel = () => utilsExportToExcel(shots);
 
   // 🆕 导出提示词 - 中文版 CSV
-  const exportPromptsChineseCSV = () => {
-    const headers = ['#', '类型', '首帧中文提示词', '尾帧中文提示词', '视频提示词'];
-    const escapeCSV = (str: string | undefined) => {
-      if (!str) return '';
-      if (str.includes(',') || str.includes('\n') || str.includes('"')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-    const rows = shots.map(shot => [
-      escapeCSV(`#${shot.shotNumber}`),
-      escapeCSV(shot.shotType),
-      escapeCSV(shot.imagePromptCn),
-      escapeCSV(shot.endImagePromptCn),
-      escapeCSV(shot.videoGenPrompt)
-    ]);
-    const BOM = '\uFEFF';
-    const csvContent = BOM + headers.join(',') + '\n' + rows.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `AI提示词_中文版_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const exportPromptsChineseCSVHandler = () => exportPromptsChineseCSV(shots);
 
   // 🆕 导出提示词 - 英文版 CSV
-  const exportPromptsEnglishCSV = () => {
-    const headers = ['#', 'Type', 'Start Frame Prompt', 'End Frame Prompt', 'Video Prompt'];
-    const escapeCSV = (str: string | undefined) => {
-      if (!str) return '';
-      if (str.includes(',') || str.includes('\n') || str.includes('"')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-    const rows = shots.map(shot => [
-      escapeCSV(`#${shot.shotNumber}`),
-      escapeCSV(shot.shotType === '运动' ? 'Motion' : 'Static'),
-      escapeCSV(shot.imagePromptEn),
-      escapeCSV(shot.endImagePromptEn),
-      escapeCSV(shot.videoGenPrompt)
-    ]);
-    const BOM = '\uFEFF';
-    const csvContent = BOM + headers.join(',') + '\n' + rows.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `AI_Prompts_English_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const exportPromptsEnglishCSVHandler = () => exportPromptsEnglishCSV(shots);
 
   // 🆕 导出提示词专用 JSON（包含中英文）
-  const exportPromptsToJSON = () => {
-    const exportData = {
-      exportTime: new Date().toISOString(),
-      totalShots: shots.length,
-      prompts: shots.map(shot => ({
-        shotNumber: shot.shotNumber,
-        shotType: shot.shotType,
-        imagePromptCn: shot.imagePromptCn || '',
-        imagePromptEn: shot.imagePromptEn || '',
-        endImagePromptCn: shot.endImagePromptCn || '',
-        endImagePromptEn: shot.endImagePromptEn || '',
-        videoGenPrompt: shot.videoGenPrompt || ''
-      }))
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `AI提示词_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.json`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const exportPromptsToJSONHandler = () => exportPromptsToJSON(shots);
 
   // 🆕 渲染场景空间布局信息（表格顶部单独一行）
   const renderSceneSpaceHeader = () => {
@@ -4019,7 +2427,7 @@ const App: React.FC = () => {
                     {editable ? (
                       <div className="space-y-1.5">
                         <textarea className="w-full h-12 p-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-xs text-[var(--color-text-primary)] resize-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                          placeholder="故事节拍（人物+地点+事件+冲突）" value={shot.storyBeat || ''} onChange={(e) => updateShotField(shot.id, 'storyBeat', e.target.value)} />
+                          placeholder="故事节拍（人物+地点+事件+冲突）" value={typeof shot.storyBeat === 'string' ? shot.storyBeat : (shot.storyBeat ? JSON.stringify(shot.storyBeat) : '')} onChange={(e) => updateShotField(shot.id, 'storyBeat', e.target.value)} />
                         <textarea className="w-full h-8 p-1 bg-indigo-900/20 border border-indigo-700/50 rounded text-[10px] text-indigo-200 resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                           placeholder="对白/音效" value={shot.dialogue || ''} onChange={(e) => updateShotField(shot.id, 'dialogue', e.target.value)} />
                         <textarea className="w-full h-8 p-1 bg-purple-900/20 border border-purple-700/50 rounded text-[10px] text-purple-200 resize-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
@@ -4029,7 +2437,7 @@ const App: React.FC = () => {
                       </div>
                     ) : (
                       <div className="space-y-1.5">
-                        <div className="text-[var(--color-text-primary)] font-medium text-xs leading-relaxed">{shot.storyBeat}</div>
+                        <div className="text-[var(--color-text-primary)] font-medium text-xs leading-relaxed">{typeof shot.storyBeat === 'string' ? shot.storyBeat : JSON.stringify(shot.storyBeat)}</div>
                         {shot.dialogue && <div className="text-indigo-300 text-[10px] bg-indigo-900/30 px-1.5 py-1 rounded-md">💬 {shot.dialogue}</div>}
                         {shot.directorNote && (
                           <div className="text-purple-300 text-[9px] bg-purple-900/30 px-1.5 py-1 rounded-md border-l-2 border-purple-500">
@@ -4564,6 +2972,10 @@ const App: React.FC = () => {
                   chatScrollRef={chatScrollRef}
                   handleConsultDirector={handleConsultDirector}
                   handleExecuteChanges={handleExecuteChanges}
+                  reviewModel={reviewModel}
+                  setReviewModel={setReviewModel}
+                  editModel={editModel}
+                  setEditModel={setEditModel}
                   exportToJSON={exportToJSON}
                   exportToExcel={exportToExcel}
                   downloadScript={downloadScript}
@@ -4672,6 +3084,7 @@ const App: React.FC = () => {
                   scenes={currentProject?.scenes || []}
                   episodeNumber={currentEpisodeNumber}
                   projectName={currentProject?.name}
+                  setCurrentStep={setCurrentStep}
                   onBack={() => {
                     // 如果有视频提示词且没有九宫格图片，返回视频提取页
                     if (!shots.some(s => s.storyboardGridUrl) && shots.some(s => s.videoPromptCn)) {
@@ -4694,78 +3107,17 @@ const App: React.FC = () => {
             )}
 
             {/* 🆕 上传九宫格对话框 */}
-            {uploadDialogOpen && (
-              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
-                <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4 shadow-2xl">
-                  <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-4">
-                    📤 上传第 {uploadGridIndex !== null ? uploadGridIndex + 1 : ''} 张九宫格
-                  </h3>
-
-                  <div className="space-y-4">
-                    {/* URL输入 */}
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                        图片URL
-                      </label>
-                      <input
-                        type="text"
-                        value={uploadUrl}
-                        onChange={(e) => setUploadUrl(e.target.value)}
-                        placeholder="https://example.com/image.png"
-                        className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                      />
-                    </div>
-
-                    {/* 分隔线 */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-                      <span className="text-xs text-[var(--color-text-tertiary)]">或</span>
-                      <div className="flex-1 h-px bg-[var(--color-border)]"></div>
-                    </div>
-
-                    {/* 文件上传 */}
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                        上传本地图片
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                        className="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
-                      />
-                      {uploadFile && (
-                        <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
-                          已选择: {uploadFile.name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 按钮 */}
-                  <div className="flex gap-3 mt-6">
-                    <button
-                      onClick={() => {
-                        setUploadDialogOpen(false);
-                        setUploadGridIndex(null);
-                        setUploadUrl('');
-                        setUploadFile(null);
-                      }}
-                      className="flex-1 px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-lg font-medium hover:bg-[var(--color-surface-hover)] transition-all"
-                    >
-                      取消
-                    </button>
-                    <button
-                      onClick={handleUploadGrid}
-                      disabled={!uploadUrl.trim() && !uploadFile}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      确认上传
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <UploadGridModal
+              uploadDialogOpen={uploadDialogOpen}
+              setUploadDialogOpen={setUploadDialogOpen}
+              uploadGridIndex={uploadGridIndex}
+              setUploadGridIndex={setUploadGridIndex}
+              uploadUrl={uploadUrl}
+              setUploadUrl={setUploadUrl}
+              uploadFile={uploadFile}
+              setUploadFile={setUploadFile}
+              handleUploadGrid={handleUploadGrid}
+            />
           </>
         )}
       </div>

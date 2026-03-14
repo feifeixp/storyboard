@@ -1,9 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Download, RefreshCw, Layers, MapMap, Info, CheckCircle2 } from 'lucide-react';
 import { Shot, CharacterRef, VideoGroup, VideoGroupPrompt } from '../types';
 import { SceneRef } from '../types/project';
-import { generateStoryboardImage } from '../services/storyboardUtils';
-import { getGridCellUrl } from '../services/projectIntegration';
 
 /**
  * 提取角色的最佳展示图片（包含对多形态的向下兼容）
@@ -43,6 +40,7 @@ interface FinalStoryboardProps {
   scenes?: SceneRef[]; // 🆕 新增可选项：当前项目中的场景数据
   setCurrentStep: (step: number) => void;
   episodeNumber: number | null;
+  projectName?: string;
   episodeTitle?: string;
   script?: string;
   onBack: () => void; // Keep onBack as it's used in the component

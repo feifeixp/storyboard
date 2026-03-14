@@ -356,3 +356,56 @@ servers:
                     type: boolean
                   pdfUrl:
                     type: string
+  /api/v1/storyboard/generate-single-shot:
+    post:
+      summary: Generate Single Storyboard Shot
+      description: Generates a single storyboard illustration (16:9) without any grid or split panels. Recommended for individual shot regeneration. Blocks and waits for the image generation to complete.
+      operationId: generateSingleShot
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: JWT accessToken obtained from Login.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - shot
+              properties:
+                shot:
+                  type: object
+                  description: A single storyboard shot object detailing camera angles and scene content.
+                  properties:
+                    description:
+                      type: string
+                    cameraAngle:
+                      type: string
+                styleName:
+                  type: string
+                  description: Name of the visual style (e.g. "Rough Sketch")
+                styleSuffix:
+                  type: string
+                  description: Prompt tags for the art style
+                characterSection:
+                  type: string
+                  description: Prefix text defining the characters
+                sceneSection:
+                  type: string
+                  description: Prefix text defining the scenes
+      responses:
+        '200':
+          description: Image generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  imageUrl:
+                    type: string

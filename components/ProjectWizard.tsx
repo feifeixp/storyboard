@@ -45,7 +45,7 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<ProjectAnalysisResult | null>(null);
   const [analysisProgress, setAnalysisProgress] = useState(0);
-  const [selectedModel, setSelectedModel] = useState(MODELS.GEMINI_2_5_FLASH);
+  const [selectedModel, setSelectedModel] = useState<string>(MODELS.GEMINI_2_5_FLASH);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 🆕 提取模式和范围设置

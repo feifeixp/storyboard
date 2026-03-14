@@ -106,102 +106,102 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       if (pendingGenerations.characters.length > 0) {
         // 先清理消费掉的信号，避免循环
         clearPendingGenerations?.();
-        
+
         let confirmMsg = `接收到 ${pendingGenerations.characters.length} 个角色的生成请求。马上开始后台排队...\n\n注意：如果需要生成场景，请等待第一波角色任务开始后再处理。`;
         // 不显式确认，直接在UI反馈即可（已在上一页确认）
 
         const charsToGenerate = (project.characters || []).filter(c => pendingGenerations.characters.includes(c.id));
         if (charsToGenerate.length > 0) {
-           setIsBatchGeneratingCharacters(true);
-           setBatchCharacterProgress({ current: 0, total: charsToGenerate.length });
-           
-           // 直接服用 batchGenerate 的 while 循环逻辑
-           const CONCURRENCY_LIMIT = 4;
-           let completedTasks = 0;
-           const pendingChars = [...charsToGenerate];
-           const runningChars = new Set<string>();
+          setIsBatchGeneratingCharacters(true);
+          setBatchCharacterProgress({ current: 0, total: charsToGenerate.length });
 
-           const processChar = async (charId: string, charName: string) => {
-             try {
-               await handleGenerateCharacterImageSheet(charId, true);
-               await new Promise(resolve => setTimeout(resolve, 1000));
-             } catch (error) {
-               console.error(`自动生成角色 ${charName} 失败:`, error);
-             } finally {
-               runningChars.delete(charId);
-               completedTasks++;
-               setBatchCharacterProgress({ current: completedTasks, total: charsToGenerate.length });
-             }
-           };
+          // 直接服用 batchGenerate 的 while 循环逻辑
+          const CONCURRENCY_LIMIT = 4;
+          let completedTasks = 0;
+          const pendingChars = [...charsToGenerate];
+          const runningChars = new Set<string>();
 
-           while (pendingChars.length > 0 || runningChars.size > 0) {
-             while (
-               pendingChars.length > 0 &&
-               runningChars.size < CONCURRENCY_LIMIT &&
-               (generatingIds.size + generatingSceneIds.size) < 4
-             ) {
-               const char = pendingChars.shift()!;
-               runningChars.add(char.id);
-               processChar(char.id, char.name).catch(console.error);
-             }
-             if (runningChars.size > 0) {
-               await new Promise(resolve => setTimeout(resolve, 500));
-             }
-           }
-           setIsBatchGeneratingCharacters(false);
-           setBatchCharacterProgress(null);
+          const processChar = async (charId: string, charName: string) => {
+            try {
+              await handleGenerateCharacterImageSheet(charId, true);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (error) {
+              console.error(`自动生成角色 ${charName} 失败:`, error);
+            } finally {
+              runningChars.delete(charId);
+              completedTasks++;
+              setBatchCharacterProgress({ current: completedTasks, total: charsToGenerate.length });
+            }
+          };
+
+          while (pendingChars.length > 0 || runningChars.size > 0) {
+            while (
+              pendingChars.length > 0 &&
+              runningChars.size < CONCURRENCY_LIMIT &&
+              (generatingIds.size + generatingSceneIds.size) < 4
+            ) {
+              const char = pendingChars.shift()!;
+              runningChars.add(char.id);
+              processChar(char.id, char.name).catch(console.error);
+            }
+            if (runningChars.size > 0) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+          setIsBatchGeneratingCharacters(false);
+          setBatchCharacterProgress(null);
         }
       }
 
       // 处理场景
       if (pendingGenerations.scenes.length > 0) {
         clearPendingGenerations?.();
-        
+
         const scenesToGenerate = (project.scenes || []).filter(s => pendingGenerations.scenes.includes(s.id));
         if (scenesToGenerate.length > 0) {
-           setIsBatchGeneratingScenes(true);
-           setBatchSceneProgress({ current: 0, total: scenesToGenerate.length });
-           
-           const CONCURRENCY_LIMIT = 4;
-           let completedTasks = 0;
-           const pendingScenes = [...scenesToGenerate];
-           const runningScenes = new Set<string>();
+          setIsBatchGeneratingScenes(true);
+          setBatchSceneProgress({ current: 0, total: scenesToGenerate.length });
 
-           const processScene = async (sceneId: string, sceneName: string) => {
-             try {
-               await handleGenerateSceneImageSheet(sceneId, true);
-               await new Promise(resolve => setTimeout(resolve, 1000));
-             } catch (error) {
-               console.error(`自动生成场景 ${sceneName} 失败:`, error);
-             } finally {
-               runningScenes.delete(sceneId);
-               completedTasks++;
-               setBatchSceneProgress({ current: completedTasks, total: scenesToGenerate.length });
-             }
-           };
+          const CONCURRENCY_LIMIT = 4;
+          let completedTasks = 0;
+          const pendingScenes = [...scenesToGenerate];
+          const runningScenes = new Set<string>();
 
-           while (pendingScenes.length > 0 || runningScenes.size > 0) {
-             while (
-               pendingScenes.length > 0 &&
-               runningScenes.size < CONCURRENCY_LIMIT &&
-               (generatingIds.size + generatingSceneIds.size) < 4
-             ) {
-               const scene = pendingScenes.shift()!;
-               runningScenes.add(scene.id);
-               processScene(scene.id, scene.name).catch(console.error);
-             }
-             if (runningScenes.size > 0) {
-               await new Promise(resolve => setTimeout(resolve, 500));
-             }
-           }
-           setIsBatchGeneratingScenes(false);
-           setBatchSceneProgress(null);
+          const processScene = async (sceneId: string, sceneName: string) => {
+            try {
+              await handleGenerateSceneImageSheet(sceneId, true);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (error) {
+              console.error(`自动生成场景 ${sceneName} 失败:`, error);
+            } finally {
+              runningScenes.delete(sceneId);
+              completedTasks++;
+              setBatchSceneProgress({ current: completedTasks, total: scenesToGenerate.length });
+            }
+          };
+
+          while (pendingScenes.length > 0 || runningScenes.size > 0) {
+            while (
+              pendingScenes.length > 0 &&
+              runningScenes.size < CONCURRENCY_LIMIT &&
+              (generatingIds.size + generatingSceneIds.size) < 4
+            ) {
+              const scene = pendingScenes.shift()!;
+              runningScenes.add(scene.id);
+              processScene(scene.id, scene.name).catch(console.error);
+            }
+            if (runningScenes.size > 0) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+          setIsBatchGeneratingScenes(false);
+          setBatchSceneProgress(null);
         }
       }
     };
 
     if (pendingGenerations.characters.length > 0 || pendingGenerations.scenes.length > 0) {
-        processPendingAssets();
+      processPendingAssets();
     }
   }, [pendingGenerations]);
 
@@ -745,7 +745,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       setIsAnalyzingImage(true);
       const blob = await getCroppedImg(imgRef.current, completedCrop);
       const file = new File([blob], `avatar_crop_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      
+
       const ossPath = generateOSSPath(
         project.id,
         `character_${character.id}_avatar_crop_${Date.now()}`,
@@ -776,7 +776,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       setUploadingCharacterId(null);
       setSelectedGalleryImage(null);
       setCompletedCrop(null);
-      
+
       alert('✅ 头像裁剪并保存成功！');
     } catch (e: any) {
       console.error('裁剪头像失败:', e);
@@ -1026,12 +1026,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
     // 并发处理任务
     while (pendingTasks.length > 0 || runningTasks.size > 0) {
-        // 全局并发控制：包括场景并发和角色并发不能超过4个
-        while (
-          pendingTasks.length > 0 && 
-          runningTasks.size < CONCURRENCY_LIMIT && 
-          (generatingIds.size + generatingSceneIds.size + runningTasks.size) < 4
-        ) {
+      // 全局并发控制：包括场景并发和角色并发不能超过4个
+      while (
+        pendingTasks.length > 0 &&
+        runningTasks.size < CONCURRENCY_LIMIT &&
+        (generatingIds.size + generatingSceneIds.size + runningTasks.size) < 4
+      ) {
         const task = pendingTasks.shift()!;
         // 如果是子形象且主形象还未开始，暂时跳过
         if (dependsOnMainForm(task)) {
@@ -2215,11 +2215,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                       ) : (
                         <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                           {galleryImages.map((img, i) => (
-                            <img 
-                              key={i} 
-                              src={img} 
-                              alt={`Gallery Reference ${i}`} 
-                              className="w-full object-cover rounded-lg cursor-pointer hover:ring-2 hover:ring-[var(--color-primary)] transition-all shadow-md" 
+                            <img
+                              key={i}
+                              src={img}
+                              alt={`Gallery Reference ${i}`}
+                              className="w-full object-cover rounded-lg cursor-pointer hover:ring-2 hover:ring-[var(--color-primary)] transition-all shadow-md"
                               onClick={() => setSelectedGalleryImage(img)}
                             />
                           ))}
@@ -2242,14 +2242,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="text-sm font-medium text-[var(--color-text-secondary)]">拖动选取头像区域</h4>
-                        <button 
-                          onClick={() => { setSelectedGalleryImage(null); setCompletedCrop(null); }} 
+                        <button
+                          onClick={() => { setSelectedGalleryImage(null); setCompletedCrop(null); }}
                           className="text-sm font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors"
                         >
                           重新选择图片
                         </button>
                       </div>
-                      
+
                       <div className="bg-black/30 rounded-xl overflow-hidden flex items-center justify-center p-4 mb-4 border border-[var(--color-border)]">
                         <ReactCrop
                           crop={crop}
@@ -2259,16 +2259,16 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                           circularCrop
                           className="max-h-[50vh]"
                         >
-                          <img 
+                          <img
                             ref={imgRef}
-                            src={selectedGalleryImage} 
+                            src={selectedGalleryImage}
                             alt="Crop source"
                             style={{ maxHeight: '50vh', objectFit: 'contain' }}
                             crossOrigin="anonymous"
                           />
                         </ReactCrop>
                       </div>
-                      
+
                       {/* Buttons */}
                       <div className="flex gap-3 mt-4">
                         <button

@@ -2517,6 +2517,167 @@ export async function generateMergedStoryboardSheet(
  * @param projectId 项目 ID，用于上传到 OSS
  * @returns 生成的图片URL，失败返回null
  */
+
+/**
+ * 🆕 生成单张独立的分镜图片
+ * @param shot 单个镜头对象
+ * @param characterRefs 角色参考图列表
+ * @param imageModel 图像生成模型
+ * @param style 分镜风格
+ * @param episodeNumber 当前集数
+ * @param scenes 场景库
+ * @param artStyleType 美术风格类型
+ * @param onTaskCreated 任务创建回调（用于保存taskCode以便恢复）
+ * @returns 生成的图片URL，失败返回null
+ */
+export async function generateSingleShotImage(
+  shot: Shot,
+  characterRefs: CharacterRef[],
+  imageModel: string = DEFAULT_NEODOMAIN_IMAGE_MODEL,
+  style?: StoryboardStyle,
+  episodeNumber?: number,
+  scenes?: SceneRef[],
+  artStyleType?: ArtStyleType,
+  onTaskCreated?: (taskCode: string) => void | Promise<void>
+): Promise<string | null> {
+  const styleName = style?.name || '粗略线稿';
+  const styleSuffix = style?.promptSuffix || 'rough sketch, black and white, storyboard style';
+
+  // 1. 获取模型配置
+  const { generateImage, pollGenerationResult, TaskStatus, getModelsByScenario, ScenarioType } = await import('./aiImageGeneration');
+
+  let availableModels: import('./aiImageGeneration').ImageGenerationModel[] = [];
+  try {
+    availableModels = await getModelsByScenario(ScenarioType.STORYBOARD);
+  } catch (error) {
+    throw new Error('无法获取可用模型列表，请稍后重试');
+  }
+
+  const PRIMARY_MODEL_KEYWORDS = ['nano', 'banana', 'pro'];
+  const FALLBACK_MODEL_KEYWORDS = ['seedream'];
+  const findModelByKeywords = (keywords: string[]) => {
+    return availableModels.find(m => {
+      const displayNameLower = m.model_display_name.toLowerCase();
+      const modelNameLower = m.model_name.toLowerCase();
+      return keywords.every(keyword =>
+        displayNameLower.includes(keyword.toLowerCase()) ||
+        modelNameLower.includes(keyword.toLowerCase())
+      );
+    });
+  };
+
+  const requestedModel = imageModel ? availableModels.find(m => m.model_name === imageModel) : null;
+  const primaryModel = findModelByKeywords(PRIMARY_MODEL_KEYWORDS);
+  const fallbackModel = findModelByKeywords(FALLBACK_MODEL_KEYWORDS);
+  const preferredModel = requestedModel || primaryModel || fallbackModel;
+
+  if (!preferredModel) {
+    throw new Error('未找到可用的生图模型');
+  }
+
+  const effectiveModel = preferredModel.model_name;
+  console.log(`[OpenRouter] 生成单张分镜, 模型: ${effectiveModel}, 风格: ${styleName}`);
+
+  // 2. 构建场景与美术约束
+  const sceneSection = scenes ? buildSceneDescriptionsForPrompt(scenes, episodeNumber) : '';
+  const artStyleSection = artStyleType ? getArtStyleConstraints(artStyleType) : '';
+
+  // 3. 构建角色参考图
+  const involvedCharacterIds = new Set<string>();
+  if (shot.assignedCharacterIds && shot.assignedCharacterIds.length > 0) {
+    shot.assignedCharacterIds.forEach(id => involvedCharacterIds.add(id));
+  } else {
+    const eventText = typeof shot.storyBeat === 'string' ? shot.storyBeat : shot.storyBeat?.event || '';
+    const searchText = `${shot.imagePromptCn || ''} ${eventText}`;
+    characterRefs.forEach(c => {
+      if (searchText.includes(c.name) || (shot.imagePromptCn && shot.imagePromptCn.includes(`@${c.name}`))) {
+        involvedCharacterIds.add(c.id);
+      }
+    });
+  }
+
+  const allCharacterRefImages = getCharacterReferenceImagesForEpisode(characterRefs, episodeNumber);
+  const filteredCharacterRefs = allCharacterRefImages.filter(ref => {
+    const character = characterRefs.find(c => c.name === ref.name);
+    return character && involvedCharacterIds.has(character.id);
+  });
+
+  const maxRefImages = preferredModel.max_reference_images || 0;
+  const limitedRefImages = maxRefImages > 0 ? filteredCharacterRefs.slice(0, maxRefImages) : filteredCharacterRefs;
+  const referenceImageUrls = limitedRefImages.map(r => r.imageUrl);
+
+  // 4. 构建单图描述 (复用九宫格相同的角度解析逻辑)
+  let angleInstruction = '';
+  const heightCn = shot.angleHeight || '';
+  const directionCn = shot.angleDirection || '';
+  
+  if (heightCn || directionCn) {
+     const heightEn = heightCn.match(/\(([^)]+)\)/)?.[1] || '';
+     const directionEn = directionCn.match(/\(([^)]+)\)/)?.[1] || '';
+     angleInstruction = [heightEn, directionEn].filter(Boolean).join('; ');
+  }
+  
+  const shotDesc = shot.shotType === '运动' 
+    ? `Left half (start frame): ${shot.imagePromptEn || shot.startFrame || 'scene start'}\nRight half (end frame): ${shot.endImagePromptEn || shot.endFrame || shot.imagePromptEn}`
+    : `Scene content: ${shot.imagePromptEn || shot.promptEn || shot.promptCn || 'empty scene'}`;
+
+  // 5. 构建角色描述文本
+  const characterDescriptions = buildCharacterDescriptionsForEpisode(characterRefs, episodeNumber);
+  const characterSection = characterDescriptions.length > 0
+    ? `【角色设定】\n${characterDescriptions.map(c => `• ${c.name}：${c.appearance || '保持外观一致'}`).join('\n')}`
+    : '';
+
+  const singleShotPrompt = `Create a professional storyboard illustration for a single shot/scene.
+
+LAYOUT
+- Draw exactly ONE full-canvas illustration.
+- Do NOT draw any grids, panels, numbers, text, or borders.
+- Fill the entire canvas edge-to-edge.
+
+SCENE DETAILS
+${angleInstruction ? `[CAMERA: ${angleInstruction}] MUST draw from this angle!
+` : ''}${shotDesc}
+
+STYLE INSTRUCTIONS
+- Style: ${styleName} (${styleSuffix})
+${artStyleSection ? '\n' + artStyleSection : ''}
+
+${characterSection}
+${sceneSection}`;
+
+  // 6. 调用 API
+  const task = await generateImage({
+    prompt: singleShotPrompt,
+    negativePrompt: 'blurry, low quality, watermark, signature, multi-panel, grid, borders, text, typography, letters, numbers, digits, caption, split screen',
+    modelName: effectiveModel,
+    imageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+    numImages: '1',
+    aspectRatio: '16:9',
+    size: '2K',
+    outputFormat: 'jpeg',
+    guidanceScale: 7.5,
+    showPrompt: false,
+  });
+
+  if (onTaskCreated) {
+    try { await Promise.resolve(onTaskCreated(task.task_code)); } catch (err) { }
+  }
+
+  // 7. 轮询结果
+  const result = await pollGenerationResult(task.task_code);
+  const tempImageUrl = (result.status === TaskStatus.SUCCESS && result.image_urls && result.image_urls.length > 0)
+    ? result.image_urls[0]
+    : null;
+
+  if (tempImageUrl) {
+    console.log(`[OpenRouter] ✅ 单张分镜生成成功: ${tempImageUrl}`);
+    return tempImageUrl;
+  } else {
+    console.warn(`[OpenRouter] ❌ 单张分镜生成失败`);
+    return null;
+  }
+}
+
 export async function generateSingleGrid(
   gridIndex: number,
   shots: Shot[],

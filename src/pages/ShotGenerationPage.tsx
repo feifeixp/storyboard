@@ -44,7 +44,7 @@ interface ShotGenerationPageProps {
   getSelectedSuggestionsCount: () => number;
   selectAllSuggestions: () => void;
   deselectAllSuggestions: () => void;
-  toggleSuggestionSelection: (shotNumber: number) => void;
+  toggleSuggestionSelection: (shotNumber: string) => void;
 
   // 精修相关
   chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>;

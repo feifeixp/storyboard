@@ -12,7 +12,7 @@ export interface CharacterForm {
   visualPromptEn?: string;   // 英文视觉提示词
 
   // 🆕 形态变化类型（来自 FormSummary）
-  changeType?: 'costume' | 'makeup' | 'damage' | 'transformation';
+  changeType?: 'costume' | 'makeup' | 'damage' | 'transformation' | 'age' | 'other';
   // 🆕 变化差异描述（相对于基础形态的差异）
   delta?: string;
   // 🆕 优先级（数字越小越靠前）
@@ -384,6 +384,10 @@ export interface ScriptCleaningResult {
 
   // 剧情节拍权重
   sceneWeights: SceneWeight[];
+
+  // 🆕 解析信息
+  parseError?: boolean;
+  rawOutput?: string;
 }
 
 export interface CleanedScene {
