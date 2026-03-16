@@ -1775,7 +1775,11 @@ export async function* extractImagePromptsStream(
 
   let fullText = '';
   for await (const chunk of stream) {
-    yield fullText;
+    const content = chunk.choices[0]?.delta?.content;
+    if (content) {
+      fullText += content;
+      yield fullText;
+    }
   }
 }
 
