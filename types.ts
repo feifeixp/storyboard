@@ -342,6 +342,7 @@ export interface Shot {
 
   // ═══════════ 🆕 视频生成结果 ═══════════
   videoUrl?: string;        // 最终生成的视频URL
+  errorMessage?: string;    // 🆕 记录失败原因与请求ID
   videoGenerationMeta?: {   // 视频生成元信息
     taskCode: string;
     taskCreatedAt: string;

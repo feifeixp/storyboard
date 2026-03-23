@@ -80,7 +80,8 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to create video task: ${response.status} ${errorText}`);
+    const reqId = response.headers.get('x-request-id') || 'unknown';
+    throw new Error(`Failed to create video task: ${response.status} ${errorText} (ReqID: ${reqId})`);
   }
 
   const result: VideoGenerationResponse = await response.json();
@@ -115,7 +116,7 @@ export async function getVideoTaskResult(taskId: string): Promise<VideoTaskResul
 export async function pollVideoTask(
   taskId: string,
   onProgress?: (status: string, attempt: number) => void,
-  maxTimeoutMs = 600000 // default 10 mins 
+  maxTimeoutMs = 1800000 // default 30 mins 
 ): Promise<VideoTaskResult> {
   const startTime = Date.now();
   let attempt = 0;

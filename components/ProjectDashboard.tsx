@@ -22,6 +22,7 @@ import { analyzeCharacterImage, mergeAnalysisToCharacter } from '../services/cha
 import mammoth from 'mammoth';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import { AssetManager } from './AssetManager';
 
 interface ProjectDashboardProps {
   project: Project;
@@ -1709,10 +1710,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // 渲染项目概览 - Neodomain 设计
   const renderOverview = () => (
     <div className="space-y-5">
-      {/* 顶部行：基础信息 + 分卷 */}
+      {/* 顶部行：基础信息 + 资产池 */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* 基础信息 + 角色卡/场景卡按钮 */}
-        <div className="glass-card rounded-xl p-5">
+        <div className="glass-card rounded-xl p-5 lg:col-span-1">
           <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3">📋 项目信息</h3>
           <div className="space-y-2 text-[13px]">
             {project.settings?.mediaType && (
@@ -1742,26 +1743,31 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           </div>
         </div>
 
-        {/* 分卷结构 - 横向展示 */}
-        {project.volumes && project.volumes.length > 0 && (
-          <div className="glass-card rounded-xl p-5 lg:col-span-3">
-            <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3">📖 分卷 ({project.volumes.length})</h3>
-            <div className="flex flex-wrap gap-3">
-              {project.volumes.map((vol) => (
-                <div
-                  key={vol.id}
-                  className="flex items-center gap-2 text-[13px] border-l-2 pl-3 bg-[var(--color-surface)] rounded-r pr-3 py-2"
-                  style={{ borderColor: vol.color || 'var(--color-accent-green)' }}
-                >
-                  <span className="text-[var(--color-text)] font-medium">V{vol.volumeNumber}</span>
-                  <span className="text-[var(--color-text-tertiary)]">Ep{vol.episodeRange[0]}-{vol.episodeRange[1]}</span>
-                  <span className="text-[var(--color-text-secondary)]">{vol.title}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* 🆕 资产管理区 - 在项目信息右侧展示 */}
+        <div className="lg:col-span-3">
+          <AssetManager project={project} />
+        </div>
       </div>
+
+      {/* 分卷结构 - 横向展示 (移至下方) */}
+      {project.volumes && project.volumes.length > 0 && (
+        <div className="glass-card rounded-xl p-5">
+          <h3 className="text-[15px] font-semibold text-[var(--color-text)] mb-3">📖 分卷 ({project.volumes.length})</h3>
+          <div className="flex flex-wrap gap-3">
+            {project.volumes.map((vol) => (
+              <div
+                key={vol.id}
+                className="flex items-center gap-2 text-[13px] border-l-2 pl-3 bg-[var(--color-surface)] rounded-r pr-3 py-2"
+                style={{ borderColor: vol.color || 'var(--color-accent-green)' }}
+              >
+                <span className="text-[var(--color-text)] font-medium">V{vol.volumeNumber}</span>
+                <span className="text-[var(--color-text-tertiary)]">Ep{vol.episodeRange[0]}-{vol.episodeRange[1]}</span>
+                <span className="text-[var(--color-text-secondary)]">{vol.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 世界观 - 全宽展开 */}
       <div className="glass-card rounded-xl p-5">

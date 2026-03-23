@@ -31,7 +31,8 @@ import {
   getShotStoryBeat,
 } from '../src/utils/videoGrouping';
 import { createVideoTask, pollVideoTask, VideoTaskStatus, VideoContentItem } from '../src/services/aiVideoGeneration';
-import { uploadToOSS, generateOSSPath } from '../services/oss'; // 🆕 新增 OSS 上传
+import { uploadToOSS, generateOSSPath } from '../services/oss';
+import { downloadFile } from '../src/utils/download'; // 🆕 直接下载工具 // 🆕 新增 OSS 上传
 // 静态导入（避免动态 import chunk 在 Cloudflare Pages 部署时因 MIME 类型错误导致加载失败）
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -81,6 +82,7 @@ export function FinalStoryboard({
   const [generatingGroupIds, setGeneratingGroupIds] = useState<Set<string>>(new Set());
   const [uploadingRefGroupId, setUploadingRefGroupId] = useState<string | null>(null);
   const [isBatchMode, setIsBatchMode] = useState(false); // 🆕 智能并行批量模式
+  const [videoModel, setVideoModel] = useState<'doubao-seedance-2-0-260128' | 'doubao-seedance-2-0-fast-260128'>('doubao-seedance-2-0-260128'); // 🆕 模型选择
 
   // 批量生成处理器已经移到下方
 
@@ -219,9 +221,9 @@ export function FinalStoryboard({
     return content;
   };
 
-  const updateGroupStatus = (group: VideoGroup, status: 'generating' | 'error' | 'completed' | 'pending') => {
+  const updateGroupStatus = (group: VideoGroup, status: 'generating' | 'error' | 'completed' | 'pending', errorMessage?: string) => {
     const shotIds = new Set(group.shots.map(s => s.shot.id));
-    setShots(latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, status } : s));
+    setShots(latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, status, errorMessage } : s));
   };
 
   const updateGroupMeta = (group: VideoGroup, meta: any) => {
@@ -345,7 +347,7 @@ export function FinalStoryboard({
     updateGroupStatus(group, 'generating');
 
     try {
-      const model = 'doubao-seedance-2-0-260128';
+      const model = videoModel;
       const contentList = extractContentList(promptText);
 
       // 0. 注入分镜草图参考（九宫格）
@@ -435,7 +437,7 @@ export function FinalStoryboard({
       }
     } catch (err: any) {
         console.error('视频生成异常:', err);
-        updateGroupStatus(group, 'error');
+        updateGroupStatus(group, 'error', err.message);
         alert(`分组 ${group.groupName} 生成失败：${err.message}`);
     } finally {
         setGeneratingGroupIds(prev => {
@@ -877,29 +879,43 @@ export function FinalStoryboard({
               {/* 🆕 一键并行批量生成按钮 (仅在分组模式下显示) */}
             {viewMode === 'grouped' && (() => {
                const ungeneratedCount = videoGroups.filter(g => !g.shots[0]?.shot?.videoUrl).length;
-               const estimatedMins = Math.ceil(ungeneratedCount / CONCURRENCY_LIMIT) * 1.5;
+               const estimatedMins = Math.ceil(ungeneratedCount / CONCURRENCY_LIMIT) * (videoModel.includes('fast') ? 1.0 : 1.5);
                
                return (
-                 <button
-                   onClick={() => {
-                     if (isBatchMode) {
-                       setIsBatchMode(false);
-                     } else {
-                       if (ungeneratedCount === 0) {
-                         alert('所有分组均已生成视频！');
-                         return;
+                 <div className="flex items-center gap-2 ml-2">
+                   {/* 🆕 模型选择下拉 */}
+                   <select
+                     value={videoModel}
+                     onChange={(e) => setVideoModel(e.target.value as any)}
+                     disabled={isBatchMode}
+                     className="bg-black/60 border border-white/20 text-white text-sm rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-colors"
+                     title="选择视频生成模型 (Fast 模型生成更快但质量稍逊)"
+                   >
+                     <option value="doubao-seedance-2-0-260128">Normal (画质优先)</option>
+                     <option value="doubao-seedance-2-0-fast-260128">Fast (速度优先)</option>
+                   </select>
+
+                   <button
+                     onClick={() => {
+                       if (isBatchMode) {
+                         setIsBatchMode(false);
+                       } else {
+                         if (ungeneratedCount === 0) {
+                           alert('所有分组均已生成视频！');
+                           return;
+                         }
+                         setIsBatchMode(true);
                        }
-                       setIsBatchMode(true);
-                     }
-                   }}
-                   className={`ml-2 px-4 py-2 text-sm font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg border ${isBatchMode ? 'bg-red-500/20 text-red-500 border-red-500/30 hover:bg-red-500/30' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-400/30 hover:shadow-orange-500/25 h-10'}`}
-                 >
-                   {isBatchMode ? (
-                     <>⏹ 停止智能批量任务 (剩 {ungeneratedCount} 组)</>
-                   ) : (
-                     <>🚀 批量智能生成 (约 {estimatedMins.toFixed(1)} 分钟)</>
-                   )}
-                 </button>
+                     }}
+                     className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 shadow-lg border ${isBatchMode ? 'bg-red-500/20 text-red-500 border-red-500/30 hover:bg-red-500/30' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-400/30 hover:shadow-orange-500/25 h-[38px]'}`}
+                   >
+                     {isBatchMode ? (
+                       <>⏹ 停止智能批量任务 (剩 {ungeneratedCount} 组)</>
+                     ) : (
+                       <>🚀 批量智能生成 (约 {estimatedMins.toFixed(1)} 分）</>
+                     )}
+                   </button>
+                 </div>
                );
             })()}
             </div>
@@ -1354,15 +1370,33 @@ function VideoGroupCard({
         <div className={`flex-1 w-full flex flex-col gap-6`}>
           {group.shots[0]?.shot?.videoUrl && (
             <div className="w-full flex flex-col rounded-2xl overflow-hidden border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] bg-black/50 relative flex-shrink-0 animate-fadeIn">
-              <div className="w-full aspect-video relative bg-black">
+              <div className="w-full aspect-video relative bg-black group/video">
                 <video 
                   src={group.shots[0].shot.videoUrl} 
                   autoPlay 
                   controls 
                   className="absolute inset-0 w-full h-full object-contain"
                 />
+                <button
+                  onClick={() => downloadFile(group.shots[0].shot.videoUrl!, `${group.groupName.replace(/\s+/g, '_')}.mp4`)}
+                  className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white p-2.5 rounded-full opacity-0 group-hover/video:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm border border-white/20 shadow-lg"
+                  title="下载该视频"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                </button>
               </div>
               
+              {/* 显示失败信息 */}
+              {group.shots[0].shot.status === 'error' && group.shots[0].shot.errorMessage && (
+                <div className="bg-red-900/30 border-t border-red-900 px-4 py-3 text-red-400 text-xs font-mono break-words whitespace-pre-wrap flex items-start gap-2">
+                   <div className="mt-0.5">⚠️</div>
+                   <div className="flex-1">
+                      <div className="font-semibold mb-1">生成失败或已超时停滞</div>
+                      <div>{group.shots[0].shot.errorMessage}</div>
+                   </div>
+                </div>
+              )}
+
               {/* 🆕 视频生成参数与多模态参考折叠面板 */}
               {group.shots[0].shot.videoGenerationMeta && (
                 <details className="group/details bg-[#161824] border-t border-white/5">
