@@ -241,11 +241,14 @@ export function FinalStoryboard({
     setShots(latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, videoGenerationMeta: meta } : s));
   };
 
-  const updateGroupComplete = (group: VideoGroup, videoUrl: string) => {
+  const updateGroupComplete = (group: VideoGroup, videoUrl: string, taskCompletedAt?: string, taskDurationMs?: number) => {
      const shotIds = new Set(group.shots.map(s => s.shot.id));
      const nextShots = latestShotsRef.current.map(s => {
        if (shotIds.has(s.id)) {
-         return { ...s, status: 'completed' as const, videoUrl };
+         const newMeta = s.videoGenerationMeta 
+           ? { ...s.videoGenerationMeta, taskCompletedAt, taskDurationMs } 
+           : s.videoGenerationMeta;
+         return { ...s, status: 'completed' as const, videoUrl, videoGenerationMeta: newMeta };
        }
        return s;
      });
@@ -451,9 +454,10 @@ export function FinalStoryboard({
         duration: targetDuration,
       });
 
+      const taskCreatedAt = new Date().toISOString();
       updateGroupMeta(group, {
         taskCode: res.id,
-        taskCreatedAt: new Date().toISOString(),
+        taskCreatedAt,
         model,
         duration: targetDuration,
         contentList, // 🆕 将生成时所用的完整输入记录下来
@@ -461,8 +465,11 @@ export function FinalStoryboard({
 
       const finalResult = await pollVideoTask(res.id);
 
+      const taskCompletedAt = new Date().toISOString();
+      const taskDurationMs = new Date(taskCompletedAt).getTime() - new Date(taskCreatedAt).getTime();
+
       if (finalResult.status === VideoTaskStatus.SUCCEEDED && finalResult.content?.video_url) {
-        updateGroupComplete(group, finalResult.content.video_url);
+        updateGroupComplete(group, finalResult.content.video_url, taskCompletedAt, taskDurationMs);
       } else {
         throw new Error(finalResult.error?.message || '视频生成失败');
       }
@@ -1439,11 +1446,19 @@ function VideoGroupCard({
                      <span className="text-xs text-gray-600 font-mono">Task ID: {group.shots[0].shot.videoGenerationMeta.taskCode}</span>
                   </summary>
                   <div className="p-4 pt-1 border-t border-white/5 bg-[#0b0d14]/50 flex flex-col gap-4 text-xs text-gray-300">
-                    <div className="flex gap-4">
+                    <div className="flex flex-wrap gap-4">
                       <span><strong>模型:</strong> {group.shots[0].shot.videoGenerationMeta.model}</span>
                       <span><strong>指定时长:</strong> {group.shots[0].shot.videoGenerationMeta.duration}s</span>
-                      <span><strong>时间:</strong> {new Date(group.shots[0].shot.videoGenerationMeta.taskCreatedAt).toLocaleString()}</span>
+                      <span><strong>提交时间:</strong> {new Date(group.shots[0].shot.videoGenerationMeta.taskCreatedAt).toLocaleString()}</span>
                     </div>
+                    {group.shots[0].shot.videoGenerationMeta.taskCompletedAt && (
+                      <div className="flex flex-wrap gap-4 text-emerald-300">
+                        <span><strong>完成时间:</strong> {new Date(group.shots[0].shot.videoGenerationMeta.taskCompletedAt).toLocaleString()}</span>
+                        {group.shots[0].shot.videoGenerationMeta.taskDurationMs && (
+                          <span><strong>花费时长:</strong> {Math.round(group.shots[0].shot.videoGenerationMeta.taskDurationMs / 1000)}s</span>
+                        )}
+                      </div>
+                    )}
                     {group.shots[0].shot.videoGenerationMeta.contentList && (
                       <div className="flex flex-col gap-2">
                         <strong className="text-gray-500 uppercase tracking-wider">提交的完整多模态混合提示词:</strong>

@@ -347,6 +347,8 @@ export interface Shot {
   videoGenerationMeta?: {   // 视频生成元信息
     taskCode: string;
     taskCreatedAt: string;
+    taskCompletedAt?: string; // 🆕 任务完成时间
+    taskDurationMs?: number;  // 🆕 任务花费总时长（毫秒）
     model: string;
     duration: number;
     contentList?: any[];    // 🆕 记录当时生成时传递的多模态图文数组
