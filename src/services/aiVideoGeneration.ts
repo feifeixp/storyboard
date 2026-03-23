@@ -53,8 +53,8 @@ const getProxyBaseUrl = () => {
             return import.meta.env.VITE_WORKER_URL;
         }
     }
-    // 假设在本地或部署后 worker 与前端同一域名
-    return '';
+    // Fallback to production worker URL if env is missing
+    return 'https://storyboard.neodomain.ai';
 };
 
 /**
