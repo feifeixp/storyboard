@@ -337,6 +337,7 @@ export interface Shot {
 
   // ═══════════ 关联与状态 ═══════════
   assignedCharacterIds?: string[]; // 关联的角色ID
+  selectedCharacterForms?: Record<string, string>; // 🆕 角色ID -> 子形态ID映射（用于视频生成参考图覆盖）
   startFrameUrl?: string;   // 生成的首帧图片URL
   endFrameUrl?: string;     // 生成的尾帧图片URL
 

@@ -172,7 +172,7 @@ export function FinalStoryboard({
   }, [isBatchMode, generatingGroupIds, videoGroups, videoGroupPrompts]);
 
   // 从提示词提取引用角色和场景并转换成 API 格式 (多模态参考)
-  const extractContentList = (promptText: string): VideoContentItem[] => {
+  const extractContentList = (promptText: string, group?: VideoGroup): VideoContentItem[] => {
     const content: VideoContentItem[] = [];
     content.push({ type: 'text', text: promptText });
 
@@ -188,7 +188,17 @@ export function FinalStoryboard({
       activeCharNames.forEach(charName => {
         const char = characterRefs.find(c => c.name === charName);
         if (char) {
-          const url = getCharacterImageUrl(char);
+          let url = getCharacterImageUrl(char);
+          
+          // 🆕 如果在当前组手动指定了形态，则用其覆盖
+          if (group && group.shots[0]?.shot.selectedCharacterForms?.[char.id]) {
+            const formId = group.shots[0].shot.selectedCharacterForms[char.id];
+            const form = char.forms?.find(f => f.id === formId);
+            if (form && form.imageSheetUrl) {
+              url = form.imageSheetUrl;
+            }
+          }
+
           if (url && !addedImageUrls.has(url)) {
             addedImageUrls.add(url);
             content.push({
@@ -342,13 +352,34 @@ export function FinalStoryboard({
     await handleSaveEpisodes(nextShots);
   };
 
+  const handleSetCharacterForm = async (groupId: string, charId: string, formId?: string) => {
+    const group = videoGroups.find(g => g.id === groupId);
+    if (!group) return;
+    const firstShotId = group.shots[0].shot.id;
+    
+    const nextShots = latestShotsRef.current.map(s => {
+      if (s.id === firstShotId) {
+        const nextForms = { ...(s.selectedCharacterForms || {}) };
+        if (formId) {
+          nextForms[charId] = formId;
+        } else {
+          delete nextForms[charId];
+        }
+        return { ...s, selectedCharacterForms: nextForms };
+      }
+      return s;
+    });
+    setShots(nextShots);
+    await handleSaveEpisodes(nextShots);
+  };
+
   const handleGenerateGroup = async (group: VideoGroup, promptText: string) => {
     setGeneratingGroupIds(prev => new Set(prev).add(group.id));
     updateGroupStatus(group, 'generating');
 
     try {
       const model = videoModel;
-      const contentList = extractContentList(promptText);
+      const contentList = extractContentList(promptText, group);
 
       // 0. 注入分镜草图参考（九宫格）
       const storyboardUrl = group.shots[0]?.shot.storyboardGridUrl;
@@ -953,6 +984,7 @@ export function FinalStoryboard({
                     onGenerateVideo={() => prompt && handleGenerateGroup(group, prompt.fullPromptCn)}
                     onUploadCustomReference={(file) => handleUploadCustomRef(group.id, file)}
                     onRemoveCustomReference={(url) => handleRemoveCustomRef(group.id, url)}
+                    onSetCharacterForm={(groupId, charId, formId) => handleSetCharacterForm(groupId, charId, formId)}
                   />
                 );
               })}
@@ -1116,6 +1148,7 @@ function VideoGroupCard({
   onGenerateVideo,
   onUploadCustomReference,
   onRemoveCustomReference,
+  onSetCharacterForm,
 }: {
   group: VideoGroup;
   prompt: VideoGroupPrompt | undefined;
@@ -1129,6 +1162,7 @@ function VideoGroupCard({
   onGenerateVideo?: () => void;
   onUploadCustomReference?: (file: File) => Promise<void>;
   onRemoveCustomReference?: (url: string) => Promise<void>;
+  onSetCharacterForm?: (groupId: string, charId: string, formId?: string) => Promise<void>;
 }) {
   const [showPrompt, setShowPrompt] = useState(true);
 
@@ -1459,24 +1493,62 @@ function VideoGroupCard({
                 <div className="flex flex-wrap gap-2 items-center bg-[#0b0d14] p-3 rounded-xl border border-white/5 shadow-inner">
                   <span className="text-[11px] font-medium text-gray-500 mr-1 uppercase tracking-wider">本组参考:</span>
                   {matchedChars.map(c => {
-                    const imgUrl = getCharacterImageUrl(c);
+                    const firstShot = group.shots[0]?.shot;
+                    const selectedFormId = firstShot?.selectedCharacterForms?.[c.id];
+                    let imgUrl = getCharacterImageUrl(c);
+                    let displayName = c.name;
+
+                    if (selectedFormId && c.forms) {
+                      const form = c.forms.find(f => f.id === selectedFormId);
+                      if (form && form.imageSheetUrl) {
+                        imgUrl = form.imageSheetUrl;
+                        displayName = `${c.name} (${form.name})`;
+                      }
+                    }
+
                     return (
-                      <div key={`char-${c.id}`} className="group/ref flex items-center gap-1.5 bg-emerald-900/20 border border-emerald-500/20 rounded-full pr-2 p-1 hover:bg-emerald-800/40 transition-colors cursor-help relative">
+                      <div key={`char-${c.id}`} className="group/ref relative flex items-center gap-1.5 bg-emerald-900/20 border border-emerald-500/20 rounded-full pr-2 p-1 hover:bg-emerald-800/40 transition-colors cursor-help">
                         {imgUrl ? (
                           <img src={imgUrl} alt={c.name} className="w-5 h-5 rounded-full object-cover border border-emerald-500/30" />
                         ) : (
                           <div className="w-5 h-5 rounded-full bg-emerald-800/50 border border-emerald-500/30 flex items-center justify-center text-[8px] text-emerald-200">?</div>
                         )}
-                        <span className="text-[11px] text-emerald-300 font-medium">@{c.name}</span>
+                        <span className="text-[11px] text-emerald-300 font-medium">@{displayName}</span>
+                        
+                        {/* 形态选择下拉浮层 */}
+                        {c.forms && c.forms.length > 0 && onSetCharacterForm && (
+                          <div className="absolute top-full left-0 pt-2 hidden group-hover/ref:flex flex-col z-[100] min-w-[120px]">
+                            <div className="bg-[#1a1b26] border border-white/10 rounded-lg p-1.5 shadow-2xl flex flex-col">
+                              <div className="text-[10px] text-gray-500 mb-1 px-2 uppercase tracking-wide">选择参考形态</div>
+                              <div 
+                                className={`px-3 py-2 text-xs cursor-pointer rounded-md transition-colors ${!selectedFormId ? 'bg-emerald-600/30 text-emerald-300 font-medium' : 'text-gray-300 hover:bg-white/10'}`}
+                                onClick={() => {
+                                  onSetCharacterForm(group.id, c.id, undefined);
+                                }}
+                              >
+                                默认形态 (主图)
+                              </div>
+                              {c.forms.map(form => (
+                                <div 
+                                  key={form.id}
+                                  className={`px-3 py-2 text-xs cursor-pointer rounded-md transition-colors ${selectedFormId === form.id ? 'bg-emerald-600/30 text-emerald-300 font-medium' : 'text-gray-300 hover:bg-white/10'}`}
+                                  onClick={() => onSetCharacterForm(group.id, c.id, form.id)}
+                                >
+                                  {form.name}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         
                         {/* 悬浮放大图 */}
                         {imgUrl && (
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-32 h-32 bg-gray-900 border border-white/20 rounded-lg shadow-[0_15px_50px_rgba(0,0,0,0.9)] overflow-hidden scale-95 opacity-0 group-hover/ref:scale-100 group-hover/ref:opacity-100 translate-y-2 group-hover/ref:translate-y-0 transform origin-top transition-all duration-200 pointer-events-none z-[100]">
+                          <div className="absolute top-1/2 left-[120%] -translate-y-1/2 ml-2 w-32 h-32 bg-gray-900 border border-white/20 rounded-lg shadow-[0_15px_50px_rgba(0,0,0,0.9)] overflow-hidden scale-95 opacity-0 group-hover/ref:scale-100 group-hover/ref:opacity-100 transform origin-left transition-all duration-200 pointer-events-none z-[110]">
                             <img src={imgUrl} alt={c.name} className="w-full h-full object-cover" />
                           </div>
                         )}
                       </div>
-                    )
+                    );
                   })}
                   {matchedScenes.map(s => {
                     const imgUrl = getSceneImageUrl(s);
