@@ -8,7 +8,20 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 5173,  // 修改为5173，避免与其他项目冲突
         host: '0.0.0.0',
-        // AI 请求直连 OpenRouter HTTPS 接口，无需本地代理
+        proxy: {
+          '/volcengine': {
+            target: 'https://ark.cn-beijing.volces.com',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/volcengine/, ''),
+            configure: (proxy, _options) => {
+              proxy.on('proxyReq', (proxyReq, req, _res) => {
+                if (env.VITE_ARK_API_KEY) {
+                  proxyReq.setHeader('Authorization', `Bearer ${env.VITE_ARK_API_KEY}`);
+                }
+              });
+            }
+          }
+        }
       },
       plugins: [react()],
       define: {

@@ -45,8 +45,13 @@ export interface VideoTaskResult {
 
 // 代理 URL 根据环境变量配置或默认相对路径
 const getProxyBaseUrl = () => {
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_WORKER_PROXY_URL) {
-        return import.meta.env.VITE_WORKER_PROXY_URL; // 如: https://my-worker.workers.dev
+    if (typeof import.meta !== 'undefined') {
+        if (import.meta.env?.VITE_WORKER_PROXY_URL) {
+            return import.meta.env.VITE_WORKER_PROXY_URL;
+        }
+        if (import.meta.env?.VITE_WORKER_URL) {
+            return import.meta.env.VITE_WORKER_URL;
+        }
     }
     // 假设在本地或部署后 worker 与前端同一域名
     return '';
