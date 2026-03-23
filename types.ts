@@ -347,7 +347,11 @@ export interface Shot {
     taskCreatedAt: string;
     model: string;
     duration: number;
+    contentList?: any[];    // 🆕 记录当时生成时传递的多模态图文数组
   };
+
+  // ═══════════ 🆕 自定义/继承的视频与图片参考 ═══════════
+  customVideoReferences?: string[]; // 用户手动上传或前置关联的自定义参考图/视频的URL
 
   // ═══════════ 🆕 九宫格草图映射（虚拟切割，不生成独立小图文件） ═══════════
   storyboardGridUrl?: string;        // 九宫格图片URL（该镜头所属页）

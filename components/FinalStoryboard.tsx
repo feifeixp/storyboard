@@ -31,6 +31,7 @@ import {
   getShotStoryBeat,
 } from '../src/utils/videoGrouping';
 import { createVideoTask, pollVideoTask, VideoTaskStatus, VideoContentItem } from '../src/services/aiVideoGeneration';
+import { uploadToOSS, generateOSSPath } from '../services/oss'; // 🆕 新增 OSS 上传
 // 静态导入（避免动态 import chunk 在 Cloudflare Pages 部署时因 MIME 类型错误导致加载失败）
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -78,6 +79,10 @@ export function FinalStoryboard({
 
   // ---------- 开始视频生成状态管理 ----------
   const [generatingGroupIds, setGeneratingGroupIds] = useState<Set<string>>(new Set());
+  const [uploadingRefGroupId, setUploadingRefGroupId] = useState<string | null>(null);
+  const [isBatchMode, setIsBatchMode] = useState(false); // 🆕 智能并行批量模式
+
+  // 批量生成处理器已经移到下方
 
   // 🆕 使用 useRef 追踪最新的 shots，防止异步回调中出现 stale closure 导致数据覆盖
   const latestShotsRef = useRef(shots);
@@ -92,6 +97,78 @@ export function FinalStoryboard({
     return { videoGroups: groups, videoGroupPrompts: prompts };
   }, [shots, scenes]);
 
+  // 检查某个分组是否可以立刻生成（依赖解析）
+  const checkDependency = (groupIndex: number): { status: 'ready' | 'pending'; waitGroupName?: string } => {
+    if (groupIndex === 0) return { status: 'ready' };
+    const group = videoGroups[groupIndex];
+    if (group.shots[0]?.shot?.videoUrl) return { status: 'ready' }; // 已经生成好了
+
+    const prevGroup = videoGroups[groupIndex - 1];
+    
+    const isSameScene = prevGroup.sceneId && group.sceneId && prevGroup.sceneId === group.sceneId;
+    const prevCharIds = new Set(prevGroup.shots.flatMap(s => s.shot.assignedCharacterIds || []));
+    const currCharIds = new Set(group.shots.flatMap(s => s.shot.assignedCharacterIds || []));
+    const hasCommonChar = [...currCharIds].some(id => prevCharIds.has(id));
+
+    // 如果与上一组有关联，则必须等上一组生成完毕
+    if (isSameScene || hasCommonChar) {
+      if (!prevGroup.shots[0]?.shot?.videoUrl) {
+         return { status: 'pending', waitGroupName: prevGroup.groupName };
+      }
+    }
+    return { status: 'ready' };
+  };
+
+  const CONCURRENCY_LIMIT = 3; // 🚀 最大并发数
+
+  // 🤖 智能并行批量调度器
+  useEffect(() => {
+    if (!isBatchMode) return;
+
+    // 过滤出未生成且当前不在生成池里的任务
+    const ungeneratedIndices = videoGroups
+      .map((g, idx) => ({ group: g, idx }))
+      .filter(({ group }) => !group.shots[0]?.shot?.videoUrl && !generatingGroupIds.has(group.id));
+
+    if (ungeneratedIndices.length === 0 && generatingGroupIds.size === 0) {
+      // 队列全部消费完毕！
+      setIsBatchMode(false);
+      alert('🎉 批量视频生成队列执行完成！');
+      return;
+    }
+
+    if (ungeneratedIndices.length === 0 && generatingGroupIds.size > 0) {
+       // 等待最后几个任务走完
+       return;
+    }
+
+    // 从未生成的任务中，挑选出满足依赖条件（Ready）的任务
+    const readyIndices = ungeneratedIndices.filter(({ idx }) => checkDependency(idx).status === 'ready');
+
+    if (readyIndices.length === 0 && generatingGroupIds.size === 0) {
+      // 没有任何生成任务在跑，但剩下的全在 pending... 死锁（或者上一组发生报错弹窗拦截了）
+      setIsBatchMode(false);
+      console.warn('队列中止：没有可以继续并行的任务（可能是前置任务报错失败拦截，或缺乏参考图导致死锁）');
+      return;
+    }
+
+    // 开始把 Ready 任务塞满并发池
+    const availableSlots = CONCURRENCY_LIMIT - generatingGroupIds.size;
+    if (availableSlots > 0 && readyIndices.length > 0) {
+      const toStart = readyIndices.slice(0, availableSlots);
+      toStart.forEach(({ group }) => {
+        const prompt = videoGroupPrompts.find(p => p.groupId === group.id);
+        if (prompt) {
+          handleGenerateGroup(group, prompt.fullPromptCn).catch(err => {
+             console.error(`Group ${group.groupName} failed parsing visual inputs:`, err);
+             // handleGenerateGroup 内部抛出错误会触发 alert。我们可以静默吃掉这边的 rejection 让外层 useEffect 下一次能处理死锁
+          });
+        }
+      });
+    }
+
+  }, [isBatchMode, generatingGroupIds, videoGroups, videoGroupPrompts]);
+
   // 从提示词提取引用角色和场景并转换成 API 格式 (多模态参考)
   const extractContentList = (promptText: string): VideoContentItem[] => {
     const content: VideoContentItem[] = [];
@@ -101,8 +178,9 @@ export function FinalStoryboard({
 
     // 提取角色
     if (characterRefs && characterRefs.length > 0) {
-      const matchRegex = /\[[^\]]+\]/g;
-      const matches = [...promptText.matchAll(matchRegex)].map(m => m[0].replace(/[\[\]]/g, ''));
+      // 匹配 @角色名 语法，例如 @林溪
+      const matchRegex = /@([^\s，。、！@:：]+)/g;
+      const matches = [...promptText.matchAll(matchRegex)].map(m => m[1].trim());
       const activeCharNames = new Set(matches);
 
       activeCharNames.forEach(charName => {
@@ -163,6 +241,37 @@ export function FinalStoryboard({
      handleSaveEpisodes(nextShots);
   };
 
+  // 批量生成处理器已经移到下方
+
+  // 🆕 计算分组的依赖状态
+  const getGroupDependency = (groupIdx: number) => {
+    if (groupIdx === 0) return null;
+    const group = videoGroups[groupIdx];
+    const prevGroup = videoGroups[groupIdx - 1];
+    
+    const prevHasSameScene = group.sceneId && prevGroup.sceneId === group.sceneId;
+    const prevCharNames = new Set(
+      prevGroup.shots.flatMap(s => s.shot.assignedCharacterIds || [])
+        .map(id => characterRefs.find(c => c.id === id)?.name)
+        .filter(Boolean)
+    );
+    const currCharNames = new Set(
+      group.shots.flatMap(s => s.shot.assignedCharacterIds || [])
+        .map(id => characterRefs.find(c => c.id === id)?.name)
+        .filter(Boolean)
+    );
+    const hasOverlappingChars = [...currCharNames].some(name => prevCharNames.has(name));
+    
+    if (prevHasSameScene || hasOverlappingChars) {
+      const isPending = !prevGroup.shots[0].shot.videoUrl;
+      return { 
+        pending: isPending, 
+        groupName: prevGroup.groupName || `分组 ${groupIdx}` 
+      };
+    }
+    return null;
+  };
+
   const handleSaveEpisodes = async (updatedShots: Shot[]) => {
     if (currentProject && episodeNumber !== null) {
       const currentEpisode = currentProject.episodes?.find((ep: any) => ep.episodeNumber === episodeNumber);
@@ -178,6 +287,59 @@ export function FinalStoryboard({
     }
   };
 
+  const handleUploadCustomRef = async (groupId: string, file: File) => {
+    if (!currentProject) {
+      alert('未找到当前项目，无法上传');
+      return;
+    }
+    setUploadingRefGroupId(groupId);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const isVideo = ext.match(/mp4|mov|webm/i);
+      const ossPath = generateOSSPath(currentProject.id, `ref_${Date.now()}`, isVideo ? 'video' : 'image', ext);
+      const url = await uploadToOSS(file, ossPath);
+      
+      const group = videoGroups.find(g => g.id === groupId);
+      if (!group) return;
+      const firstShotId = group.shots[0].shot.id;
+      
+      const nextShots = latestShotsRef.current.map(s => {
+        if (s.id === firstShotId) {
+          return {
+            ...s,
+            customVideoReferences: [...(s.customVideoReferences || []), url]
+          };
+        }
+        return s;
+      });
+      setShots(nextShots);
+      await handleSaveEpisodes(nextShots);
+    } catch (e: any) {
+      console.error('上传参考文件失败:', e);
+      alert('上传参考文件失败: ' + e.message);
+    } finally {
+      setUploadingRefGroupId(null);
+    }
+  };
+
+  const handleRemoveCustomRef = async (groupId: string, urlToRemove: string) => {
+    const group = videoGroups.find(g => g.id === groupId);
+    if (!group) return;
+    const firstShotId = group.shots[0].shot.id;
+    
+    const nextShots = latestShotsRef.current.map(s => {
+      if (s.id === firstShotId && s.customVideoReferences) {
+        return {
+          ...s,
+          customVideoReferences: s.customVideoReferences.filter(r => r !== urlToRemove)
+        };
+      }
+      return s;
+    });
+    setShots(nextShots);
+    await handleSaveEpisodes(nextShots);
+  };
+
   const handleGenerateGroup = async (group: VideoGroup, promptText: string) => {
     setGeneratingGroupIds(prev => new Set(prev).add(group.id));
     updateGroupStatus(group, 'generating');
@@ -185,6 +347,67 @@ export function FinalStoryboard({
     try {
       const model = 'doubao-seedance-2-0-260128';
       const contentList = extractContentList(promptText);
+
+      // 0. 注入分镜草图参考（九宫格）
+      const storyboardUrl = group.shots[0]?.shot.storyboardGridUrl;
+      if (storyboardUrl) {
+          contentList.push({
+            type: 'image_url',
+            role: 'reference_image',
+            image_url: { url: storyboardUrl }
+          });
+      }
+
+      // 1. 注入上一组生成的视频作为参考（如果紧密衔接）
+      const groupIndex = videoGroups.findIndex(g => g.id === group.id);
+      if (groupIndex > 0) {
+        const prevGroup = videoGroups[groupIndex - 1];
+        const prevVideoUrl = prevGroup.shots[0]?.shot.videoUrl;
+        
+        if (prevVideoUrl) {
+          let isConnected = false;
+          if (group.sceneId && group.sceneId === prevGroup.sceneId) {
+            isConnected = true;
+          } else {
+            const charRegex = /@([^\s，。、！@:：]+)/g;
+            const currentChars = new Set([...promptText.matchAll(charRegex)].map(m => m[1].trim()));
+            const prevPrompt = videoGroupPrompts.find(p => p.groupId === prevGroup.id)?.fullPromptCn || '';
+            const prevChars = new Set([...prevPrompt.matchAll(charRegex)].map(m => m[1].trim()));
+            for (const char of currentChars) {
+              if (prevChars.has(char)) {
+                isConnected = true; break;
+              }
+            }
+          }
+          if (isConnected) {
+            contentList.push({
+              type: 'video_url',
+              role: 'reference_video',
+              video_url: { url: prevVideoUrl }
+            });
+          }
+        }
+      }
+
+      // 2. 注入手动上传的自定义参考
+      const customRefs = new Set<string>();
+      group.shots.forEach(s => {
+        if (s.shot.customVideoReferences) {
+          s.shot.customVideoReferences.forEach(ref => customRefs.add(ref));
+        }
+      });
+      customRefs.forEach(url => {
+        const isVideo = url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.mov') || url.toLowerCase().includes('.webm');
+        const mediaType = isVideo ? 'video_url' : 'image_url';
+        contentList.push({
+          type: mediaType,
+          role: isVideo ? 'reference_video' : 'reference_image',
+          [mediaType]: { url }
+        } as any);
+      });
+
+      // 3. 自由生成 (不再强制视觉参考，支持纯文生视频)
+
       const targetDuration = Math.min(15, Math.max(4, Math.round(group.totalDuration)));
       
       const res = await createVideoTask({
@@ -200,6 +423,7 @@ export function FinalStoryboard({
         taskCreatedAt: new Date().toISOString(),
         model,
         duration: targetDuration,
+        contentList, // 🆕 将生成时所用的完整输入记录下来
       });
 
       const finalResult = await pollVideoTask(res.id);
@@ -650,6 +874,34 @@ export function FinalStoryboard({
                   <><div className="w-3 h-3 border-2 border-rose-400 border-t-transparent rounded-full animate-spin"></div> 导出中</>
                 ) : '📕 PDF'}
               </button>
+              {/* 🆕 一键并行批量生成按钮 (仅在分组模式下显示) */}
+            {viewMode === 'grouped' && (() => {
+               const ungeneratedCount = videoGroups.filter(g => !g.shots[0]?.shot?.videoUrl).length;
+               const estimatedMins = Math.ceil(ungeneratedCount / CONCURRENCY_LIMIT) * 1.5;
+               
+               return (
+                 <button
+                   onClick={() => {
+                     if (isBatchMode) {
+                       setIsBatchMode(false);
+                     } else {
+                       if (ungeneratedCount === 0) {
+                         alert('所有分组均已生成视频！');
+                         return;
+                       }
+                       setIsBatchMode(true);
+                     }
+                   }}
+                   className={`ml-2 px-4 py-2 text-sm font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg border ${isBatchMode ? 'bg-red-500/20 text-red-500 border-red-500/30 hover:bg-red-500/30' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-400/30 hover:shadow-orange-500/25 h-10'}`}
+                 >
+                   {isBatchMode ? (
+                     <>⏹ 停止智能批量任务 (剩 {ungeneratedCount} 组)</>
+                   ) : (
+                     <>🚀 批量智能生成 (约 {estimatedMins.toFixed(1)} 分钟)</>
+                   )}
+                 </button>
+               );
+            })()}
             </div>
           </div>
         </div>
@@ -668,9 +920,11 @@ export function FinalStoryboard({
             <div className="space-y-12">
               {videoGroups.map((group, groupIdx) => {
                 const prompt = videoGroupPrompts.find(p => p.groupId === group.id);
+                const dependencyInfo = checkDependency(groupIdx);
+                
                 return (
                   <VideoGroupCard
-                    key={`group-${prompt ? prompt.groupId : groupIdx}`} // Changed key to use groupIdx if prompt is undefined
+                    key={`group-${prompt ? prompt.groupId : groupIdx}`}
                     group={group}
                     prompt={prompt}
                     groupIndex={groupIdx}
@@ -678,7 +932,11 @@ export function FinalStoryboard({
                     scenes={scenes}
                     isExporting={isExporting}
                     isGenerating={generatingGroupIds.has(group.id)}
+                    isUploadingRef={uploadingRefGroupId === group.id}
+                    dependencyInfo={dependencyInfo}
                     onGenerateVideo={() => prompt && handleGenerateGroup(group, prompt.fullPromptCn)}
+                    onUploadCustomReference={(file) => handleUploadCustomRef(group.id, file)}
+                    onRemoveCustomReference={(url) => handleRemoveCustomRef(group.id, url)}
                   />
                 );
               })}
@@ -837,7 +1095,11 @@ function VideoGroupCard({
   scenes,
   isExporting,
   isGenerating = false,
+  isUploadingRef = false,
+  dependencyInfo,
   onGenerateVideo,
+  onUploadCustomReference,
+  onRemoveCustomReference,
 }: {
   group: VideoGroup;
   prompt: VideoGroupPrompt | undefined;
@@ -846,7 +1108,11 @@ function VideoGroupCard({
   scenes?: SceneRef[];
   isExporting?: boolean;
   isGenerating?: boolean;
+  isUploadingRef?: boolean;
+  dependencyInfo?: { status: 'ready' | 'pending'; waitGroupName?: string };
   onGenerateVideo?: () => void;
+  onUploadCustomReference?: (file: File) => Promise<void>;
+  onRemoveCustomReference?: (url: string) => Promise<void>;
 }) {
   const [showPrompt, setShowPrompt] = useState(true);
 
@@ -860,8 +1126,8 @@ function VideoGroupCard({
         {/* 背景光晕装饰 */}
         <div className="absolute -right-20 -top-40 w-80 h-80 bg-purple-500/20 blur-[80px] rounded-full pointer-events-none"></div>
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
               <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white font-bold text-sm backdrop-blur-md border border-white/20">
                 {groupIndex + 1}
@@ -879,9 +1145,76 @@ function VideoGroupCard({
               <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>时长: <strong className="text-white font-medium">{group.totalDuration.toFixed(1)}s</strong></span>
               <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>包含 <strong className="text-white font-medium">{group.shots.length}</strong> 个镜头</span>
             </div>
+
+            {/* 🆕 渲染依赖状态 */}
+            {dependencyInfo && (
+              <div className={`mt-3 inline-flex items-center gap-2 text-[11px] px-2.5 py-1.5 rounded-lg border ${dependencyInfo.status === 'pending' ? 'bg-amber-900/40 border-amber-500/30 text-amber-300' : 'bg-emerald-900/40 border-emerald-500/30 text-emerald-300'}`}>
+                <span className="shrink-0">{dependencyInfo.status === 'pending' ? '⚠️ 依赖等待' : '✅ 依赖就绪'}</span>
+                <span>{dependencyInfo.status === 'pending' ? `需要前置镜头组「${dependencyInfo.waitGroupName}」生成完毕以继承画面，保持连贯性。` : '此分组无前置依赖，可独立生成。'}</span>
+              </div>
+            )}
+
+            {/* 🆕 渲染自定义参考 */}
+            {group.shots[0]?.shot?.customVideoReferences && group.shots[0].shot.customVideoReferences.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2 items-center">
+                <span className="text-xs text-indigo-300 flex items-center gap-1 font-medium bg-indigo-900/30 px-2 py-1 rounded border border-indigo-500/20">
+                  📎 附加参考:
+                </span>
+                {group.shots[0].shot.customVideoReferences.map((url, i) => {
+                   const isVid = url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.mov') || url.toLowerCase().includes('.webm');
+                   return (
+                     <div key={i} className="relative h-10 aspect-video rounded-md overflow-hidden border border-indigo-400/40 group/ref shadow-sm hover:border-indigo-400 transition-colors">
+                       {isVid ? (
+                         <video src={url} className="w-full h-full object-cover opacity-80" />
+                       ) : (
+                         <img src={url} className="w-full h-full object-cover" />
+                       )}
+                       <button
+                         onClick={() => onRemoveCustomReference?.(url)}
+                         className="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white w-5 h-5 text-[12px] flex items-center justify-center opacity-0 group-hover/ref:opacity-100 transition-opacity rounded-bl-sm"
+                         title="移除参考"
+                       >×</button>
+                     </div>
+                   );
+                })}
+              </div>
+            )}
+            
+            {/* 🆕 依赖锁定提示 */}
+            {!group.shots[0]?.shot?.videoUrl && dependencyInfo?.status === 'pending' && (
+              <div className="mt-4 flex items-center gap-2 text-sm text-rose-300 bg-rose-900/20 px-3 py-1.5 rounded-lg border border-rose-500/20 w-max shadow-sm">
+                <span className="animate-pulse">⏳</span> 依赖卡锁: 正在等待 <strong>{dependencyInfo.waitGroupName}</strong> 出图以继承背景参考...
+              </div>
+            )}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2 justify-end shrink-0">
+            {/* 🆕 增加参考文件查传入口 */}
+            {onUploadCustomReference && (
+              <div className="relative">
+                <input
+                  type="file"
+                  accept="image/*,video/mp4,video/quicktime,video/webm"
+                  className="hidden"
+                  id={`upload-ref-${group.id}`}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      e.target.value = ''; // clear
+                      await onUploadCustomReference(file);
+                    }
+                  }}
+                />
+                <label
+                  htmlFor={isUploadingRef ? undefined : `upload-ref-${group.id}`}
+                  className={`px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/30 rounded-lg text-indigo-300 hover:text-indigo-200 transition-all text-sm font-medium flex items-center gap-2 ${isUploadingRef ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} whitespace-nowrap`}
+                  title="上传本地图片或视频作为额外的生成参考"
+                >
+                  {isUploadingRef ? <><div className="w-3.5 h-3.5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin"></div> 上传中</> : '📎 附加参考'}
+                </label>
+              </div>
+            )}
+
             {group.shots.some(s => s.shot.storyboardGridUrl) && (
               <button
                 onClick={async () => {
@@ -991,8 +1324,8 @@ function VideoGroupCard({
             {prompt && onGenerateVideo && (
               <button
                 onClick={onGenerateVideo}
-                disabled={isGenerating}
-                className={`px-4 py-2 ${group.shots[0]?.shot?.videoUrl ? 'bg-[#1a1b26]/50 hover:bg-[#1a1b26] border border-white/10' : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 border border-emerald-400/30'} text-white rounded-lg transition-all text-sm font-bold flex items-center gap-2 shadow-lg whitespace-nowrap`}
+                disabled={isGenerating || dependencyInfo?.status === 'pending'}
+                className={`px-4 py-2 ${group.shots[0]?.shot?.videoUrl ? 'bg-[#1a1b26]/50 hover:bg-[#1a1b26] border border-white/10' : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 border border-emerald-400/30'} ${dependencyInfo?.status === 'pending' ? 'opacity-50 cursor-not-allowed grayscale' : ''} text-white rounded-lg transition-all text-sm font-bold flex items-center gap-2 shadow-lg whitespace-nowrap`}
               >
                 {isGenerating ? (
                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> 生成中...</>
@@ -1020,14 +1353,53 @@ function VideoGroupCard({
         {/* 左侧：分组内小镜头瀑布流布局 (放大尺寸版) */}
         <div className={`flex-1 w-full flex flex-col gap-6`}>
           {group.shots[0]?.shot?.videoUrl && (
-            <div className="w-full rounded-2xl overflow-hidden border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] bg-black/50 aspect-video relative flex-shrink-0 animate-fadeIn">
-              <video 
-                src={group.shots[0].shot.videoUrl} 
-                autoPlay 
-                loop 
-                controls 
-                className="w-full h-full object-contain"
-              />
+            <div className="w-full flex flex-col rounded-2xl overflow-hidden border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] bg-black/50 relative flex-shrink-0 animate-fadeIn">
+              <div className="w-full aspect-video relative bg-black">
+                <video 
+                  src={group.shots[0].shot.videoUrl} 
+                  autoPlay 
+                  controls 
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
+              </div>
+              
+              {/* 🆕 视频生成参数与多模态参考折叠面板 */}
+              {group.shots[0].shot.videoGenerationMeta && (
+                <details className="group/details bg-[#161824] border-t border-white/5">
+                  <summary className="px-4 py-3 text-sm font-medium text-gray-400 cursor-pointer hover:text-white transition-colors flex items-center justify-between select-none">
+                     <span>🔍 展开生成参数详情</span>
+                     <span className="text-xs text-gray-600 font-mono">Task ID: {group.shots[0].shot.videoGenerationMeta.taskCode}</span>
+                  </summary>
+                  <div className="p-4 pt-1 border-t border-white/5 bg-[#0b0d14]/50 flex flex-col gap-4 text-xs text-gray-300">
+                    <div className="flex gap-4">
+                      <span><strong>模型:</strong> {group.shots[0].shot.videoGenerationMeta.model}</span>
+                      <span><strong>指定时长:</strong> {group.shots[0].shot.videoGenerationMeta.duration}s</span>
+                      <span><strong>时间:</strong> {new Date(group.shots[0].shot.videoGenerationMeta.taskCreatedAt).toLocaleString()}</span>
+                    </div>
+                    {group.shots[0].shot.videoGenerationMeta.contentList && (
+                      <div className="flex flex-col gap-2">
+                        <strong className="text-gray-500 uppercase tracking-wider">提交的完整多模态混合提示词:</strong>
+                        <div className="flex flex-wrap gap-2 items-start bg-black/40 p-3 rounded-lg border border-white/5">
+                          {group.shots[0].shot.videoGenerationMeta.contentList.map((item, i) => {
+                             if (item.type === 'text') {
+                               return <span key={i} className="text-[11px] text-gray-300 whitespace-pre-wrap flex-1 min-w-[200px] leading-relaxed break-all border-l-2 border-indigo-500/50 pl-2">{item.text}</span>;
+                             } else if (item.type === 'image_url') {
+                               return (
+                                 <img key={i} src={item.image_url?.url} className="h-16 w-16 object-cover rounded-md border border-white/10 bg-black" title="Reference Image" />
+                               );
+                             } else if (item.type === 'video_url') {
+                               return (
+                                 <video key={i} src={item.video_url?.url} className="h-16 aspect-video bg-black object-cover rounded-md border border-white/10" title="Reference Video" />
+                               );
+                             }
+                             return null;
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
             </div>
           )}
           <div className={`grid grid-cols-1 md:grid-cols-2 ${prompt && showPrompt ? '2xl:grid-cols-2' : 'lg:grid-cols-2 xl:grid-cols-3'} gap-6 md:gap-8`}>

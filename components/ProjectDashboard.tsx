@@ -1122,10 +1122,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         .replace(/血|死|杀|暴|裸|胸|臀|性感|诱惑/g, ' ')
         .replace(/blood|kill|death|violence|nude|naked|sexy/gi, ' ');
 
+      // 强制用户需求：只生成场景图和环境氛围，绝对不能出现人物
+      baseInfoCn += '；只生成纯粹的场景图和环境氛围，绝不能包含任何人物、角色或动物';
+
       const prompt = [
         baseInfoCn,
         '16:9 canvas, 2x2 grid layout with 4 equal panels, edge-to-edge.',
         'Panels: (1) wide establishing shot, (2) second angle (left 3/4 view), (3) third angle (right 3/4 view), (4) key detail close-up.',
+        'NO characters, NO people, NO humans, empty scene, absolutely NO living figures.',
         'NO text, NO labels, NO numbers, NO watermark, NO logo.',
         styleSuffix,
       ].filter(Boolean).join(' ');
