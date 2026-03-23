@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Shot, CharacterRef, VideoGroup, VideoGroupPrompt } from '../types';
 import { SceneRef } from '../types/project';
 
@@ -74,8 +74,16 @@ export function FinalStoryboard({
 }: FinalStoryboardProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
-  const [generatingGroupIds, setGeneratingGroupIds] = useState<Set<string>>(new Set());
   const storyboardRef = useRef<HTMLDivElement>(null);
+
+  // ---------- 开始视频生成状态管理 ----------
+  const [generatingGroupIds, setGeneratingGroupIds] = useState<Set<string>>(new Set());
+
+  // 🆕 使用 useRef 追踪最新的 shots，防止异步回调中出现 stale closure 导致数据覆盖
+  const latestShotsRef = useRef(shots);
+  useEffect(() => {
+    latestShotsRef.current = shots;
+  }, [shots]);
 
   // 生成分组数据
   const { videoGroups, videoGroupPrompts } = useMemo(() => {
@@ -89,25 +97,28 @@ export function FinalStoryboard({
     const content: VideoContentItem[] = [];
     content.push({ type: 'text', text: promptText });
 
-    // 提取角色
-    const charRegex = /@([^(]+)(?:\(([^)]+)\))?/g;
     const addedImageUrls = new Set<string>();
-    
-    let match;
-    while ((match = charRegex.exec(promptText)) !== null) {
-      const roleName = match[1].trim();
-      const char = characterRefs.find(c => c.name === roleName);
-      if (char) {
-        const url = getCharacterImageUrl(char);
-        if (url && !addedImageUrls.has(url)) {
-          addedImageUrls.add(url);
-          content.push({
-            type: 'image_url',
-            role: 'reference_image',
-            image_url: { url }
-          });
+
+    // 提取角色
+    if (characterRefs && characterRefs.length > 0) {
+      const matchRegex = /\[[^\]]+\]/g;
+      const matches = [...promptText.matchAll(matchRegex)].map(m => m[0].replace(/[\[\]]/g, ''));
+      const activeCharNames = new Set(matches);
+
+      activeCharNames.forEach(charName => {
+        const char = characterRefs.find(c => c.name === charName);
+        if (char) {
+          const url = getCharacterImageUrl(char);
+          if (url && !addedImageUrls.has(url)) {
+            addedImageUrls.add(url);
+            content.push({
+              type: 'image_url',
+              role: 'reference_image',
+              image_url: { url }
+            });
+          }
         }
-      }
+      });
     }
 
     // 提取场景
@@ -132,17 +143,17 @@ export function FinalStoryboard({
 
   const updateGroupStatus = (group: VideoGroup, status: 'generating' | 'error' | 'completed' | 'pending') => {
     const shotIds = new Set(group.shots.map(s => s.shot.id));
-    setShots(shots.map(s => shotIds.has(s.id) ? { ...s, status } : s));
+    setShots(latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, status } : s));
   };
 
   const updateGroupMeta = (group: VideoGroup, meta: any) => {
     const shotIds = new Set(group.shots.map(s => s.shot.id));
-    setShots(shots.map(s => shotIds.has(s.id) ? { ...s, videoGenerationMeta: meta } : s));
+    setShots(latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, videoGenerationMeta: meta } : s));
   };
 
   const updateGroupComplete = (group: VideoGroup, videoUrl: string) => {
      const shotIds = new Set(group.shots.map(s => s.shot.id));
-     const nextShots = shots.map(s => {
+     const nextShots = latestShotsRef.current.map(s => {
        if (shotIds.has(s.id)) {
          return { ...s, status: 'completed' as const, videoUrl };
        }
