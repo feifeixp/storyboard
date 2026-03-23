@@ -46,7 +46,7 @@ export function ProjectList({
     <div className="p-4 md:p-8 relative z-10">
       <div className="max-w-7xl mx-auto relative">
         {/* 帮助文档按钮 - 右上角 */}
-        <div className="absolute top-0 right-0">
+        <div className="absolute top-0 right-0 z-50">
           <button
             onClick={() => setShowHelpModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 hover:from-blue-500/20 hover:to-purple-500/20 text-blue-300 border border-blue-500/20 hover:border-blue-500/40 rounded-full transition-all text-sm font-medium shadow-sm backdrop-blur-sm"

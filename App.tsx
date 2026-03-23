@@ -31,6 +31,7 @@ import {
   ShotGenerationPage,
   PromptExtractionPage,
   VideoPromptExtractionPage, // 🆕 新增
+  VideoGenerationPage,
   ImageGenerationPage,
 } from './src/pages';
 // 使用 OpenRouter 统一 API（支持多模型切换）
@@ -2868,7 +2869,7 @@ const App: React.FC = () => {
           <>
             <StepTracker 
               currentStep={currentStep} 
-              branch={(currentStep === AppStep.EXTRACT_VIDEO_PROMPTS || (currentStep === AppStep.FINAL_STORYBOARD && !shots.some(s => s.storyboardGridUrl) && shots.some(s => s.videoPromptCn))) ? 'video' : 'image'} 
+              branch={(currentStep === AppStep.EXTRACT_VIDEO_PROMPTS || currentStep === AppStep.GENERATE_VIDEO || (currentStep === AppStep.FINAL_STORYBOARD && !shots.some(s => s.storyboardGridUrl) && shots.some(s => s.videoPromptCn))) ? 'video' : 'image'} 
             />
 
             <main className="max-w-[1600px] mx-auto mt-4">
@@ -3037,6 +3038,7 @@ const App: React.FC = () => {
                 />
               )}
 
+              {/* 🆕 分支2: 视频批量生成 (已迁移到 FinalStoryboard 内聚展示，此处不再渲染独立页面) */}
               {currentStep === AppStep.GENERATE_IMAGES && (
                 <ImageGenerationPage
                   shots={shots}
@@ -3080,11 +3082,16 @@ const App: React.FC = () => {
               {currentStep === AppStep.FINAL_STORYBOARD && (
                 <FinalStoryboard
                   shots={shots}
+                  setShots={setShots}
                   characterRefs={characterRefs}
                   scenes={currentProject?.scenes || []}
+                  setCurrentStep={setCurrentStep}
+                  currentProject={currentProject}
                   episodeNumber={currentEpisodeNumber}
                   projectName={currentProject?.name}
-                  setCurrentStep={setCurrentStep}
+                  episodeTitle={currentProject?.episodes?.find((ep: any) => ep.episodeNumber === currentEpisodeNumber)?.title}
+                  script={script}
+                  saveEpisode={saveEpisode}
                   onBack={() => {
                     // 如果有视频提示词且没有九宫格图片，返回视频提取页
                     if (!shots.some(s => s.storyboardGridUrl) && shots.some(s => s.videoPromptCn)) {

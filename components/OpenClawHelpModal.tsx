@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { OPENCLAW_SYSTEM_PROMPT } from '../src/constants/OpenClawPrompt';
 
 interface OpenClawHelpModalProps {
     onClose: () => void;
@@ -102,40 +103,14 @@ export function OpenClawHelpModal({ onClose }: OpenClawHelpModalProps) {
                             <div className="bg-black/50 p-4 rounded-xl border border-white/5 relative group">
                                 <button
                                     onClick={() => {
-                                        navigator.clipboard.writeText(`## Tool Identity & Purpose
-你现在具备了 Visionary Storyboard Studio 核心引擎的调用能力。这是一套专业的影视分镜自动化工作流辅助工具。当用户输入小说或剧本时，你**必须**使用本插件提供的 API 节点产生符合专业视听语言和主流 AI 视频工具的提示词。
-
-### 1. POST /api/v1/characters/extract
-- **时机**：用户提供全新剧本，请求“列出角色”或“设计人物外观”。
-- **要求**：直接透传剧本，返回给用户高度结构化的角色静态外观词 (appearance)。
-
-### 2. POST /api/v1/script/clean
-- **时机**：要求划分镜头、拆分画面和对话。
-- **要求**：输出剥去主观修辞的纯画面视觉内容、提炼情绪基调(moodTags)，并对齐场景剧情节奏。
-
-### 3. POST /api/v1/prompts/generate-video-prompts
-- **时机**：用户已确认分镜数据，要求生成最终用于 AI (如 Nano Banana Pro / Kling / Seedance 2.0) 的提示词时。
-- **红色禁忌**：绝对不要尝试用你自己的常识组装生图提示词！必须调用此接口翻译摄影角度和景深，并将 imagePromptCn 呈现给用户。`);
+                                        navigator.clipboard.writeText(OPENCLAW_SYSTEM_PROMPT);
                                     }}
                                     className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded transition-colors"
                                 >
                                     复制代码
                                 </button>
                                 <div className="font-mono text-gray-400 text-xs whitespace-pre-wrap leading-relaxed select-all">
-                                    {`## Tool Identity & Purpose
-你现在具备了 Visionary Storyboard Studio 核心引擎的调用能力。这是一套专业的影视分镜自动化工作流辅助工具。当用户输入小说或剧本时，你**必须**使用本插件提供的 API 节点产生符合专业视听语言和主流 AI 视频工具的提示词。
-
-### 1. POST /api/v1/characters/extract
-- **时机**：用户提供全新剧本，请求“列出角色”或“设计人物外观”。
-- **要求**：直接透传剧本，返回给用户高度结构化的角色静态外观词 (appearance)。
-
-### 2. POST /api/v1/script/clean
-- **时机**：要求划分镜头、拆分画面和对话。
-- **要求**：输出剥去主观修辞的纯画面视觉内容、提炼情绪基调(moodTags)，并对齐场景剧情节奏。
-
-### 3. POST /api/v1/prompts/generate-video-prompts
-- **时机**：用户已确认分镜数据，要求生成最终用于 AI (如 Nano Banana Pro / Kling / Seedance 2.0) 的提示词时。
-- **红色禁忌**：绝对不要尝试用你自己的常识组装生图提示词！必须调用此接口翻译摄影角度和景深，并将 imagePromptCn 呈现给用户。`}
+                                    {OPENCLAW_SYSTEM_PROMPT}
                                 </div>
                             </div>
                         </div>

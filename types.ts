@@ -340,6 +340,15 @@ export interface Shot {
   startFrameUrl?: string;   // 生成的首帧图片URL
   endFrameUrl?: string;     // 生成的尾帧图片URL
 
+  // ═══════════ 🆕 视频生成结果 ═══════════
+  videoUrl?: string;        // 最终生成的视频URL
+  videoGenerationMeta?: {   // 视频生成元信息
+    taskCode: string;
+    taskCreatedAt: string;
+    model: string;
+    duration: number;
+  };
+
   // ═══════════ 🆕 九宫格草图映射（虚拟切割，不生成独立小图文件） ═══════════
   storyboardGridUrl?: string;        // 九宫格图片URL（该镜头所属页）
   storyboardGridCellIndex?: number;  // 该镜头在九宫格中的格子索引（0-8，按行优先）
@@ -439,6 +448,7 @@ export enum AppStep {
   MANUAL_EDIT = 4,        // 手动编辑/AI对话精修
   EXTRACT_PROMPTS = 5,    // 提取AI图片提示词（分支1：九宫格生成）
   EXTRACT_VIDEO_PROMPTS = 8, // 🆕 提取AI视频提示词（分支2：Seedance 2.0生成）
+  GENERATE_VIDEO = 9,     // 🆕 视频批量生成
   GENERATE_IMAGES = 6,
   FINAL_STORYBOARD = 7    // 🆕 最终故事板预览
 }

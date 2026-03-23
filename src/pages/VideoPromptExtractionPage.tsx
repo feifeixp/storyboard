@@ -288,11 +288,11 @@ export const VideoPromptExtractionPage: React.FC<VideoPromptExtractionPageProps>
               ← 返回精修
             </button>
             <button
-              onClick={() => setCurrentStep(7)} // AppStep.FINAL_STORYBOARD (复用该组件作最终预览)
+              onClick={() => setCurrentStep(7)} // AppStep.FINAL_STORYBOARD
               disabled={!shots.some(s => s.videoPromptCn)}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
-              下一步: 最终脚本预览 →
+              下一步: 开始视频生成 →
             </button>
           </div>
         </div>

@@ -9,6 +9,7 @@
  *    - OPENROUTER_API_KEY: 你的 OpenRouter API Key
  *    - DEEPSEEK_API_KEY: 你的 DeepSeek API Key (可选)
  *    - GEMINI_API_KEY: 你的 Gemini API Key (可选)
+ *    - ARK_API_KEY: 你的 Volcengine 方舟 API Key (可选，用于视频生成)
  *    - ALLOWED_ORIGIN: 你的网站域名 (如 https://your-app.pages.dev)
  * 4. 部署 Worker
  * 5. 修改前端代码，将 API 请求发送到 Worker URL
@@ -46,6 +47,8 @@ export default {
         return await proxyDeepSeek(request, env, origin);
       } else if (path.startsWith('/gemini/')) {
         return await proxyGemini(request, env, origin);
+      } else if (path.startsWith('/volcengine/')) {
+        return await proxyVolcengine(request, env, origin);
       } else {
         return new Response('Not Found', { status: 404 });
       }
@@ -151,6 +154,40 @@ async function proxyGemini(request, env, origin) {
     method: request.method,
     headers: {
       'Content-Type': 'application/json',
+    },
+    body: request.method !== 'GET' ? await request.text() : undefined,
+  });
+
+  return new Response(response.body, {
+    status: response.status,
+    headers: {
+      ...Object.fromEntries(response.headers),
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    }
+  });
+}
+
+/**
+ * 代理 Volcengine Ark API
+ */
+async function proxyVolcengine(request, env, origin) {
+  const apiKey = env.ARK_API_KEY;
+  if (!apiKey) {
+    return new Response('ARK API Key not configured', { status: 500 });
+  }
+
+  // 移除 /volcengine 前缀
+  const url = new URL(request.url);
+  const targetPath = url.pathname.replace('/volcengine', '');
+  const targetUrl = `https://ark.cn-beijing.volces.com${targetPath}${url.search}`;
+
+  const response = await fetch(targetUrl, {
+    method: request.method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: request.method !== 'GET' ? await request.text() : undefined,
   });

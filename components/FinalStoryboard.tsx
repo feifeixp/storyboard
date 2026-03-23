@@ -30,19 +30,23 @@ import {
   generateAllVideoGroupPrompts, // Keep original utility functions
   getShotStoryBeat,
 } from '../src/utils/videoGrouping';
+import { createVideoTask, pollVideoTask, VideoTaskStatus, VideoContentItem } from '../src/services/aiVideoGeneration';
 // 静态导入（避免动态 import chunk 在 Cloudflare Pages 部署时因 MIME 类型错误导致加载失败）
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 interface FinalStoryboardProps {
   shots: Shot[];
+  setShots: (shots: Shot[]) => void;
   characterRefs: CharacterRef[];
   scenes?: SceneRef[]; // 🆕 新增可选项：当前项目中的场景数据
   setCurrentStep: (step: number) => void;
+  currentProject: any;
   episodeNumber: number | null;
   projectName?: string;
   episodeTitle?: string;
   script?: string;
+  saveEpisode: (projectId: string, episode: any) => Promise<void>;
   onBack: () => void; // Keep onBack as it's used in the component
 }
 
@@ -57,16 +61,20 @@ type ViewMode = 'original' | 'grouped';
  */
 export function FinalStoryboard({
   shots,
+  setShots,
   characterRefs,
   scenes = [], // 默认空数组
   setCurrentStep, // Added as per instruction
+  currentProject,
   episodeNumber,
   episodeTitle, // Added as per instruction
   script = '', // Added as per instruction
+  saveEpisode,
   onBack, // Kept onBack
 }: FinalStoryboardProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
+  const [generatingGroupIds, setGeneratingGroupIds] = useState<Set<string>>(new Set());
   const storyboardRef = useRef<HTMLDivElement>(null);
 
   // 生成分组数据
@@ -75,6 +83,133 @@ export function FinalStoryboard({
     const prompts = generateAllVideoGroupPrompts(groups);
     return { videoGroups: groups, videoGroupPrompts: prompts };
   }, [shots, scenes]);
+
+  // 从提示词提取引用角色和场景并转换成 API 格式 (多模态参考)
+  const extractContentList = (promptText: string): VideoContentItem[] => {
+    const content: VideoContentItem[] = [];
+    content.push({ type: 'text', text: promptText });
+
+    // 提取角色
+    const charRegex = /@([^(]+)(?:\(([^)]+)\))?/g;
+    const addedImageUrls = new Set<string>();
+    
+    let match;
+    while ((match = charRegex.exec(promptText)) !== null) {
+      const roleName = match[1].trim();
+      const char = characterRefs.find(c => c.name === roleName);
+      if (char) {
+        const url = getCharacterImageUrl(char);
+        if (url && !addedImageUrls.has(url)) {
+          addedImageUrls.add(url);
+          content.push({
+            type: 'image_url',
+            role: 'reference_image',
+            image_url: { url }
+          });
+        }
+      }
+    }
+
+    // 提取场景
+    if (scenes && scenes.length > 0) {
+      scenes.forEach(scene => {
+        if (promptText.includes(scene.name)) {
+          const url = getSceneImageUrl(scene);
+          if (url && !addedImageUrls.has(url)) {
+            addedImageUrls.add(url);
+            content.push({
+              type: 'image_url',
+              role: 'reference_image',
+              image_url: { url }
+            });
+          }
+        }
+      });
+    }
+
+    return content;
+  };
+
+  const updateGroupStatus = (group: VideoGroup, status: 'generating' | 'error' | 'completed' | 'pending') => {
+    const shotIds = new Set(group.shots.map(s => s.shot.id));
+    setShots(shots.map(s => shotIds.has(s.id) ? { ...s, status } : s));
+  };
+
+  const updateGroupMeta = (group: VideoGroup, meta: any) => {
+    const shotIds = new Set(group.shots.map(s => s.shot.id));
+    setShots(shots.map(s => shotIds.has(s.id) ? { ...s, videoGenerationMeta: meta } : s));
+  };
+
+  const updateGroupComplete = (group: VideoGroup, videoUrl: string) => {
+     const shotIds = new Set(group.shots.map(s => s.shot.id));
+     const nextShots = shots.map(s => {
+       if (shotIds.has(s.id)) {
+         return { ...s, status: 'completed' as const, videoUrl };
+       }
+       return s;
+     });
+     setShots(nextShots);
+     handleSaveEpisodes(nextShots);
+  };
+
+  const handleSaveEpisodes = async (updatedShots: Shot[]) => {
+    if (currentProject && episodeNumber !== null) {
+      const currentEpisode = currentProject.episodes?.find((ep: any) => ep.episodeNumber === episodeNumber);
+      if (currentEpisode) {
+          const updatedEpisode = {
+              ...currentEpisode,
+              script,
+              shots: updatedShots,
+              updatedAt: new Date().toISOString(),
+          };
+          await saveEpisode(currentProject.id, updatedEpisode);
+      }
+    }
+  };
+
+  const handleGenerateGroup = async (group: VideoGroup, promptText: string) => {
+    setGeneratingGroupIds(prev => new Set(prev).add(group.id));
+    updateGroupStatus(group, 'generating');
+
+    try {
+      const model = 'doubao-seedance-2-0-260128';
+      const contentList = extractContentList(promptText);
+      const targetDuration = Math.min(15, Math.max(4, Math.round(group.totalDuration)));
+      
+      const res = await createVideoTask({
+        model,
+        content: contentList,
+        generate_audio: true,
+        ratio: '16:9',
+        duration: targetDuration,
+      });
+
+      updateGroupMeta(group, {
+        taskCode: res.id,
+        taskCreatedAt: new Date().toISOString(),
+        model,
+        duration: targetDuration,
+      });
+
+      const finalResult = await pollVideoTask(res.id);
+
+      if (finalResult.status === VideoTaskStatus.SUCCEEDED && finalResult.content?.video_url) {
+        updateGroupComplete(group, finalResult.content.video_url);
+      } else {
+        throw new Error(finalResult.error?.message || '视频生成失败');
+      }
+    } catch (err: any) {
+        console.error('视频生成异常:', err);
+        updateGroupStatus(group, 'error');
+        alert(`分组 ${group.groupName} 生成失败：${err.message}`);
+    } finally {
+        setGeneratingGroupIds(prev => {
+           const next = new Set(prev);
+           next.delete(group.id);
+           return next;
+        });
+    }
+  };
 
   // 检查是否有九宫格数据或视频生成提示词
   const hasStoryboardData = shots.some(shot => shot.storyboardGridUrl || shot.videoPromptCn);
@@ -531,6 +666,8 @@ export function FinalStoryboard({
                     characterRefs={characterRefs}
                     scenes={scenes}
                     isExporting={isExporting}
+                    isGenerating={generatingGroupIds.has(group.id)}
+                    onGenerateVideo={() => prompt && handleGenerateGroup(group, prompt.fullPromptCn)}
                   />
                 );
               })}
@@ -688,6 +825,8 @@ function VideoGroupCard({
   characterRefs,
   scenes,
   isExporting,
+  isGenerating = false,
+  onGenerateVideo,
 }: {
   group: VideoGroup;
   prompt: VideoGroupPrompt | undefined;
@@ -695,6 +834,8 @@ function VideoGroupCard({
   characterRefs: CharacterRef[];
   scenes?: SceneRef[];
   isExporting?: boolean;
+  isGenerating?: boolean;
+  onGenerateVideo?: () => void;
 }) {
   const [showPrompt, setShowPrompt] = useState(true);
 
@@ -836,6 +977,18 @@ function VideoGroupCard({
               </button>
             )}
 
+            {prompt && onGenerateVideo && (
+              <button
+                onClick={onGenerateVideo}
+                disabled={isGenerating}
+                className={`px-4 py-2 ${group.shots[0]?.shot?.videoUrl ? 'bg-[#1a1b26]/50 hover:bg-[#1a1b26] border border-white/10' : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 border border-emerald-400/30'} text-white rounded-lg transition-all text-sm font-bold flex items-center gap-2 shadow-lg whitespace-nowrap`}
+              >
+                {isGenerating ? (
+                   <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> 生成中...</>
+                ) : (group.shots[0]?.shot?.videoUrl ? '🔄 全部重生成' : '✨ 生成视频')}
+              </button>
+            )}
+
             {prompt && (
               <button
                 onClick={() => setShowPrompt(!showPrompt)}
@@ -854,10 +1007,23 @@ function VideoGroupCard({
       {/* 分组内容区 */}
       <div className="p-6 md:p-8 flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
         {/* 左侧：分组内小镜头瀑布流布局 (放大尺寸版) */}
-        <div className={`flex-1 w-full grid grid-cols-1 md:grid-cols-2 ${prompt && showPrompt ? '2xl:grid-cols-2' : 'lg:grid-cols-2 xl:grid-cols-3'} gap-6 md:gap-8`}>
-          {group.shots.map((shotRange, idx) => (
-            <GroupedShotCard key={shotRange.shot.id} shotRange={shotRange} characterRefs={characterRefs} scenes={scenes} isExporting={isExporting} />
-          ))}
+        <div className={`flex-1 w-full flex flex-col gap-6`}>
+          {group.shots[0]?.shot?.videoUrl && (
+            <div className="w-full rounded-2xl overflow-hidden border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] bg-black/50 aspect-video relative flex-shrink-0 animate-fadeIn">
+              <video 
+                src={group.shots[0].shot.videoUrl} 
+                autoPlay 
+                loop 
+                controls 
+                className="w-full h-full object-contain"
+              />
+            </div>
+          )}
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${prompt && showPrompt ? '2xl:grid-cols-2' : 'lg:grid-cols-2 xl:grid-cols-3'} gap-6 md:gap-8`}>
+            {group.shots.map((shotRange, idx) => (
+              <GroupedShotCard key={shotRange.shot.id} shotRange={shotRange} characterRefs={characterRefs} scenes={scenes} isExporting={isExporting} />
+            ))}
+          </div>
         </div>
 
         {/* 右侧：视频生成提示词展开区 (Code Editor 质感) */}
