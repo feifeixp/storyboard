@@ -33,6 +33,7 @@ import {
 import { createVideoTask, pollVideoTask, VideoTaskStatus, VideoContentItem } from '../src/services/aiVideoGeneration';
 import { uploadToOSS, generateOSSPath } from '../services/oss';
 import { downloadFile } from '../src/utils/download'; // 🆕 直接下载工具 // 🆕 新增 OSS 上传
+import { rewriteSensitivePrompt } from '../services/openrouter'; // 🆕 敏感词拦截后自动重写
 // 静态导入（避免动态 import chunk 在 Cloudflare Pages 部署时因 MIME 类型错误导致加载失败）
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -376,9 +377,10 @@ export function FinalStoryboard({
     await handleSaveEpisodes(nextShots);
   };
 
-  const handleGenerateGroup = async (group: VideoGroup, promptText: string) => {
+  const handleGenerateGroup = async (group: VideoGroup, promptText: string, isAutoRetry = false) => {
+    let shouldCleanup = true;
     setGeneratingGroupIds(prev => new Set(prev).add(group.id));
-    updateGroupStatus(group, 'generating');
+    updateGroupStatus(group, 'generating', isAutoRetry ? '提示词已净化，正在重新生成...' : undefined);
 
     try {
       const model = videoModel;
@@ -475,14 +477,35 @@ export function FinalStoryboard({
       }
     } catch (err: any) {
         console.error('视频生成异常:', err);
-        updateGroupStatus(group, 'error', err.message);
-        alert(`分组 ${group.groupName} 生成失败：${err.message}`);
+        const errMsg = err.message || '';
+        
+        // 🆕 敏感词拦截自动重试逻辑 (只有首次失败且明确是内容敏感时触发)
+        if (!isAutoRetry && (errMsg.includes('sensitive') || errMsg.includes('敏感词') || errMsg.includes('审核'))) {
+          try {
+            console.log(`[敏感词拦截] 尝试自动重写提示词: ${group.groupName}`);
+            updateGroupStatus(group, 'generating', `触发敏感词拦截，正在使用AI自动重写净化的提示词...`);
+            shouldCleanup = false; // 让递归调用的函数去清理 loading 状态
+            
+            const sanitizedPrompt = await rewriteSensitivePrompt(promptText);
+            
+            console.log(`[敏感词净化完毕] 再次下发任务...`);
+            handleGenerateGroup(group, sanitizedPrompt, true);
+            return;
+          } catch (rewriteErr) {
+             console.error('提示词净化失败:', rewriteErr);
+             shouldCleanup = true;
+          }
+        }
+
+        updateGroupStatus(group, 'error', errMsg);
     } finally {
-        setGeneratingGroupIds(prev => {
-           const next = new Set(prev);
-           next.delete(group.id);
-           return next;
-        });
+        if (shouldCleanup) {
+          setGeneratingGroupIds(prev => {
+            const next = new Set(prev);
+            next.delete(group.id);
+            return next;
+          });
+        }
     }
   };
 
@@ -1385,7 +1408,7 @@ function VideoGroupCard({
                 className={`px-4 py-2 ${group.shots[0]?.shot?.videoUrl ? 'bg-[#1a1b26]/50 hover:bg-[#1a1b26] border border-white/10' : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 border border-emerald-400/30'} ${dependencyInfo?.status === 'pending' ? 'opacity-50 cursor-not-allowed grayscale' : ''} text-white rounded-lg transition-all text-sm font-bold flex items-center gap-2 shadow-lg whitespace-nowrap`}
               >
                 {isGenerating ? (
-                   <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> 生成中...</>
+                   <><div className="w-4 h-4 border-2 border-white border-t-transparent flex-shrink-0 rounded-full animate-spin"></div><span className="truncate">{group.shots[0].shot.errorMessage || '生成中...'}</span></>
                 ) : (group.shots[0]?.shot?.videoUrl ? '🔄 全部重生成' : '✨ 生成视频')}
               </button>
             )}

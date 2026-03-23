@@ -3210,3 +3210,36 @@ ${scriptContent.slice(0, 20000)}`;
     return { episodes: [] };
   }
 }
+
+/**
+ * 🆕 自动净化被拦截的视频生成提示词
+ * 当 Volcengine 返回 sensitive information 报错时调用
+ */
+export async function rewriteSensitivePrompt(prompt: string): Promise<string> {
+  const client = getClient();
+  const response = await client.chat.completions.create({
+    model: 'gemini-2.5-flash',
+    messages: [
+      {
+        role: 'system',
+        content: `你是一个专业的视频生成提示词净化助手。
+用户的视频提示词已被敏感词过滤系统拦截拒绝，因为包含了例如“血腥”、“暴力”、“色情”、“暴露”、“恐怖”、“病态”等敏感词汇。
+请在【完全保留】原有画面的主体结构、镜头语言、光影构图的前提下，大面积弱化、替换并删除所有可能触发敏感拦截的明确违禁词和极端形容词，使其能顺利通过机器审核。
+
+修改指南：
+- 替换为中性/柔和词（例：“血染的海水” -> “暗红色的海水”，“尸体” -> “倒下的身影”，“斩断” -> “击退”，“绝望恐怖” -> “悲伤凝重”）
+- 对于暴力动作，改写为抽象/意象化描述（例：“被一剑刺穿” -> “受到创伤”）
+- 对于涉黄色彩，移除具体身体部位聚焦，改为“穿着破损的衣物”等。
+
+直接返回修改后的纯文本提示词，不要包含任何解释、分析或前言。`
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: 0.3,
+  });
+
+  return response.choices[0]?.message?.content?.trim() || prompt;
+}
