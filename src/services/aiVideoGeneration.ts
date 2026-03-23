@@ -45,6 +45,12 @@ export interface VideoTaskResult {
 
 // 代理 URL 根据环境变量配置或默认相对路径
 const getProxyBaseUrl = () => {
+    // 本地开发环境必须返回空字符串，以使用 vite.config.ts 中的代理
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+        return '';
+    }
+    
+    // 生产环境读取配置
     if (typeof import.meta !== 'undefined') {
         if (import.meta.env?.VITE_WORKER_PROXY_URL) {
             return import.meta.env.VITE_WORKER_PROXY_URL;
