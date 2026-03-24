@@ -479,8 +479,12 @@ export function FinalStoryboard({
         console.error('视频生成异常:', err);
         const errMsg = err.message || '';
         
+        // 🆕 拦截图片违规/真人参考图类报错，直接跳过文字净化并明确提示用户
+        if (errMsg.includes('真人') || errMsg.includes('real person') || errMsg.includes('image') || errMsg.includes('图片')) {
+             updateGroupStatus(group, 'error', '请求被拦截：当前模型可能不支持该类型的参考图（如真人照片或敏感图像）。请尝试移除/更换对应参考图后再试！原始报错：' + errMsg);
+        }
         // 🆕 敏感词拦截自动重试逻辑 (只有首次失败且明确是内容敏感时触发)
-        if (!isAutoRetry && (errMsg.includes('sensitive') || errMsg.includes('敏感词') || errMsg.includes('审核'))) {
+        else if (!isAutoRetry && (errMsg.includes('sensitive') || errMsg.includes('敏感词') || errMsg.includes('审核'))) {
           try {
             console.log(`[敏感词拦截] 尝试自动重写提示词: ${group.groupName}`);
             updateGroupStatus(group, 'generating', `触发敏感词拦截，正在使用AI自动重写净化的提示词...`);
@@ -495,9 +499,9 @@ export function FinalStoryboard({
              console.error('提示词净化失败:', rewriteErr);
              shouldCleanup = true;
           }
+        } else {
+             updateGroupStatus(group, 'error', errMsg);
         }
-
-        updateGroupStatus(group, 'error', errMsg);
     } finally {
         if (shouldCleanup) {
           setGeneratingGroupIds(prev => {
