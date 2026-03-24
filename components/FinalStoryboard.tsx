@@ -264,14 +264,25 @@ export function FinalStoryboard({
     return content;
   };
 
+  // 🔧 串行写库锁：防止高并发（例如批量生成）时互相覆盖数据库
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
+
   const updateGroupStatus = (group: VideoGroup, status: 'generating' | 'error' | 'completed' | 'pending', errorMessage?: string) => {
     const shotIds = new Set(group.shots.map(s => s.shot.id));
-    setShots(latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, status, errorMessage } : s));
+    const nextShots = latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, status, errorMessage } : s);
+    latestShotsRef.current = nextShots; // 立即同步
+    setShots(nextShots);
   };
 
   const updateGroupMeta = (group: VideoGroup, meta: any) => {
     const shotIds = new Set(group.shots.map(s => s.shot.id));
-    setShots(latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, videoGenerationMeta: meta } : s));
+    const nextShots = latestShotsRef.current.map(s => shotIds.has(s.id) ? { ...s, videoGenerationMeta: meta } : s);
+    latestShotsRef.current = nextShots; // 立即同步
+    setShots(nextShots);
+    
+    // 立即写库以防刷新丢失 taskCode
+    const myWrite = writeChainRef.current.then(() => handleSaveEpisodes(latestShotsRef.current));
+    writeChainRef.current = myWrite.catch(() => {});
   };
 
   const updateGroupComplete = (group: VideoGroup, videoUrl: string, taskCompletedAt?: string, taskDurationMs?: number) => {
@@ -285,8 +296,12 @@ export function FinalStoryboard({
        }
        return s;
      });
+     latestShotsRef.current = nextShots; // 立即同步
      setShots(nextShots);
-     handleSaveEpisodes(nextShots);
+     
+     // 串行写库
+     const myWrite = writeChainRef.current.then(() => handleSaveEpisodes(latestShotsRef.current));
+     writeChainRef.current = myWrite.catch(() => {});
   };
 
   // 批量生成处理器已经移到下方
@@ -360,8 +375,11 @@ export function FinalStoryboard({
         }
         return s;
       });
+      latestShotsRef.current = nextShots; // 立即同步
       setShots(nextShots);
-      await handleSaveEpisodes(nextShots);
+      
+      const myWrite = writeChainRef.current.then(() => handleSaveEpisodes(latestShotsRef.current));
+      writeChainRef.current = myWrite.catch(() => {});
     } catch (e: any) {
       console.error('上传参考文件失败:', e);
       alert('上传参考文件失败: ' + e.message);
@@ -384,8 +402,11 @@ export function FinalStoryboard({
       }
       return s;
     });
+    latestShotsRef.current = nextShots; // 立即同步
     setShots(nextShots);
-    await handleSaveEpisodes(nextShots);
+    
+    const myWrite = writeChainRef.current.then(() => handleSaveEpisodes(latestShotsRef.current));
+    writeChainRef.current = myWrite.catch(() => {});
   };
 
   const handleSetCharacterForm = async (groupId: string, charId: string, formId?: string) => {
@@ -405,8 +426,11 @@ export function FinalStoryboard({
       }
       return s;
     });
+    latestShotsRef.current = nextShots; // 立即同步
     setShots(nextShots);
-    await handleSaveEpisodes(nextShots);
+    
+    const myWrite = writeChainRef.current.then(() => handleSaveEpisodes(latestShotsRef.current));
+    writeChainRef.current = myWrite.catch(() => {});
   };
 
   const handleGenerateGroup = async (group: VideoGroup, promptText: string, isAutoRetry = false) => {

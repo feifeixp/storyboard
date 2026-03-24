@@ -9,6 +9,7 @@ import { projectRoutes } from './routes/projects';
 import { episodeRoutes } from './routes/episodes';
 import { authRoutes } from './routes/auth';
 import { aiProxyRoutes } from './routes/aiProxy';
+import { volcengineRoutes } from './routes/volcengineProxy';
 
 // 环境变量类型定义
 export interface Env {
@@ -68,6 +69,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/projects', projectRoutes);
 app.route('/api/episodes', episodeRoutes);
 app.route('/api/ai-proxy', aiProxyRoutes);
+app.route('/volcengine', volcengineRoutes);
 
 // 404 处理
 app.notFound((c) => {

@@ -144,21 +144,30 @@ ${relevantContent}
  * 从剧本中提取与场景相关的内容
  */
 function extractRelevantContent(scene: SceneRef, scripts: ScriptFile[]): string {
-  const sceneNumber = scene.id.replace('scene-', '');
   const relevantParts: string[] = [];
 
-  for (const script of scripts) {
-    // 查找包含该场景标记的内容
-    const scenePattern = new RegExp(`Scene\\s+${sceneNumber}\\s*[｜|:]\\s*[^\\n]+([\\s\\S]{0,800})`, 'i');
-    const match = script.content.match(scenePattern);
+  // 按照场景名称搜索剧本片段（取关键词前后400字上下文）
+  const escapedName = scene.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const contextRegex = new RegExp(`(.{0,400}${escapedName}.{0,400})`, 'gi');
 
-    if (match) {
-      relevantParts.push(`\n=== 第${script.episodeNumber}集 ===\n${match[0]}`);
+  for (const script of scripts) {
+    let match;
+    contextRegex.lastIndex = 0;
+    const localMatches = [];
+    
+    while ((match = contextRegex.exec(script.content)) !== null) {
+      localMatches.push(match[1]);
+      // 避免重复太多，最多取3个片段防止 Context 溢出
+      if (localMatches.length >= 3) break;
+    }
+
+    if (localMatches.length > 0) {
+      relevantParts.push(`\n=== 第${script.episodeNumber}集 ===\n...${localMatches.join('...\n\n...')}...`);
     }
   }
 
   if (relevantParts.length === 0) {
-    return '（剧本中未找到该场景的详细描述）';
+    return '（剧本中未找到该场景名称的具体片段，请根据其名称和项目总体世界观进行合理推演补全）';
   }
 
   return relevantParts.join('\n\n');

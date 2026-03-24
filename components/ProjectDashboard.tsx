@@ -485,23 +485,31 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             styleName: characterStyle?.name || '未知风格',
             generatedAt: createdTaskAt, taskCode, taskCreatedAt: createdTaskAt,
           };
-          // 🔧 使用 projectRef.current 获取最新状态，避免批量生成时覆盖其他角色的数据
-          const pTask = projectRef.current;
-          const taskMetaProject: Project = {
-            ...pTask, updatedAt: new Date().toISOString(),
-            characters: (pTask.characters || []).map(c => {
-              if (c.id !== characterId) return c;
-              if (targetForm) {
-                // 更新形态的 imageGenerationMeta
-                return { ...c, forms: (c.forms || []).map(f => f.id === formId ? { ...f, imageGenerationMeta: metaData } : f) };
-              }
-              // 更新角色主体的 imageGenerationMeta（不清空 imageSheetUrl，保留旧图避免生成失败导致空白）
-              return { ...c, imageGenerationMeta: metaData };
-            }),
+          
+          // 🔧 串行化写入 taskCode，避免并发生成导致状态覆盖
+          const doTaskWrite = async () => {
+            const pTask = projectRef.current;
+            const taskMetaProject: Project = {
+              ...pTask, updatedAt: new Date().toISOString(),
+              characters: (pTask.characters || []).map(c => {
+                if (c.id !== characterId) return c;
+                if (targetForm) {
+                  // 更新形态的 imageGenerationMeta
+                  return { ...c, forms: (c.forms || []).map(f => f.id === formId ? { ...f, imageGenerationMeta: metaData } : f) };
+                }
+                // 更新角色主体的 imageGenerationMeta
+                return { ...c, imageGenerationMeta: metaData };
+              }),
+            };
+            projectRef.current = taskMetaProject;
+            try { await patchProject(pTask.id, { characters: taskMetaProject.characters }); }
+            catch (err) { console.warn('[ProjectDashboard] patchProject(characters/taskCode) 失败，回退到全量保存:', err); await saveProject(taskMetaProject); }
+            await Promise.resolve(onUpdateProject(taskMetaProject, { persist: false }));
           };
-          try { await patchProject(pTask.id, { characters: taskMetaProject.characters }); }
-          catch (err) { console.warn('[ProjectDashboard] patchProject(characters/taskCode) 失败，回退到全量保存:', err); await Promise.resolve(onUpdateProject(taskMetaProject)); }
-          await Promise.resolve(onUpdateProject(taskMetaProject, { persist: false }));
+          
+          const myTaskWrite = writeChainRef.current.then(doTaskWrite);
+          writeChainRef.current = myTaskWrite.catch(() => {});
+          await myTaskWrite;
         },
         { skipOSSUpload: true }
       );
@@ -1152,34 +1160,39 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           createdTaskAt = new Date().toISOString();
           setSceneGenProgressMap(prev => { const m = new Map(prev); m.set(sceneId, { stage: '保存任务信息', percent: 15 }); return m; });
 
-          // 🔧 使用 projectRef.current 获取最新状态，避免覆盖其他已保存场景的数据
-          const p = projectRef.current;
-          const taskMetaProject: Project = {
-            ...p,
-            updatedAt: new Date().toISOString(),
-            scenes: (p.scenes || []).map(s => {
-              if (s.id !== sceneId) return s;
-              return {
-                ...s,
-                imageGenerationMeta: {
-                  modelName: sceneImageModel,
-                  styleName: sceneStyle?.name || '未知风格',
-                  generatedAt: createdTaskAt,
-                  taskCode,
-                  taskCreatedAt: createdTaskAt,
-                },
-              };
-            }),
-          };
+          // 🔧 串行化写入 taskCode，避免并发生成导致状态覆盖
+          const doTaskWrite = async () => {
+            const p = projectRef.current;
+            const taskMetaProject: Project = {
+              ...p,
+              updatedAt: new Date().toISOString(),
+              scenes: (p.scenes || []).map(s => {
+                if (s.id !== sceneId) return s;
+                return {
+                  ...s,
+                  imageGenerationMeta: {
+                    modelName: sceneImageModel,
+                    styleName: sceneStyle?.name || '未知风格',
+                    generatedAt: createdTaskAt,
+                    taskCode,
+                    taskCreatedAt: createdTaskAt,
+                  },
+                };
+              }),
+            };
 
-          // 先持久化 taskCode 到数据库，再更新前端状态
-          try {
-            await patchProject(p.id, { scenes: taskMetaProject.scenes });
-          } catch (err) {
-            console.warn('[ProjectDashboard] patchProject(scenes/taskCode) 失败，回退到全量保存:', err);
-            await Promise.resolve(onUpdateProject(taskMetaProject));
-          }
-          await Promise.resolve(onUpdateProject(taskMetaProject, { persist: false }));
+            try {
+              await patchProject(p.id, { scenes: taskMetaProject.scenes });
+            } catch (err) {
+              console.warn('[ProjectDashboard] patchProject(scenes/taskCode) 失败，回退到全量保存:', err);
+              await saveProject(taskMetaProject);
+            }
+            await Promise.resolve(onUpdateProject(taskMetaProject, { persist: false }));
+          };
+          
+          const myTaskWrite = writeChainRef.current.then(doTaskWrite);
+          writeChainRef.current = myTaskWrite.catch(() => {});
+          await myTaskWrite;
         },
         // S3：设定图直接保存 Neodomain 的永久 image_urls，跳过 OSS
         { skipOSSUpload: true }
@@ -1188,38 +1201,47 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       const sheetUrl = imageUrls?.[0];
       if (!sheetUrl) throw new Error('未获取到生成图片URL');
 
-      // 🔧 生成完成：再次用 projectRef.current 获取最新状态，避免覆盖已保存的其他场景数据
-      const finalProject = projectRef.current;
-      const updatedProject: Project = {
-        ...finalProject,
-        updatedAt: new Date().toISOString(),
-        scenes: (finalProject.scenes || []).map(s => {
-          if (s.id !== sceneId) return s;
-          return {
-            ...s,
-            imageSheetUrl: sheetUrl,
-            imageGenerationMeta: {
-              modelName: sceneImageModel,
-              styleName: sceneStyle?.name || '未知风格',
-              generatedAt: new Date().toISOString(),
-              taskCode: createdTaskCode || s.imageGenerationMeta?.taskCode,
-              taskCreatedAt: createdTaskAt || s.imageGenerationMeta?.taskCreatedAt,
-            },
-          };
-        }),
+      // 🔧 串行化写入生成结果，防止并发时互相覆盖
+      const doWrite = async () => {
+        const finalProject = projectRef.current;
+        const updatedProject: Project = {
+          ...finalProject,
+          updatedAt: new Date().toISOString(),
+          scenes: (finalProject.scenes || []).map(s => {
+            if (s.id !== sceneId) return s;
+            return {
+              ...s,
+              imageSheetUrl: sheetUrl,
+              imageGenerationMeta: {
+                modelName: sceneImageModel,
+                styleName: sceneStyle?.name || '未知风格',
+                generatedAt: new Date().toISOString(),
+                taskCode: createdTaskCode || s.imageGenerationMeta?.taskCode,
+                taskCreatedAt: createdTaskAt || s.imageGenerationMeta?.taskCreatedAt,
+              },
+            };
+          }),
+        };
+
+        // 立即同步更新 ref，让后续任务拿到最新状态
+        projectRef.current = updatedProject;
+
+        // 先持久化到数据库，再更新前端状态
+        try {
+          await patchProject(finalProject.id, { scenes: updatedProject.scenes });
+          console.log(`[ProjectDashboard] ✅ 场景设定图已保存到数据库: ${scene.name}`);
+        } catch (err) {
+          console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
+          await saveProject(updatedProject);
+        }
+
+        // 最后更新前端状态（persist: false 避免重复保存）
+        await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
       };
 
-      // 先持久化到数据库，再更新前端状态
-      try {
-        await patchProject(finalProject.id, { scenes: updatedProject.scenes });
-        console.log(`[ProjectDashboard] ✅ 场景设定图已保存到数据库: ${scene.name}`);
-      } catch (err) {
-        console.warn('[ProjectDashboard] patchProject(scenes) 失败，回退到全量保存:', err);
-        await saveProject(updatedProject);
-      }
-
-      // 最后更新前端状态（persist: false 避免重复保存）
-      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+      const myWrite = writeChainRef.current.then(doWrite);
+      writeChainRef.current = myWrite.catch(() => {});
+      await myWrite;
     } catch (error: any) {
       console.error('生成场景设定图失败:', error);
       alert(`❌ 生成失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
