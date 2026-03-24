@@ -225,28 +225,51 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
 
   const handleExtractPrompts = async () => {
     setIsExtracting(true);
-    setExtractProgress('正在分析分镜脚本，提取AI生图提示词...');
+    setExtractProgress('正在分析分镜脚本，准备提取AI生图提示词...');
 
     try {
-      const stream = extractImagePromptsStream(shots);
-      let fullText = '';
-      for await (const text of stream) {
-        fullText = text;
-        // 32镜头×约500字≈16000字总输出，除以250使进度在完成时约60-80%，最高封顶99%
-        setExtractProgress(`提取中... (${Math.min(Math.round(fullText.length / 250), 99)}%)`);
+      const BATCH_SIZE = 15; // 分批提取，避免大批量引发 Token 截断
+      let allExtracted: any[] = [];
+
+      for (let i = 0; i < shots.length; i += BATCH_SIZE) {
+        const batchShots = shots.slice(i, i + BATCH_SIZE);
+        const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(shots.length / BATCH_SIZE);
+        const baseProgressPercent = (i / shots.length) * 100;
+        const progressPerBatch = (batchShots.length / shots.length) * 100;
+
+        setExtractProgress(`正在准备批次 ${batchIndex} / ${totalBatches}...`);
+
+        try {
+          const stream = extractImagePromptsStream(batchShots);
+          let fullText = '';
+          for await (const text of stream) {
+            fullText = text;
+            // 估算批次内的进度，封顶不超过本批次总上限
+            const currentProgress = Math.min(Math.round(baseProgressPercent + (fullText.length / (BATCH_SIZE * 300)) * progressPerBatch), Math.round(baseProgressPercent + progressPerBatch - 1));
+            setExtractProgress(`提取中... (批次 ${batchIndex}/${totalBatches}) ${currentProgress}%`);
+          }
+
+          const extracted = safeParsePromptExtractionResult(fullText);
+          if (Array.isArray(extracted)) {
+            allExtracted = allExtracted.concat(extracted);
+          }
+        } catch (err) {
+          console.error(`批次 ${batchIndex} 提取异常:`, err);
+        }
       }
 
-      // 解析JSON并更新shots（兼容 ```json 代码块等格式）
-      const extracted = safeParsePromptExtractionResult(fullText);
-      if (!Array.isArray(extracted) || extracted.length === 0) {
-        throw new Error('提示词提取结果解析失败，请稍后重试或尝试更换模型');
+      if (allExtracted.length === 0) {
+        throw new Error('提示词提取结果解析彻底失败，请稍后重试或检查模型网络状态');
       }
+
       const updatedShots = shots.map(shot => {
-        const match = extracted.find((e: any) => e.shotNumber === shot.shotNumber);
+        // 兼容字符串和数字类型的 shotNumber
+        const match = allExtracted.find((e: any) => String(e.shotNumber) === String(shot.shotNumber));
         if (match) {
           const newPrompt = match.imagePromptCn || '';
 
-          // ── 新增：提取并关联角色 ──
+          // ── 提取并关联角色 ──
           const regex = /@([^(]+)(?:\(([^)]+)\))?/g;
           const assignedCharIds = new Set<string>(shot.assignedCharacterIds || []);
           let m;
@@ -268,7 +291,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
       });
 
       setShots(updatedShots);
-      setExtractProgress(`✅ 提取完成！已更新 ${extracted.length} 个镜头的AI提示词`);
+      setExtractProgress(`✅ 提取完成！已更新 ${allExtracted.length} 个镜头的AI提示词`);
 
       // 保存到云端
       if (currentProject && currentEpisodeNumber !== null) {
@@ -284,7 +307,7 @@ export const PromptExtractionPage: React.FC<PromptExtractionPageProps> = ({
               updatedAt: new Date().toISOString(),
             };
             await saveEpisode(currentProject.id, updatedEpisode);
-            setExtractProgress(`✅ 提取完成！已更新 ${extracted.length} 个镜头的AI提示词（已保存到云端）`);
+            setExtractProgress(`✅ 提取完成！已更新 ${allExtracted.length} 个镜头的AI提示词（已保存到云端）`);
           } catch (error) {
             console.error('[D1存储] ❌ 保存提示词失败:', error);
           }

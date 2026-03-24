@@ -85,7 +85,10 @@ export function FinalStoryboard({
   const [isBatchMode, setIsBatchMode] = useState(false); // 🆕 智能并行批量模式
   const [videoModel, setVideoModel] = useState<'doubao-seedance-2-0-260128' | 'doubao-seedance-2-0-fast-260128'>('doubao-seedance-2-0-260128'); // 🆕 模型选择
 
-  // 批量生成处理器已经移到下方
+  // 🆕 自定义时长映射记录 (groupId -> duration)
+  const [customDurations, setCustomDurations] = useState<Record<string, number>>({});
+  // 🆕 自定义提示词映射记录 (groupId -> prompt)
+  const [customPrompts, setCustomPrompts] = useState<Record<string, string>>({});
 
   // 🆕 使用 useRef 追踪最新的 shots，防止异步回调中出现 stale closure 导致数据覆盖
   const latestShotsRef = useRef(shots);
@@ -433,6 +436,19 @@ export function FinalStoryboard({
     writeChainRef.current = myWrite.catch(() => {});
   };
 
+  const handleShotChange = (shotId: string, updates: Partial<Shot>) => {
+    const nextShots = latestShotsRef.current.map(s => s.id === shotId ? { ...s, ...updates } : s);
+    latestShotsRef.current = nextShots;
+    setShots(nextShots);
+    const myWrite = writeChainRef.current.then(() => handleSaveEpisodes(latestShotsRef.current));
+    writeChainRef.current = myWrite.catch(() => {});
+  };
+
+  // 辅助获取实际生成时长
+  const getTargetDuration = (group: VideoGroup) => {
+    return customDurations[group.id] || Math.min(15, Math.max(4, Math.round(group.totalDuration)));
+  };
+
   const handleGenerateGroup = async (group: VideoGroup, promptText: string, isAutoRetry = false) => {
     let shouldCleanup = true;
     setGeneratingGroupIds(prev => new Set(prev).add(group.id));
@@ -502,7 +518,7 @@ export function FinalStoryboard({
 
       // 3. 自由生成 (不再强制视觉参考，支持纯文生视频)
 
-      const targetDuration = Math.min(15, Math.max(4, Math.round(group.totalDuration)));
+      const targetDuration = getTargetDuration(group);
       
       const res = await createVideoTask({
         model,
@@ -1049,7 +1065,15 @@ export function FinalStoryboard({
             /* 原始视图 */
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
               {shots.map((shot, idx) => (
-                <StoryboardCard key={shot.id} shot={shot} index={idx} characterRefs={characterRefs} scenes={scenes} isExporting={isExporting} />
+                <StoryboardCard 
+                  key={shot.id} 
+                  shot={shot} 
+                  index={idx} 
+                  characterRefs={characterRefs} 
+                  scenes={scenes} 
+                  isExporting={isExporting} 
+                  onShotChange={isExporting ? undefined : handleShotChange}
+                />
               ))}
             </div>
           ) : (
@@ -1075,6 +1099,11 @@ export function FinalStoryboard({
                     onUploadCustomReference={(file) => handleUploadCustomRef(group.id, file)}
                     onRemoveCustomReference={(url) => handleRemoveCustomRef(group.id, url)}
                     onSetCharacterForm={(groupId, charId, formId) => handleSetCharacterForm(groupId, charId, formId)}
+                    customDuration={customDurations[group.id]}
+                    onCustomDurationChange={(groupId, duration) => setCustomDurations(prev => ({ ...prev, [groupId]: duration }))}
+                    customPrompt={customPrompts[group.id]}
+                    onCustomPromptChange={(groupId, val) => setCustomPrompts(prev => ({ ...prev, [groupId]: val }))}
+                    onShotChange={isExporting ? undefined : handleShotChange}
                   />
                 );
               })}
@@ -1089,7 +1118,7 @@ export function FinalStoryboard({
 /**
  * 单个故事板卡片组件 (Premium Style)
  */
-function StoryboardCard({ shot, index, characterRefs, scenes, isExporting }: { shot: Shot; index: number; characterRefs: CharacterRef[]; scenes?: SceneRef[]; isExporting?: boolean; }) {
+function StoryboardCard({ shot, index, characterRefs, scenes, isExporting, onShotChange }: { shot: Shot; index: number; characterRefs: CharacterRef[]; scenes?: SceneRef[]; isExporting?: boolean; onShotChange?: (id: string, updates: Partial<Shot>) => void }) {
   const storyBeat = getShotStoryBeat(shot);
 
   return (
@@ -1113,16 +1142,32 @@ function StoryboardCard({ shot, index, characterRefs, scenes, isExporting }: { s
           <div className={`bg-gray-900 border-b border-white/5 p-5 flex flex-col justify-start gap-3 ${isExporting ? 'h-full flex-grow' : 'absolute inset-0 overflow-y-auto custom-scrollbar'}`}>
             <div className="flex flex-col gap-2 flex-grow">
               <div className="text-xs text-amber-500/80 font-bold border-b border-amber-500/10 pb-1 inline-block w-max">📖 分镜剧情</div>
-              <div className={`text-sm text-gray-200 leading-relaxed font-medium drop-shadow-md whitespace-pre-wrap`}>
-                {storyBeat}
-              </div>
+              {onShotChange && !isExporting ? (
+                <textarea
+                  className="w-full bg-transparent text-sm text-gray-200 leading-relaxed font-medium outline-none resize-none overflow-hidden m-0 p-0 placeholder-gray-500 custom-scrollbar flex-grow"
+                  value={storyBeat}
+                  onChange={(e) => onShotChange(shot.id, { storyBeat: e.target.value, imagePromptCn: e.target.value })}
+                />
+              ) : (
+                <div className={`text-sm text-gray-200 leading-relaxed font-medium drop-shadow-md whitespace-pre-wrap`}>
+                  {storyBeat}
+                </div>
+              )}
             </div>
             {shot.dialogue && (
               <div className="flex flex-col gap-1.5 mt-auto">
                 <div className="text-xs text-blue-400/80 font-bold border-b border-blue-500/10 pb-1 inline-block w-max">💬 对话</div>
-                <div className="text-sm text-blue-100/90 italic drop-shadow-md bg-blue-900/20 p-2.5 rounded">
-                  "{shot.dialogue}"
-                </div>
+                  {onShotChange && !isExporting ? (
+                    <textarea
+                      className="w-full bg-transparent text-blue-100 outline-none resize-none m-0 p-0"
+                      value={shot.dialogue || ''}
+                      onChange={(e) => onShotChange(shot.id, { dialogue: e.target.value })}
+                      rows={(shot.dialogue || '').split('\n').length || 1}
+                      placeholder="此处输入角色的对话..."
+                    />
+                  ) : (
+                    `"${shot.dialogue}"`
+                   )}
               </div>
             )}
             {(shot.assignedCharacterIds && shot.assignedCharacterIds.length > 0) || (shot.sceneId && scenes && scenes.length > 0) ? (
@@ -1202,20 +1247,68 @@ function StoryboardCard({ shot, index, characterRefs, scenes, isExporting }: { s
 
         {/* 底部小 Badge 状态栏 */}
         <div className="flex flex-wrap gap-2 mt-auto pt-4 border-t border-white/5">
-          <div className="flex items-center gap-1.5 justify-center bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium">
-            ⏱ {shot.duration}
+          <div className="flex items-center gap-1 bg-blue-500/10 text-blue-300 border border-blue-500/20 px-1.5 py-0.5 rounded-md text-[11px] font-medium focus-within:border-blue-400 focus-within:bg-blue-500/20 transition-colors">
+            ⏱ 
+            {onShotChange && !isExporting ? (
+              <input 
+                type="text"
+                className="w-8 bg-transparent text-center focus:outline-none appearance-none font-bold"
+                value={shot.duration.replace('s', '')}
+                onChange={(e) => onShotChange(shot.id, { duration: e.target.value + 's' })}
+                onClick={(e) => e.stopPropagation()} // Prevent triggering other things
+              />
+            ) : (
+              <span>{shot.duration.replace('s', '')}</span>
+            )}
+            s
           </div>
-          <div className="flex items-center justify-center bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium">
-            🎥 {shot.shotSize}
+          <div className="flex items-center justify-center bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium focus-within:border-purple-400 focus-within:bg-purple-500/20 transition-colors">
+            🎥 
+            {onShotChange && !isExporting ? (
+              <input
+                className="w-12 bg-transparent text-center focus:outline-none placeholder-purple-500/50 ml-1"
+                value={shot.shotSize || ''}
+                onChange={(e) => onShotChange(shot.id, { shotSize: e.target.value as any })}
+                placeholder="景别"
+              />
+            ) : (
+              <span className="ml-1">{shot.shotSize}</span>
+            )}
           </div>
-          <div className="flex items-center justify-center bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium">
-            📐 {shot.angleDirection} {shot.angleHeight}
+          <div className="flex items-center justify-center bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium focus-within:border-emerald-400 focus-within:bg-emerald-500/20 transition-colors">
+            📐 
+            {onShotChange && !isExporting ? (
+              <>
+                <input
+                  className="w-12 bg-transparent text-center focus:outline-none placeholder-emerald-500/50 ml-1"
+                  value={shot.angleDirection || ''}
+                  onChange={(e) => onShotChange(shot.id, { angleDirection: e.target.value as any })}
+                  placeholder="方向"
+                />
+                <input
+                  className="w-12 bg-transparent text-center focus:outline-none placeholder-emerald-500/50 ml-1 border-l border-emerald-500/20 pl-1"
+                  value={shot.angleHeight || ''}
+                  onChange={(e) => onShotChange(shot.id, { angleHeight: e.target.value as any })}
+                  placeholder="高度"
+                />
+              </>
+            ) : (
+              <span className="ml-1">{shot.angleDirection} {shot.angleHeight}</span>
+            )}
           </div>
-          {shot.cameraMove !== '固定(Static)' && (
-            <div className="flex items-center justify-center bg-rose-500/10 text-rose-300 border border-rose-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium">
-              💨 {shot.cameraMove}
-            </div>
-          )}
+          <div className="flex items-center justify-center bg-rose-500/10 text-rose-300 border border-rose-500/20 px-2.5 py-1 rounded-md text-[11px] font-medium focus-within:border-rose-400 focus-within:bg-rose-500/20 transition-colors">
+            💨 
+            {onShotChange && !isExporting ? (
+              <input
+                className="w-16 bg-transparent text-center focus:outline-none placeholder-rose-500/50 ml-1"
+                value={shot.cameraMove || ''}
+                onChange={(e) => onShotChange(shot.id, { cameraMove: e.target.value as any })}
+                placeholder="运镜方式"
+              />
+            ) : (
+              <span className="ml-1">{shot.cameraMove}</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1239,6 +1332,11 @@ function VideoGroupCard({
   onUploadCustomReference,
   onRemoveCustomReference,
   onSetCharacterForm,
+  customDuration,
+  onCustomDurationChange,
+  customPrompt,
+  onCustomPromptChange,
+  onShotChange,
 }: {
   group: VideoGroup;
   prompt: VideoGroupPrompt | undefined;
@@ -1253,6 +1351,11 @@ function VideoGroupCard({
   onUploadCustomReference?: (file: File) => Promise<void>;
   onRemoveCustomReference?: (url: string) => Promise<void>;
   onSetCharacterForm?: (groupId: string, charId: string, formId?: string) => Promise<void>;
+  customDuration?: number;
+  onCustomDurationChange?: (groupId: string, duration: number) => void;
+  customPrompt?: string;
+  onCustomPromptChange?: (groupId: string, prompt: string) => void;
+  onShotChange?: (shotId: string, updates: Partial<Shot>) => void;
 }) {
   const [showPrompt, setShowPrompt] = useState(true);
 
@@ -1282,7 +1385,26 @@ function VideoGroupCard({
               {group.sceneName && (
                 <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>{group.sceneName}</span>
               )}
-              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>时长: <strong className="text-white font-medium">{group.totalDuration.toFixed(1)}s</strong></span>
+              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>时长: 
+                {onCustomDurationChange && !isGenerating ? (
+                  <div className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10 hover:border-indigo-400/50 transition-colors focus-within:border-indigo-400 focus-within:bg-white/10">
+                    <input
+                      type="number"
+                      min={4}
+                      max={15}
+                      step={1}
+                      disabled={isGenerating}
+                      value={customDuration || Math.min(15, Math.max(4, Math.round(group.totalDuration)))}
+                      onChange={(e) => onCustomDurationChange(group.id, Math.min(15, Math.max(4, parseInt(e.target.value) || 4)))}
+                      className="w-10 bg-transparent text-white font-bold text-center appearance-none focus:outline-none placeholder-indigo-300 pointer-events-auto"
+                      title="手动调整视频生成时长 (4-15秒)"
+                    />
+                    <span className="text-white font-medium">s</span>
+                  </div>
+                ) : (
+                  <strong className="text-white font-medium">{customDuration || group.totalDuration.toFixed(1)}s</strong>
+                )}
+              </span>
               <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>包含 <strong className="text-white font-medium">{group.shots.length}</strong> 个镜头</span>
             </div>
 
@@ -1463,7 +1585,7 @@ function VideoGroupCard({
 
             {prompt && onGenerateVideo && (
               <button
-                onClick={onGenerateVideo}
+                onClick={() => prompt && onGenerateVideo?.()}
                 disabled={isGenerating || dependencyInfo?.status === 'pending'}
                 className={`px-4 py-2 ${group.shots[0]?.shot?.videoUrl ? 'bg-[#1a1b26]/50 hover:bg-[#1a1b26] border border-white/10' : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 border border-emerald-400/30'} ${dependencyInfo?.status === 'pending' ? 'opacity-50 cursor-not-allowed grayscale' : ''} text-white rounded-lg transition-all text-sm font-bold flex items-center gap-2 shadow-lg whitespace-nowrap`}
               >
@@ -1570,7 +1692,14 @@ function VideoGroupCard({
           )}
           <div className={`grid grid-cols-1 md:grid-cols-2 ${prompt && showPrompt ? '2xl:grid-cols-2' : 'lg:grid-cols-2 xl:grid-cols-3'} gap-6 md:gap-8`}>
             {group.shots.map((shotRange, idx) => (
-              <GroupedShotCard key={shotRange.shot.id} shotRange={shotRange} characterRefs={characterRefs} scenes={scenes} isExporting={isExporting} />
+              <GroupedShotCard 
+                key={shotRange.shot.id} 
+                shotRange={shotRange} 
+                characterRefs={characterRefs} 
+                scenes={scenes} 
+                isExporting={isExporting} 
+                onShotChange={isExporting ? undefined : onShotChange}
+              />
             ))}
           </div>
         </div>
@@ -1703,7 +1832,7 @@ function VideoGroupCard({
 /**
  * 分组视图中的单个镜头小卡片 (Premium Style)
  */
-function GroupedShotCard({ shotRange, characterRefs, scenes, isExporting }: { shotRange: { shot: Shot; startSecond: number; endSecond: number; shotNumber: string }; characterRefs: CharacterRef[]; scenes?: SceneRef[]; isExporting?: boolean; }) {
+function GroupedShotCard({ shotRange, characterRefs, scenes, isExporting, onShotChange }: { shotRange: { shot: Shot; startSecond: number; endSecond: number; shotNumber: string }; characterRefs: CharacterRef[]; scenes?: SceneRef[]; isExporting?: boolean; onShotChange?: (id: string, updates: Partial<Shot>) => void }) {
   const { shot } = shotRange;
   const storyBeat = getShotStoryBeat(shot);
 
@@ -1716,9 +1845,28 @@ function GroupedShotCard({ shotRange, characterRefs, scenes, isExporting }: { sh
         <span className="font-mono text-[10px] bg-black/60 backdrop-blur-sm border border-white/10 px-1.5 py-0.5 rounded text-white font-bold drop-shadow-md">
           #{shot.shotNumber}
         </span>
-        <span className="text-[10px] bg-indigo-600/80 backdrop-blur-sm border border-white/10 px-1.5 py-0.5 rounded text-white font-medium drop-shadow-md">
-          {shotRange.startSecond.toFixed(0)}-{shotRange.endSecond.toFixed(0)}s
-        </span>
+        
+        <div className="flex items-center bg-indigo-600/80 backdrop-blur-sm border border-white/10 pl-1.5 pr-1 py-0.5 rounded text-white drop-shadow-md focus-within:ring-1 focus-within:ring-white/50">
+          <span className="text-[10px] font-medium mr-1 border-r border-white/20 pr-1 select-none flex-shrink-0">
+            {shotRange.startSecond.toFixed(0)}s
+          </span>
+          {onShotChange && !isExporting ? (
+            <div className="flex items-center gap-0.5">
+              <span className="text-[10px] font-medium text-indigo-300">(</span>
+              <input
+                type="text"
+                className="w-4 bg-transparent text-center text-[10px] font-bold outline-none appearance-none placeholder-indigo-300"
+                value={shot.duration.replace('s', '')}
+                onChange={(e) => onShotChange(shot.id, { duration: e.target.value + 's' })}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <span className="text-[10px] font-bold leading-none pr-0.5">s</span>
+              <span className="text-[10px] font-medium text-indigo-300">)</span>
+            </div>
+          ) : (
+            <span className="text-[10px] font-medium">-{shotRange.endSecond.toFixed(0)}s</span>
+          )}
+        </div>
       </div>
 
       {/* 强制16:9比例缩略图/文本区 */}
@@ -1731,16 +1879,31 @@ function GroupedShotCard({ shotRange, characterRefs, scenes, isExporting }: { sh
           <div className={`bg-gray-900 border-b border-white/5 p-4 flex flex-col justify-start gap-2 ${isExporting ? 'h-full flex-grow' : 'absolute inset-0 overflow-y-auto custom-scrollbar'}`}>
             <div className="flex flex-col gap-1.5 flex-grow">
               <div className="text-[10px] text-amber-500/80 font-bold border-b border-amber-500/10 pb-0.5 inline-block w-max">📖 分镜剧情</div>
-              <div className={`text-[12px] text-gray-200 leading-snug font-medium drop-shadow-md ${isExporting ? 'whitespace-pre-wrap' : 'line-clamp-4'}`}>
-                {storyBeat}
-              </div>
+              {onShotChange && !isExporting ? (
+                <textarea
+                  className="w-full bg-transparent text-[12px] text-gray-200 leading-snug font-medium outline-none resize-none custom-scrollbar flex-grow"
+                  value={storyBeat}
+                  onChange={(e) => onShotChange(shot.id, { storyBeat: e.target.value, imagePromptCn: e.target.value })}
+                />
+              ) : (
+                <div className={`text-[12px] text-gray-200 leading-snug font-medium drop-shadow-md ${isExporting ? 'whitespace-pre-wrap' : 'line-clamp-4'}`}>
+                  {storyBeat}
+                </div>
+              )}
             </div>
             {shot.dialogue && (
               <div className="flex flex-col gap-1 mt-auto">
                 <div className="text-[10px] text-blue-400/80 font-bold border-b border-blue-500/10 pb-0.5 inline-block w-max">💬 对话</div>
-                <div className="text-[11px] text-blue-100/90 italic drop-shadow-md bg-blue-900/20 p-1.5 rounded line-clamp-2">
-                  "{shot.dialogue}"
-                </div>
+                  {onShotChange && !isExporting ? (
+                    <textarea
+                      className="w-full bg-transparent text-blue-100 outline-none resize-none m-0 p-0"
+                      value={shot.dialogue || ''}
+                      onChange={(e) => onShotChange(shot.id, { dialogue: e.target.value })}
+                      rows={(shot.dialogue || '').split('\n').length || 1}
+                    />
+                  ) : (
+                    `"${shot.dialogue}"`
+                   )}
               </div>
             )}
             {(shot.assignedCharacterIds && shot.assignedCharacterIds.length > 0) || (shot.sceneId && scenes && scenes.length > 0) ? (
@@ -1794,9 +1957,18 @@ function GroupedShotCard({ shotRange, characterRefs, scenes, isExporting }: { sh
       {/* 内容信息 (叠在图片下半部分) 只有在有图片的情况下才需要在这个位置重复显示剧情，如果是纯文字模式它已经在上面展示过了 */}
       {shot.storyboardGridUrl && typeof shot.storyboardGridCellIndex === 'number' && (
         <div className="px-3 pb-3 pt-6 -mt-8 relative z-20 flex-grow flex flex-col justify-end">
-          <div className="text-xs text-gray-200 line-clamp-2 leading-snug drop-shadow-md font-medium">
-            {storyBeat}
-          </div>
+          {onShotChange && !isExporting ? (
+            <textarea
+              className="w-full bg-transparent text-xs text-gray-200 leading-snug font-medium outline-none resize-none m-0 p-0 placeholder-gray-500 custom-scrollbar"
+              value={storyBeat}
+              onChange={(e) => onShotChange(shot.id, { storyBeat: e.target.value, imagePromptCn: e.target.value })}
+              rows={2}
+            />
+          ) : (
+            <div className="text-xs text-gray-200 line-clamp-2 leading-snug drop-shadow-md font-medium">
+              {storyBeat}
+            </div>
+          )}
           {shot.dialogue && (
             <div className="mt-1 text-[10px] text-amber-200/90 italic truncate drop-shadow-md pb-1">
               "{shot.dialogue}"

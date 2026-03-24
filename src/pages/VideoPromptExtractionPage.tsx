@@ -187,23 +187,46 @@ export const VideoPromptExtractionPage: React.FC<VideoPromptExtractionPageProps>
 
   const handleExtractVideoPrompts = async () => {
     setIsExtracting(true);
-    setExtractProgress('正在生成 Seedance 2.0 视频提示词...');
+    setExtractProgress('正在准备生成 Seedance 2.0 视频提示词...');
 
     try {
-      const stream = extractVideoPromptsStream(shots);
-      let fullText = '';
-      for await (const text of stream) {
-        fullText = text;
-        setExtractProgress(`生成中... (${Math.min(Math.round(fullText.length / 300), 99)}%)`);
+      const BATCH_SIZE = 15; // 分批提取，避免大批量引发 Token 截断
+      let allExtracted: any[] = [];
+
+      for (let i = 0; i < shots.length; i += BATCH_SIZE) {
+        const batchShots = shots.slice(i, i + BATCH_SIZE);
+        const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(shots.length / BATCH_SIZE);
+        const baseProgressPercent = (i / shots.length) * 100;
+        const progressPerBatch = (batchShots.length / shots.length) * 100;
+
+        setExtractProgress(`正在准备批次 ${batchIndex} / ${totalBatches}...`);
+
+        try {
+          const stream = extractVideoPromptsStream(batchShots);
+          let fullText = '';
+          for await (const text of stream) {
+            fullText = text;
+            const currentProgress = Math.min(Math.round(baseProgressPercent + (fullText.length / (BATCH_SIZE * 300)) * progressPerBatch), Math.round(baseProgressPercent + progressPerBatch - 1));
+            setExtractProgress(`生成中... (批次 ${batchIndex}/${totalBatches}) ${currentProgress}%`);
+          }
+
+          const extracted = safeParsePromptExtractionResult(fullText);
+          if (Array.isArray(extracted)) {
+            allExtracted = allExtracted.concat(extracted);
+          }
+        } catch (err) {
+          console.error(`批次 ${batchIndex} 生成异常:`, err);
+        }
       }
 
-      const extracted = safeParsePromptExtractionResult(fullText);
-      if (!Array.isArray(extracted) || extracted.length === 0) {
-        throw new Error('视频提示词生成结果解析失败，请稍后重试');
+      if (allExtracted.length === 0) {
+        throw new Error('视频提示词生成结果完全解析失败，请调整您的镜头或稍后重试');
       }
 
       const updatedShots = shots.map(shot => {
-        const match = extracted.find((e: any) => e.shotNumber === shot.shotNumber);
+        // 兼容处理 shotNumber
+        const match = allExtracted.find((e: any) => String(e.shotNumber) === String(shot.shotNumber));
         if (match) {
           const newPrompt = match.videoPromptCn || '';
 
@@ -229,7 +252,7 @@ export const VideoPromptExtractionPage: React.FC<VideoPromptExtractionPageProps>
       });
 
       setShots(updatedShots);
-      setExtractProgress(`✅ 生成完成！已为 ${extracted.length} 个镜头生成了 Seedance 2.0 视频提示词`);
+      setExtractProgress(`✅ 生成完成！已为 ${allExtracted.length} 个镜头生成了 Seedance 2.0 视频提示词`);
 
       if (currentProject && currentEpisodeNumber !== null) {
         const currentEpisode = currentProject.episodes?.find(
@@ -253,7 +276,7 @@ export const VideoPromptExtractionPage: React.FC<VideoPromptExtractionPageProps>
               ),
             });
             
-            setExtractProgress(`✅ 生成完成！已更新 ${extracted.length} 个镜头提示词（已保存到云端）`);
+            setExtractProgress(`✅ 生成完成！已更新 ${allExtracted.length} 个镜头提示词（已保存到云端）`);
           } catch (error) {
             console.error('[D1存储] ❌ 保存提示词失败:', error);
           }

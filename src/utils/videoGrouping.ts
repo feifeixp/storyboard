@@ -231,42 +231,50 @@ export function generateVideoGroupPrompt(
     const endSec = Math.floor(shotRange.endSecond);
 
     let line = `\n${startSec}-${endSec}秒画面：`;
+    let shotDesc = '';
 
     // (a) 运镜方式（核心规范三 — 专业化描述）
     const moveDesc = CAMERA_MOVE_MAP[shot.cameraMove] || '';
     if (moveDesc && shot.cameraMove !== '固定(Static)') {
-      line += `${moveDesc}，`;
+      shotDesc += `${moveDesc}，`;
     }
     // 运镜细节补充（如速度、幅度）
     if (shot.cameraMoveDetail) {
-      line += `${shot.cameraMoveDetail}，`;
+      shotDesc += `${shot.cameraMoveDetail}，`;
     }
     // 角度高度描述
     const angleDesc = translateAngleHeight(shot.angleHeight);
     if (angleDesc) {
-      line += `${angleDesc}，`;
+      shotDesc += `${angleDesc}，`;
     }
 
     // (b) 主体动作 / 故事节拍
     const storyBeat = getShotStoryBeat(shot);
     if (storyBeat) {
-      line += `${storyBeat}。`;
+      const cleanBeat = storyBeat.trim().replace(/[。，,.\s]+$/, '');
+      if (cleanBeat) shotDesc += `${cleanBeat}。`;
     }
 
     // (c) 台词/对白 — 音画同步（核心规范四）
     if (shot.dialogue) {
-      line += `说话"${shot.dialogue}"。`;
+      shotDesc += `说话"${shot.dialogue.trim()}"。`;
     }
 
     // (d) 音效（从 storyBeat 对象获取）
     if (typeof shot.storyBeat === 'object' && shot.storyBeat.sound) {
-      line += `音效：${shot.storyBeat.sound}。`;
+      const cleanSound = shot.storyBeat.sound.trim().replace(/[。，,.\s]+$/, '');
+      if (cleanSound) shotDesc += `音效：${cleanSound}。`;
     }
 
     // (e) 视频生成提示词（如果存在，优先使用更精准的描述）
     if (shot.videoPromptCn) {
-      line += `${shot.videoPromptCn}`;
+      const cleanPrompt = shot.videoPromptCn.trim().replace(/[。，,.\s]+$/, '');
+      if (cleanPrompt) shotDesc += `${cleanPrompt}。`;
     }
+
+    // 清理可能产生的连环句号
+    shotDesc = shotDesc.replace(/。{2,}/g, '。');
+    line += shotDesc;
 
     timelineLines.push(line);
 
