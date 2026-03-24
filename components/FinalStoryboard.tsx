@@ -175,9 +175,11 @@ export function FinalStoryboard({
   // 从提示词提取引用角色和场景并转换成 API 格式 (多模态参考)
   const extractContentList = (promptText: string, group?: VideoGroup): VideoContentItem[] => {
     const content: VideoContentItem[] = [];
-    content.push({ type: 'text', text: promptText });
-
     const addedImageUrls = new Set<string>();
+    
+    let augmentedText = promptText;
+    let textSupplements = '\n\n【视觉设定参考】\n';
+    let hasSupplements = false;
 
     // 提取角色
     if (characterRefs && characterRefs.length > 0) {
@@ -191,7 +193,7 @@ export function FinalStoryboard({
         if (char) {
           let url = getCharacterImageUrl(char);
           
-          // 🆕 如果在当前组手动指定了形态，则用其覆盖
+          // 如果在当前组手动指定了形态，则用其覆盖
           if (group && group.shots[0]?.shot.selectedCharacterForms?.[char.id]) {
             const formId = group.shots[0].shot.selectedCharacterForms[char.id];
             const form = char.forms?.find(f => f.id === formId);
@@ -208,14 +210,29 @@ export function FinalStoryboard({
               image_url: { url }
             });
           }
+          
+          // 补充角色文本描述（无论是否有图都补充，帮助 AI 更好理解）
+          if (char.appearance) {
+             textSupplements += `- 角色[${char.name}]: ${char.appearance.substring(0, 150)}\n`;
+             hasSupplements = true;
+          }
         }
       });
     }
 
     // 提取场景
     if (scenes && scenes.length > 0) {
+      // 收集当前组所有明确指定的 sceneId
+      const explicitSceneIds = new Set<string>();
+      if (group && group.shots) {
+        group.shots.forEach(s => {
+          if (s.shot.sceneId) explicitSceneIds.add(s.shot.sceneId);
+        });
+      }
+
       scenes.forEach(scene => {
-        if (promptText.includes(scene.name)) {
+        // 通过名字匹配 或 通过 shot.sceneId 匹配
+        if (promptText.includes(scene.name) || explicitSceneIds.has(scene.id)) {
           const url = getSceneImageUrl(scene);
           if (url && !addedImageUrls.has(url)) {
             addedImageUrls.add(url);
@@ -225,9 +242,24 @@ export function FinalStoryboard({
               image_url: { url }
             });
           }
+          
+          // 补充场景文本描述（无论是否有图都补充，帮助 AI 更好理解场景细节）
+          const sceneDesc = scene.visualPromptCn || scene.description || '';
+          const sceneAtmo = scene.atmosphere ? `氛围:${scene.atmosphere}` : '';
+          if (sceneDesc || sceneAtmo) {
+             textSupplements += `- 场景[${scene.name}]: ${sceneDesc} ${sceneAtmo}\n`;
+             hasSupplements = true;
+          }
         }
       });
     }
+
+    if (hasSupplements) {
+      augmentedText += textSupplements;
+    }
+
+    // 文本必须作为第一个元素
+    content.unshift({ type: 'text', text: augmentedText });
 
     return content;
   };

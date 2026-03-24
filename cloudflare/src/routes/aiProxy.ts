@@ -9,11 +9,12 @@ import type { AppEnv } from '../index';
 
 export const aiProxyRoutes = new Hono<AppEnv>();
 
-const ALB_BASE_URL = 'http://alb-r3li6yh4ktpwq7ugkg.ap-southeast-1.alb.aliyuncsslbintl.com:7000/v1';
+// const ALB_BASE_URL = 'http://alb-r3li6yh4ktpwq7ugkg.ap-southeast-1.alb.aliyuncsslbintl.com:7000/v1';
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 /**
- * 代理所有 /api/ai-proxy/* 请求到 ALB
- * 例：POST /api/ai-proxy/chat/completions → ALB /v1/chat/completions
+ * 代理所有 /api/ai-proxy/* 请求到 OpenRouter
+ * 例：POST /api/ai-proxy/chat/completions → OpenRouter /api/v1/chat/completions
  */
 aiProxyRoutes.all('/*', async (c) => {
   const apiKey = c.env.VITE_OPENROUTER1_API_KEY;
@@ -24,7 +25,7 @@ aiProxyRoutes.all('/*', async (c) => {
   // 拼接目标 URL，移除 /api/ai-proxy 前缀
   const url = new URL(c.req.url);
   const targetPath = url.pathname.replace(/^\/api\/ai-proxy/, '');
-  const targetUrl = `${ALB_BASE_URL}${targetPath}${url.search}`;
+  const targetUrl = `${OPENROUTER_BASE_URL}${targetPath}${url.search}`;
 
   // 读取请求体
   let body: string | undefined;
