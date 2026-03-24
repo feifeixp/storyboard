@@ -276,5 +276,58 @@ app.post('/export-pdf', async (c) => {
         return c.json({ success: false, message: 'Internal server error', error: e.message }, 500)
     }
 })
+// === 4. Submit Video Generation Task (Seedance 2.0) ===
+app.post('/submit-video', async (c) => {
+    try {
+        const body = await c.req.json();
+        const arkApiKey = c.env.VITE_ARK_API_KEY;
+        if (!arkApiKey) return c.json({ success: false, message: 'Server missing VITE_ARK_API_KEY' }, 500);
+
+        const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${arkApiKey}`
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            return c.json({ success: false, message: 'Volcengine API Error', error: errText }, response.status as any);
+        }
+
+        const data = await response.json();
+        return c.json({ success: true, data });
+    } catch (e: any) {
+        return c.json({ success: false, message: 'Internal server error', error: e.message }, 500);
+    }
+});
+
+// === 5. Poll Video Generation Status ===
+app.get('/video-status/:taskId', async (c) => {
+    try {
+        const taskId = c.req.param('taskId');
+        const arkApiKey = c.env.VITE_ARK_API_KEY;
+        if (!arkApiKey) return c.json({ success: false, message: 'Server missing VITE_ARK_API_KEY' }, 500);
+
+        const response = await fetch(`https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/${taskId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${arkApiKey}`
+            }
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            return c.json({ success: false, message: 'Volcengine API Error', error: errText }, response.status as any);
+        }
+
+        const data = await response.json();
+        return c.json({ success: true, data });
+    } catch (e: any) {
+        return c.json({ success: false, message: 'Internal server error', error: e.message }, 500);
+    }
+});
 
 export default app

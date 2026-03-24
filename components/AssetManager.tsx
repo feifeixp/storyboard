@@ -16,6 +16,7 @@ export function AssetManager({ project }: { project: Project }) {
   const [filter, setFilter] = useState<'all' | 'character' | 'scene' | 'shot' | 'video'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
+  const [previewAsset, setPreviewAsset] = useState<Asset | null>(null);
 
   // 聚合项目中所有的图片和视频资产
   const assets: Asset[] = useMemo(() => {
@@ -68,6 +69,8 @@ export function AssetManager({ project }: { project: Project }) {
     });
 
     // 3. 分镜草图 & 成片视频
+    const seenVideoUrls = new Set<string>(); // 🆕 防止同一视频组内的多个分镜重复推送
+
     (project.episodes || []).forEach(ep => {
       (ep.shots || []).forEach((shot, index) => {
         if (shot.startFrameUrl) {
@@ -97,12 +100,13 @@ export function AssetManager({ project }: { project: Project }) {
             url: shot.storyboardGridUrl
           });
         }
-        if (shot.videoUrl) {
+        if (shot.videoUrl && !seenVideoUrls.has(shot.videoUrl)) {
+          seenVideoUrls.add(shot.videoUrl);
           list.push({
             id: `shot_vid_${shot.id}`,
             type: 'video',
             category: 'video',
-            label: `Ep${ep.episodeNumber}-镜头${index + 1} 视频`,
+            label: `Ep${ep.episodeNumber}-片段${seenVideoUrls.size}`,
             url: shot.videoUrl
           });
         }
@@ -145,8 +149,13 @@ export function AssetManager({ project }: { project: Project }) {
 
       const promises = assetsToDownload.map(async (asset) => {
         try {
-          const response = await fetch(asset.url);
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          let response = await fetch(asset.url).catch(() => null);
+          if (!response || !response.ok) {
+             // 🆕 跨域备用方案：当直接请求受阻时打向全能代理隧道进行 Blob 读取
+             const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(asset.url)}`;
+             response = await fetch(proxyUrl);
+             if (!response || !response.ok) throw new Error(`Proxy HTTP error! status: ${response?.status}`);
+          }
           const blob = await response.blob();
           
           let extension = asset.type === 'video' ? 'mp4' : 'jpg';
@@ -263,7 +272,14 @@ export function AssetManager({ project }: { project: Project }) {
                   
                   {/* Hover Overlay */}
                   <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${selected && 'opacity-100'} flex flex-col justify-between p-2`}>
-                    <div className="flex justify-end">
+                    <div className="flex justify-between items-start">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setPreviewAsset(asset); }}
+                        className="w-7 h-7 rounded-full bg-black/60 border border-white/20 text-white flex items-center justify-center hover:bg-indigo-500 transition-colors shadow opacity-0 group-hover:opacity-100"
+                        title="查看大图/播放视频"
+                      >
+                        👁️
+                      </button>
                       <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${selected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-white/50 bg-black/40'}`}>
                         {selected && <span className="text-xs">✓</span>}
                       </div>
@@ -281,6 +297,36 @@ export function AssetManager({ project }: { project: Project }) {
           </div>
         )}
       </div>
+      {/* 预览 Modal */}
+      {previewAsset && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setPreviewAsset(null)}>
+          <div className="relative max-w-5xl w-full max-h-[90vh] flex flex-col items-center bg-[#1a1b26] rounded-2xl overflow-hidden border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="w-full p-4 border-b border-white/5 flex justify-between items-center bg-black/30">
+              <h3 className="text-white font-medium truncate pr-4">{previewAsset.label}</h3>
+              <button className="text-gray-400 hover:text-white flex-shrink-0" onClick={() => setPreviewAsset(null)}>✕ 关闭</button>
+            </div>
+            <div className="p-4 flex-1 w-full flex items-center justify-center overflow-auto bg-black border-none min-h-[40vh]">
+              {previewAsset.type === 'video' ? (
+                <video src={previewAsset.url} controls autoPlay className="max-w-full max-h-[70vh] rounded shadow-lg" />
+              ) : (
+                <img src={previewAsset.url} alt={previewAsset.label} className="max-w-full max-h-[70vh] object-contain rounded shadow-lg" />
+              )}
+            </div>
+            <div className="p-4 border-t border-white/5 w-full flex justify-end gap-3 bg-black/30">
+               <button 
+                 onClick={() => setPreviewAsset(null)}
+                 className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors"
+               >返回</button>
+               <button 
+                 onClick={() => {
+                     downloadFile(previewAsset.url, `${previewAsset.label.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}.${previewAsset.type === 'video' ? 'mp4' : 'png'}`);
+                 }}
+                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+               >⬇️ 原文件下载</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

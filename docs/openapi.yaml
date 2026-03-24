@@ -409,3 +409,99 @@ servers:
                     type: boolean
                   imageUrl:
                     type: string
+
+  /api/v1/storyboard/submit-video:
+    post:
+      summary: Submit Video Generation Task (Seedance 2.0)
+      description: Submits an asynchronous video generation request to the Volcengine Seedance 2.0 model. Returns a task_id that must be polled for completion.
+      operationId: submitVideoGeneration
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: JWT accessToken obtained from Login.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - model
+                - content
+              properties:
+                model:
+                  type: string
+                  description: The video generation model to use.
+                content:
+                  type: array
+                  description: Array of video layout content blocks (reference images, reference videos, prompt texts).
+                  items:
+                    type: object
+                duration:
+                  type: number
+                  description: Target video length.
+      responses:
+        '200':
+          description: Task successfully submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        description: The Video Task ID to poll for status.
+
+  /api/v1/storyboard/video-status/{taskId}:
+    get:
+      summary: Poll Video Task Status
+      description: Checks the status of a previously submitted video generation task.
+      operationId: getVideoTaskStatus
+      parameters:
+        - in: header
+          name: accessToken
+          required: true
+          description: JWT accessToken obtained from Login.
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          description: The task_id returned from the submit-video endpoint.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Video task status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        description: 'running', 'succeeded', 'failed', 'pending'
+                      content:
+                        type: object
+                        properties:
+                          video_url:
+                            type: string
+                            description: URL to the completed mp4 video.
+                      error:
+                        type: object
+                        properties:
+                          message:
+                            type: string

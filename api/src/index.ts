@@ -14,6 +14,7 @@ export type Env = {
         VITE_OPENROUTER1_API_KEY: string;
         GEMINI_API_KEY: string;
         DEEPSEEK_API_KEY: string;
+        VITE_ARK_API_KEY: string;
     }
 }
 
@@ -25,6 +26,41 @@ app.use('*', cors())
 app.get('/', (c) => {
     return c.text('Visionary Storyboard Studio - OpenClaw API Service is running!')
 })
+
+// === CORS Proxies for Frontend Assets Download (e.g. JSZip batch download) ===
+app.get('/api/v1/proxy/download', async (c) => {
+    try {
+        const targetUrl = c.req.query('url');
+        if (!targetUrl) return c.json({ error: 'Missing url query parameter' }, 400);
+        
+        const response = await fetch(targetUrl, {
+            method: 'GET',
+            headers: {
+                // Mimic browser user agent to avoid basic blocks
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/100.0.4896.127',
+                'Accept': '*/*, image/*, video/*'
+            }
+        });
+        
+        if (!response.ok) {
+            return c.text(`Failed to proxy: ${response.status}`, response.status as any);
+        }
+        
+        const contentType = response.headers.get('content-type');
+        const buffer = await response.arrayBuffer();
+        
+        return new Response(buffer, {
+            status: 200,
+            headers: {
+                'Content-Type': contentType || 'application/octet-stream',
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=86400'
+            }
+        });
+    } catch (e: any) {
+        return c.json({ error: 'Proxy fetch failed', message: e.message }, 500);
+    }
+});
 
 // === OpenClaw API Authentication Middleware ===
 // Intercept all API requests to validate the user's accessToken against Neodomain's backend
