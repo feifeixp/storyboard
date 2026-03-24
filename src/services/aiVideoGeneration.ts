@@ -70,22 +70,52 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
   const baseUrl = getProxyBaseUrl();
   const url = `${baseUrl}/volcengine/api/v3/contents/generations/tasks`;
   
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  });
+  let retries = 3;
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    const reqId = response.headers.get('x-request-id') || 'unknown';
-    throw new Error(`Failed to create video task: ${response.status} ${errorText} (ReqID: ${reqId})`);
+  while (retries > 0) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const reqId = response.headers.get('x-request-id') || 'unknown';
+        // 如果是 405 报错并且 reqId 未知，极大概率是 Vite HMR 代理断联导致的本地报错
+        if (response.status === 405 && reqId === 'unknown') {
+          console.warn(`[Vite Proxy] 检测到本地代理 405 拦截，正在重试... (剩余 ${retries - 1} 次)`);
+          throw new Error(`Failed to create video task: ${response.status} ${errorText} (ReqID: ${reqId})`);
+        }
+        // 如果是 500 系列或 429 限流，也可以重试
+        if (response.status >= 500 || response.status === 429) {
+          throw new Error(`Failed to create video task: ${response.status} ${errorText} (ReqID: ${reqId})`);
+        }
+        
+        // 否则直接报错，不重试
+        throw new Error(`Failed to create video task: ${response.status} ${errorText} (ReqID: ${reqId})`);
+      }
+
+      const result: VideoGenerationResponse = await response.json();
+      return result;
+    } catch (err: any) {
+      lastError = err;
+      retries--;
+      if (retries > 0 && err.message.includes('405') && err.message.includes('unknown')) {
+        await new Promise(res => setTimeout(res, 2000)); // 代理断连时等待 2 秒再重试
+      } else if (retries > 0 && (err.message.includes('50') || err.message.includes('429'))) {
+        await new Promise(res => setTimeout(res, 3000));
+      } else {
+        throw err; // 不可重试或耗尽直接抛出
+      }
+    }
   }
-
-  const result: VideoGenerationResponse = await response.json();
-  return result;
+  
+  throw lastError;
 }
 
 /**
