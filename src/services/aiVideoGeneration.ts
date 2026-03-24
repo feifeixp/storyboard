@@ -60,7 +60,7 @@ const getProxyBaseUrl = () => {
         }
     }
     // Fallback to production worker URL if env is missing
-    return 'https://storyboard.neodomain.ai';
+    return 'https://storyboard-api.neodomain.ai';
 };
 
 /**
