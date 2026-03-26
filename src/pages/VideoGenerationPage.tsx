@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Shot, CharacterRef, AppStep, VideoGroup } from '../../types';
 import { createVideoTask, pollVideoTask, VideoTaskStatus, VideoContentItem } from '../services/aiVideoGeneration';
 import { groupShotsBySceneAndDuration, generateVideoGroupPrompt } from '../utils/videoGrouping';
@@ -65,10 +65,60 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
     return content;
   };
 
+  const resumedGroupIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    videoGroups.forEach(group => {
+      const shot = group.shots[0]?.shot;
+      if (shot?.status === 'generating' && shot?.videoGenerationMeta?.taskCode) {
+        if (!resumedGroupIds.current.has(group.id) && !generatingGroupIds.has(group.id)) {
+          resumedGroupIds.current.add(group.id);
+          resumeGroupGeneration(group, shot.videoGenerationMeta.taskCode);
+        }
+      }
+    });
+  }, [videoGroups, generatingGroupIds]);
+
+  const resumeGroupGeneration = async (group: VideoGroup, taskId: string) => {
+    setGeneratingGroupIds(prev => new Set(prev).add(group.id));
+    updateGroupStatus(group, 'generating');
+
+    try {
+      const finalResult = await pollVideoTask(taskId);
+
+      if (finalResult.status === VideoTaskStatus.SUCCEEDED && finalResult.content?.video_url) {
+        try {
+            const videoResp = await fetch(finalResult.content.video_url);
+            if (!videoResp.ok) throw new Error('无法下载生成的视频文件');
+            const videoBlob = await videoResp.blob();
+            
+            const shotNumberText = group.shots.map(s => s.shotNumber).join('_');
+            const ossPath = generateOSSPath(currentProject?.id || 'unknown', shotNumberText, 'video', 'mp4');
+            const ossUrl = await uploadToOSS(videoBlob, ossPath);
+
+            updateGroupComplete(group, ossUrl);
+        } catch (uploadErr: any) {
+            console.error('OSS上传失败:', uploadErr);
+            throw new Error(`视频生成成功但OSS上传失败：${uploadErr.message}`);
+        }
+      } else {
+        throw new Error(finalResult.error?.message || '视频生成失败');
+      }
+    } catch (err: any) {
+        console.error('视频自动拉取或上传异常:', err);
+        updateGroupStatus(group, 'error');
+        alert(`分组 ${group.groupName} 生成失败：${err.message}`);
+    } finally {
+        setGeneratingGroupIds(prev => {
+           const next = new Set(prev);
+           next.delete(group.id);
+           return next;
+        });
+    }
+  };
+
   const handleGenerateGroup = async (group: VideoGroup) => {
     setGeneratingGroupIds(prev => new Set(prev).add(group.id));
-
-    // 更新视图状态：Pending/Generating
     updateGroupStatus(group, 'generating');
 
     try {
@@ -90,31 +140,12 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
         duration: -1,
       });
 
-      const finalResult = await pollVideoTask(res.id);
-
-      if (finalResult.status === VideoTaskStatus.SUCCEEDED && finalResult.content?.video_url) {
-        try {
-            const videoResp = await fetch(finalResult.content.video_url);
-            if (!videoResp.ok) throw new Error('无法下载生成的视频文件');
-            const videoBlob = await videoResp.blob();
-            
-            const shotNumberText = group.shots.map(s => s.shotNumber).join('_');
-            const ossPath = generateOSSPath(currentProject?.id || 'unknown', shotNumberText, 'video', 'mp4');
-            const ossUrl = await uploadToOSS(videoBlob, ossPath);
-
-            updateGroupComplete(group, ossUrl);
-        } catch (uploadErr: any) {
-            console.error('OSS上传失败:', uploadErr);
-            throw new Error(`视频生成成功但OSS上传失败：${uploadErr.message}`);
-        }
-      } else {
-        throw new Error(finalResult.error?.message || '视频生成失败');
-      }
+      // Pass off the remainder of the flow to the background queue resumer
+      resumeGroupGeneration(group, res.id);
     } catch (err: any) {
-        console.error('视频生成异常:', err);
+        console.error('视频发包异常:', err);
         updateGroupStatus(group, 'error');
-        alert(`分组 ${group.groupName} 生成失败：${err.message}`);
-    } finally {
+        alert(`分组 ${group.groupName} 发送生成请求失败：${err.message}`);
         setGeneratingGroupIds(prev => {
            const next = new Set(prev);
            next.delete(group.id);
