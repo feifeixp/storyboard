@@ -126,6 +126,29 @@ interface ChatMessage {
 }
 
 
+import { useVersionCheck } from './src/hooks/useVersionCheck';
+
+const VersionUpdateToast: React.FC = () => {
+  const hasUpdate = useVersionCheck(5 * 60 * 1000); // 5 minutes polling
+
+  if (!hasUpdate) return null;
+
+  return (
+    <div className="fixed bottom-6 right-6 z-[9999] bg-indigo-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 animate-bounce-short">
+      <span className="text-sm font-medium">✨ 发现新版本更新</span>
+      <button 
+        onClick={() => {
+          // Clear any potentially conflicting local states if necessary, or just reload
+          window.location.reload();
+        }}
+        className="px-4 py-2 bg-white text-indigo-700 rounded-lg text-sm font-bold hover:bg-gray-100 transition-colors shadow-sm"
+      >
+        立即刷新体验
+      </button>
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   // ═══════════════════════════════════════════════════════════════
   // 🆕 用户认证检查
@@ -2571,6 +2594,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen p-3 md:p-6 bg-[#0f111a] text-gray-200 font-inter relative overflow-x-hidden">
+      <VersionUpdateToast />
       {/* 全局动态背景装饰 */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 blur-[120px] rounded-full"></div>
