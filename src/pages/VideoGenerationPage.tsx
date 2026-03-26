@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Shot, CharacterRef, AppStep, VideoGroup } from '../../types';
 import { createVideoTask, pollVideoTask, VideoTaskStatus, VideoContentItem } from '../services/aiVideoGeneration';
 import { groupShotsBySceneAndDuration, generateVideoGroupPrompt } from '../utils/videoGrouping';
+import { uploadToOSS, generateOSSPath } from '../../services/oss';
 
 interface VideoGenerationPageProps {
   shots: Shot[];
@@ -92,7 +93,20 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
       const finalResult = await pollVideoTask(res.id);
 
       if (finalResult.status === VideoTaskStatus.SUCCEEDED && finalResult.content?.video_url) {
-        updateGroupComplete(group, finalResult.content.video_url);
+        try {
+            const videoResp = await fetch(finalResult.content.video_url);
+            if (!videoResp.ok) throw new Error('无法下载生成的视频文件');
+            const videoBlob = await videoResp.blob();
+            
+            const shotNumberText = group.shots.map(s => s.shotNumber).join('_');
+            const ossPath = generateOSSPath(currentProject?.id || 'unknown', shotNumberText, 'video', 'mp4');
+            const ossUrl = await uploadToOSS(videoBlob, ossPath);
+
+            updateGroupComplete(group, ossUrl);
+        } catch (uploadErr: any) {
+            console.error('OSS上传失败:', uploadErr);
+            throw new Error(`视频生成成功但OSS上传失败：${uploadErr.message}`);
+        }
       } else {
         throw new Error(finalResult.error?.message || '视频生成失败');
       }
