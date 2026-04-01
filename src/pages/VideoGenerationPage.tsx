@@ -122,7 +122,7 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
     updateGroupStatus(group, 'generating');
 
     try {
-      const model = 'doubao-seedance-2-0-260128';
+      const model = 'neo-video-2-0';
       const promptData = generateVideoGroupPrompt(group, currentProject?.settings?.visualStyle);
       const contentList = extractContentList(promptData.fullPromptCn, characterRefs);
       

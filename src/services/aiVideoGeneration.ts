@@ -68,8 +68,38 @@ const getProxyBaseUrl = () => {
  */
 export async function createVideoTask(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
   const baseUrl = getProxyBaseUrl();
-  const url = `${baseUrl}/volcengine/api/v3/contents/generations/tasks`;
+  const url = `${baseUrl}/agent/user/video/generate`;
   
+  // Transform standard request content list to new API JSON structure
+  const textItem = request.content.find(c => c.type === 'text');
+  const imageItems = request.content.filter(c => c.type === 'image_url');
+  const videoItems = request.content.filter(c => c.type === 'video_url');
+
+  let generationType = 'TEXT_TO_VIDEO';
+  if (videoItems.length > 0) generationType = 'UNIVERSAL_TO_VIDEO';
+  else if (imageItems.length > 0) generationType = 'IMAGE_TO_VIDEO';
+
+  const firstFrameImageUrl = imageItems.length > 0 ? imageItems[0].image_url?.url : undefined;
+  const imageUrls = imageItems.map(c => c.image_url?.url).filter(Boolean);
+  const referenceVideoUrls = videoItems.map(c => c.video_url?.url).filter(Boolean);
+
+  let modelName = 'neo-video-2-0';
+  if (request.model.includes('fast') || request.model === 'neo-video-2-0-fast') {
+      modelName = 'neo-video-2-0-fast';
+  }
+
+  const payload = {
+    modelName,
+    generationType,
+    prompt: textItem?.text || '',
+    firstFrameImageUrl,
+    imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
+    referenceVideoUrls: referenceVideoUrls.length > 0 ? referenceVideoUrls : undefined,
+    aspectRatio: request.ratio,
+    duration: request.duration ? `${request.duration}s` : undefined,
+    generateAudio: request.generate_audio,
+  };
+
   let retries = 3;
   let lastError: Error | null = null;
 
@@ -80,7 +110,7 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -100,8 +130,14 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
         throw new Error(`Failed to create video task: ${response.status} ${errorText} (ReqID: ${reqId})`);
       }
 
-      const result: VideoGenerationResponse = await response.json();
-      return result;
+      const result = await response.json();
+      if (!result.success || !result.data) {
+        throw new Error(`API returned error: ${result.errMessage || JSON.stringify(result)}`);
+      }
+      return {
+        req_id: 'new-api',
+        id: result.data.generationRecordId
+      };
     } catch (err: any) {
       lastError = err;
       retries--;
@@ -123,7 +159,7 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
  */
 export async function getVideoTaskResult(taskId: string): Promise<VideoTaskResult> {
   const baseUrl = getProxyBaseUrl();
-  const url = `${baseUrl}/volcengine/api/v3/contents/generations/tasks/${taskId}`;
+  const url = `${baseUrl}/agent/user/video/status/${taskId}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -137,7 +173,28 @@ export async function getVideoTaskResult(taskId: string): Promise<VideoTaskResul
     throw new Error(`Failed to query video task: ${response.status} ${errorText}`);
   }
 
-  return response.json();
+  const result = await response.json();
+  if (!result.success || !result.data) {
+     throw new Error(`API returned error mapping status: ${result.errMessage || JSON.stringify(result)}`);
+  }
+
+  const apiData = result.data;
+  let status = VideoTaskStatus.PENDING;
+  switch (apiData.status) {
+    case 'SUCCESS': status = VideoTaskStatus.SUCCEEDED; break;
+    case 'FAILED': status = VideoTaskStatus.FAILED; break;
+    case 'PROCESSING': status = VideoTaskStatus.RUNNING; break;
+    case 'PENDING': status = VideoTaskStatus.PENDING; break;
+  }
+
+  return {
+    id: apiData.generationRecordId,
+    status,
+    content: {
+      video_url: apiData.ossVideoUrl,
+    },
+    error: apiData.errorMessage ? { message: apiData.errorMessage, code: apiData.errorCode } : undefined,
+  };
 }
 
 /**

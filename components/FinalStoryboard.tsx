@@ -83,7 +83,7 @@ export function FinalStoryboard({
   const [generatingGroupIds, setGeneratingGroupIds] = useState<Set<string>>(new Set());
   const [uploadingRefGroupId, setUploadingRefGroupId] = useState<string | null>(null);
   const [isBatchMode, setIsBatchMode] = useState(false); // 🆕 智能并行批量模式
-  const [videoModel, setVideoModel] = useState<'doubao-seedance-2-0-260128' | 'doubao-seedance-2-0-fast-260128'>('doubao-seedance-2-0-260128'); // 🆕 模型选择
+  const [videoModel, setVideoModel] = useState<'neo-video-2-0' | 'neo-video-2-0-fast'>('neo-video-2-0'); // 🆕 模型选择
 
   // 🆕 自定义时长映射记录 (groupId -> duration)
   const [customDurations, setCustomDurations] = useState<Record<string, number>>({});
@@ -1028,8 +1028,8 @@ export function FinalStoryboard({
                      className="bg-black/60 border border-white/20 text-white text-sm rounded-lg px-3 py-2 outline-none focus:border-indigo-500 transition-colors"
                      title="选择视频生成模型 (Fast 模型生成更快但质量稍逊)"
                    >
-                     <option value="doubao-seedance-2-0-260128">Normal (画质优先)</option>
-                     <option value="doubao-seedance-2-0-fast-260128">Fast (速度优先)</option>
+                     <option value="neo-video-2-0">Normal (画质优先)</option>
+                     <option value="neo-video-2-0-fast">Fast (速度优先)</option>
                    </select>
 
                    <button

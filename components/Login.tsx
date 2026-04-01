@@ -5,9 +5,11 @@
 import React, { useState } from 'react';
 import {
   sendVerificationCode,
-  login,
+  verifyLogin,
+  selectIdentityLogin,
   validateContact,
   validateCode,
+  LoginIdentityVO,
 } from '../services/auth';
 
 interface LoginProps {
@@ -23,6 +25,7 @@ export default function Login(props: LoginProps) {
   const [countdown, setCountdown] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [identities, setIdentities] = useState<LoginIdentityVO[] | null>(null);
 
   // 发送验证码
   const handleSendCode = async () => {
@@ -60,19 +63,34 @@ export default function Login(props: LoginProps) {
     }
   };
 
-  // 登录
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSelectIdentity = async (userId: string) => {
+    setError('');
+    setLoading(true);
+    try {
+      await selectIdentityLogin(userId, contact);
+      if (onLoginSuccess) {
+        onLoginSuccess();
+      } else {
+        window.location.reload();
+      }
+    } catch(err) {
+      setError(err instanceof Error ? err.message : '登录失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 验证码验证
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // 验证联系方式
     const contactValidation = validateContact(contact);
     if (!contactValidation.isValid) {
       setError(contactValidation.error || '联系方式格式错误');
       return;
     }
 
-    // 验证验证码
     const codeValidation = validateCode(code);
     if (!codeValidation.isValid) {
       setError(codeValidation.error || '验证码格式错误');
@@ -82,20 +100,59 @@ export default function Login(props: LoginProps) {
     setLoading(true);
 
     try {
-      await login(contact, code, invitationCode || undefined);
-      // 🆕 登录成功后调用回调
-      if (onLoginSuccess) {
-        onLoginSuccess();
+      const res = await verifyLogin(contact, code, invitationCode || undefined);
+      
+      if (res.identities && res.identities.length > 1) {
+        // 如果后端返回了多个账号，弹出选择身份界面
+        setIdentities(res.identities);
+      } else if (res.identities && res.identities.length === 1) {
+        // 如果只有 1 个账号，直接自动选择该账号，完成登录
+        await handleSelectIdentity(res.identities[0].userId);
       } else {
-        // 如果没有回调，刷新页面（兼容旧代码）
-        window.location.reload();
+        throw new Error('未找到可用身份信息');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '登录失败');
+      setError(err instanceof Error ? err.message : '验证失败');
     } finally {
       setLoading(false);
     }
   };
+
+  const renderIdentitySelection = () => (
+    <div className="space-y-4 animate-fadeIn">
+      <h3 className="text-xl font-bold text-white text-center mb-6">请选择登录身份</h3>
+      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+        {identities?.map((idVO) => (
+          <button
+            key={idVO.userId}
+            onClick={() => handleSelectIdentity(idVO.userId)}
+            disabled={loading}
+            className="w-full text-left p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-purple-500/50 transition-all group flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <img src={idVO.avatar || 'https://api.dicebear.com/7.x/notionists/svg?seed=' + encodeURIComponent(idVO.nickname || 'a')} alt="avatar" className="w-12 h-12 rounded-full bg-black/20 shrink-0 object-cover" />
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-white group-hover:text-purple-300 transition-colors truncate">
+                {idVO.userType === 'PERSONAL' ? (idVO.nickname || '个人空间') : idVO.enterpriseName}
+              </div>
+              <div className="text-xs text-gray-400 mt-1 truncate">
+                 {idVO.userType === 'PERSONAL' ? '个人账户' : `企业角色: ${idVO.role || '成员'}`}
+              </div>
+            </div>
+            <div className="text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+               ➔
+            </div>
+          </button>
+        ))}
+      </div>
+       <button
+          onClick={() => setIdentities(null)}
+          disabled={loading}
+          className="w-full mt-4 py-3 text-gray-400 hover:text-white transition-colors text-sm"
+        >
+          返回重新验证
+        </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-4">
@@ -120,7 +177,8 @@ export default function Login(props: LoginProps) {
           </p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-5">
+        {identities ? renderIdentitySelection() : (
+          <form onSubmit={handleVerify} className="space-y-5">
           {/* 联系方式输入 */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-200">
@@ -203,6 +261,7 @@ export default function Login(props: LoginProps) {
             )}
           </button>
         </form>
+        )}
 
         {/* 底部提示 */}
         <div className="mt-6 text-center text-xs text-gray-400">

@@ -77,44 +77,65 @@ export async function sendVerificationCode(contact: string): Promise<void> {
   }
 }
 
+export interface LoginIdentityVO {
+  userId: string;
+  userType: 'PERSONAL' | 'ENTERPRISE';
+  enterpriseId?: string;
+  enterpriseName?: string;
+  enterpriseCode?: string;
+  nickname: string;
+  avatar: string;
+  role?: string;
+}
+
+export interface LoginIdentityListRes {
+  needSelectIdentity: boolean;
+  identities: LoginIdentityVO[];
+}
+
 /**
- * 统一登录（支持手机号和邮箱验证码登录）
+ * 验证联系方式和验证码，返回可用身份列表
  * 🆕 调用 Neodomain API
  */
-export async function login(
+export async function verifyLogin(
   contact: string,
   code: string,
   invitationCode?: string
-): Promise<UserInfo> {
-  const body: { contact: string; code: string; invitationCode?: string } = {
-    contact,
-    code,
-  };
+): Promise<LoginIdentityListRes> {
+  const body: any = { contact, code };
+  if (invitationCode) body.invitationCode = invitationCode;
 
-  if (invitationCode) {
-    body.invitationCode = invitationCode;
-  }
-
-  const response = await fetch(`${NEODOMAIN_API_BASE}/user/login/unified-login`, {
+  const response = await fetch(`${NEODOMAIN_API_BASE}/user/login/unified-login/identity`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 
   const result = await response.json();
-
   if (!result.success) {
-    throw new Error(result.errMessage || '登录失败');
+    throw new Error(result.errMessage || '验证失败');
   }
 
-  // 🆕 Neodomain API 直接返回 UserInfo 格式
+  return result.data as LoginIdentityListRes;
+}
+
+/**
+ * 选择具体身份完成最终登录
+ */
+export async function selectIdentityLogin(userId: string, contact: string): Promise<UserInfo> {
+  const response = await fetch(`${NEODOMAIN_API_BASE}/user/login/select-identity`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, contact }),
+  });
+
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(result.errMessage || '身份选择失败');
+  }
+
   const userInfo: UserInfo = result.data;
-
-  // 保存用户信息到本地存储
   saveUserInfo(userInfo);
-
   return userInfo;
 }
 
