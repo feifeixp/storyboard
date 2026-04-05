@@ -381,13 +381,20 @@ const App: React.FC = () => {
         }
       };
 
-      if (streamText.trim().endsWith(']')) {
-        parseAndSet(streamText);
-      } else {
-        const lastCloseBrace = streamText.lastIndexOf('}');
-        if (lastCloseBrace > -1) {
-          const candidate = streamText.substring(0, lastCloseBrace + 1) + ']';
-          parseAndSet(candidate);
+      let cleanedText = streamText;
+      const arrStart = cleanedText.indexOf('[');
+      if (arrStart > -1) {
+        cleanedText = cleanedText.substring(arrStart);
+        cleanedText = cleanedText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        if (cleanedText.endsWith(']')) {
+          parseAndSet(cleanedText);
+        } else {
+          const lastCloseBrace = cleanedText.lastIndexOf('}');
+          if (lastCloseBrace > -1) {
+            const candidate = cleanedText.substring(0, lastCloseBrace + 1) + ']';
+            parseAndSet(candidate);
+          }
         }
       }
     }
@@ -1881,7 +1888,7 @@ const App: React.FC = () => {
 
       // 更新对应镜头的提示词
       const updatedShots = shots.map(shot => {
-        const fix = optimized.find(o => Number(o.shotNumber) === Number(shot.shotNumber));
+        const fix = optimized.find(o => String(o.shotNumber) === String(shot.shotNumber));
         if (fix && fix.imagePromptCn !== (shot.imagePromptCn || '')) {
           changes.push({
             shotNumber: shot.shotNumber,
