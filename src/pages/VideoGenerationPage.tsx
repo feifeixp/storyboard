@@ -125,6 +125,17 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
       const model = 'neo-video-2-0';
       const promptData = generateVideoGroupPrompt(group, currentProject?.settings?.visualStyle);
       const contentList = extractContentList(promptData.fullPromptCn, characterRefs);
+
+      // 若分组第一个镜头已有生成图，作为首帧传入（IMAGE_TO_VIDEO / UNIVERSAL_TO_VIDEO）
+      const firstShot = group.shots[0]?.shot;
+      const firstFrameUrl = firstShot?.storyboardGridUrl || firstShot?.promptCn || undefined;
+      if (firstFrameUrl && typeof firstFrameUrl === 'string' && firstFrameUrl.startsWith('http')) {
+        contentList.push({
+          type: 'image_url',
+          role: 'first_frame',
+          image_url: { url: firstFrameUrl },
+        });
+      }
       
       const res = await createVideoTask({
         model,

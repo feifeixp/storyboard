@@ -67,13 +67,31 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
   const imageItems = request.content.filter(c => c.type === 'image_url');
   const videoItems = request.content.filter(c => c.type === 'video_url');
 
-  let generationType = 'TEXT_TO_VIDEO';
-  if (videoItems.length > 0) generationType = 'UNIVERSAL_TO_VIDEO';
-  else if (imageItems.length > 0) generationType = 'IMAGE_TO_VIDEO';
+  // 按 role 区分首帧图 vs 参考图（角色一致性图）
+  const firstFrameItem = imageItems.find(c => c.role === 'first_frame');
+  const lastFrameItem  = imageItems.find(c => c.role === 'last_frame');
+  const refImageItems  = imageItems.filter(c => c.role === 'reference_image' || (!c.role && c !== firstFrameItem && c !== lastFrameItem));
 
-  const firstFrameImageUrl = imageItems.length > 0 ? imageItems[0].image_url?.url : undefined;
-  const imageUrls = imageItems.map(c => c.image_url?.url).filter(Boolean);
-  const referenceVideoUrls = videoItems.map(c => c.video_url?.url).filter(Boolean);
+  const firstFrameImageUrl = firstFrameItem?.image_url?.url;
+  const lastFrameImageUrl  = lastFrameItem?.image_url?.url;
+  const imageUrls = refImageItems.map(c => c.image_url?.url).filter(Boolean) as string[];
+  const referenceVideoUrls = videoItems.map(c => c.video_url?.url).filter(Boolean) as string[];
+
+  // 根据实际内容决定 generationType
+  //   有视频参考                        → UNIVERSAL_TO_VIDEO
+  //   有首帧图（无视频参考）            → IMAGE_TO_VIDEO
+  //   只有角色参考图（无首帧/视频）     → REFERENCE_TO_VIDEO
+  //   纯文字                            → TEXT_TO_VIDEO
+  let generationType: string;
+  if (videoItems.length > 0 || (firstFrameImageUrl && refImageItems.length > 0)) {
+    generationType = 'UNIVERSAL_TO_VIDEO';
+  } else if (firstFrameImageUrl) {
+    generationType = 'IMAGE_TO_VIDEO';
+  } else if (refImageItems.length > 0) {
+    generationType = 'REFERENCE_TO_VIDEO';
+  } else {
+    generationType = 'TEXT_TO_VIDEO';
+  }
 
   let modelName = 'neo-video-2-0';
   if (request.model.includes('fast') || request.model === 'neo-video-2-0-fast') {
@@ -84,13 +102,15 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
     modelName,
     generationType,
     prompt: textItem?.text || '',
-    firstFrameImageUrl,
+    firstFrameImageUrl: firstFrameImageUrl || undefined,
+    lastFrameImageUrl: lastFrameImageUrl || undefined,
     imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
     referenceVideoUrls: referenceVideoUrls.length > 0 ? referenceVideoUrls : undefined,
     aspectRatio: request.ratio,
     duration: request.duration ? `${request.duration}s` : undefined,
     generateAudio: request.generate_audio,
   };
+
 
   let retries = 3;
   let lastError: Error | null = null;
