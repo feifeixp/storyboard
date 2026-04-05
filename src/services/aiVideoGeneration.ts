@@ -77,20 +77,46 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
   const imageUrls = refImageItems.map(c => c.image_url?.url).filter(Boolean) as string[];
   const referenceVideoUrls = videoItems.map(c => c.video_url?.url).filter(Boolean) as string[];
 
-  // 根据实际内容决定 generationType
-  //   有视频参考                        → UNIVERSAL_TO_VIDEO
-  //   有首帧图（无视频参考）            → IMAGE_TO_VIDEO
-  //   只有角色参考图（无首帧/视频）     → REFERENCE_TO_VIDEO
-  //   纯文字                            → TEXT_TO_VIDEO
+  // ⚠️ API 规则：每次请求只能选择一种输入内容类型，不能混用。
+  //
+  //   优先级（从高到低）：
+  //   1. 有参考图（imageUrls）或视频参考（referenceVideoUrls）
+  //      → UNIVERSAL_TO_VIDEO，只发 imageUrls/referenceVideoUrls（不发 firstFrameImageUrl）
+  //   2. 只有首帧图（无参考图/视频）
+  //      → IMAGE_TO_VIDEO，只发 firstFrameImageUrl
+  //   3. 无图无视频
+  //      → TEXT_TO_VIDEO
   let generationType: string;
-  if (videoItems.length > 0 || (firstFrameImageUrl && refImageItems.length > 0)) {
+  let payloadFirstFrameUrl: string | undefined;
+  let payloadLastFrameUrl: string | undefined;
+  let payloadImageUrls: string[] | undefined;
+  let payloadRefVideoUrls: string[] | undefined;
+
+  const hasRefImages = imageUrls.length > 0;
+  const hasRefVideos = referenceVideoUrls.length > 0;
+
+  if (hasRefImages || hasRefVideos) {
+    // UNIVERSAL_TO_VIDEO：只传参考图/参考视频，不传首帧（避免「内容类型不兼容」报错）
     generationType = 'UNIVERSAL_TO_VIDEO';
+    payloadImageUrls = hasRefImages ? imageUrls : undefined;
+    payloadRefVideoUrls = hasRefVideos ? referenceVideoUrls : undefined;
+    // firstFrameImageUrl 在此模式下不发送，改为在 prompt 中以文字描述
+    payloadFirstFrameUrl = undefined;
+    payloadLastFrameUrl = undefined;
   } else if (firstFrameImageUrl) {
+    // IMAGE_TO_VIDEO：只传首帧图
     generationType = 'IMAGE_TO_VIDEO';
-  } else if (refImageItems.length > 0) {
-    generationType = 'REFERENCE_TO_VIDEO';
+    payloadFirstFrameUrl = firstFrameImageUrl;
+    payloadLastFrameUrl = lastFrameImageUrl;
+    payloadImageUrls = undefined;
+    payloadRefVideoUrls = undefined;
   } else {
+    // TEXT_TO_VIDEO：纯文字
     generationType = 'TEXT_TO_VIDEO';
+    payloadFirstFrameUrl = undefined;
+    payloadLastFrameUrl = undefined;
+    payloadImageUrls = undefined;
+    payloadRefVideoUrls = undefined;
   }
 
   let modelName = 'neo-video-2-0';
@@ -102,10 +128,10 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
     modelName,
     generationType,
     prompt: textItem?.text || '',
-    firstFrameImageUrl: firstFrameImageUrl || undefined,
-    lastFrameImageUrl: lastFrameImageUrl || undefined,
-    imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
-    referenceVideoUrls: referenceVideoUrls.length > 0 ? referenceVideoUrls : undefined,
+    firstFrameImageUrl: payloadFirstFrameUrl,
+    lastFrameImageUrl: payloadLastFrameUrl,
+    imageUrls: payloadImageUrls,
+    referenceVideoUrls: payloadRefVideoUrls,
     aspectRatio: request.ratio,
     duration: request.duration ? `${request.duration}s` : undefined,
     generateAudio: request.generate_audio,
