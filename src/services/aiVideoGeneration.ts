@@ -1,3 +1,5 @@
+import { getAccessToken } from '../../services/auth';
+
 export enum VideoTaskStatus {
   RUNNING = 'running',
   SUCCEEDED = 'succeeded',
@@ -105,10 +107,12 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
 
   while (retries > 0) {
     try {
+      const accessToken = getAccessToken();
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify(payload),
       });
@@ -161,10 +165,12 @@ export async function getVideoTaskResult(taskId: string): Promise<VideoTaskResul
   const baseUrl = getProxyBaseUrl();
   const url = `${baseUrl}/agent/user/video/status/${taskId}`;
 
+  const accessToken = getAccessToken();
   const response = await fetch(url, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     },
   });
 

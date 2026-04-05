@@ -10,6 +10,7 @@ import { episodeRoutes } from './routes/episodes';
 import { authRoutes } from './routes/auth';
 import { aiProxyRoutes } from './routes/aiProxy';
 import { volcengineRoutes } from './routes/volcengineProxy';
+import { agentProxyRoutes } from './routes/agentProxy';
 
 // 环境变量类型定义
 export interface Env {
@@ -70,6 +71,8 @@ app.route('/api/projects', projectRoutes);
 app.route('/api/episodes', episodeRoutes);
 app.route('/api/ai-proxy', aiProxyRoutes);
 app.route('/volcengine', volcengineRoutes);
+// 代理至后端业务 API（story.neodomain.cn）
+app.route('/agent', agentProxyRoutes);
 
 // 404 处理
 app.notFound((c) => {
