@@ -68,14 +68,53 @@ export function extractJSON(text: string, preferredFields?: string[]): string {
     }
   }
 
-  // 方法3: 查找最后一个完整的JSON对象
-  const lastJsonMatch = text.match(/\{[\s\S]*\}/g);
-  if (lastJsonMatch && lastJsonMatch.length > 0) {
-    return lastJsonMatch[lastJsonMatch.length - 1];
+  // 方法3: 字符级括号追踪，找出文本中所有顶级完整 JSON 结构（对象或数组）
+  // ❌ 旧逻辑：/\{[\s\S]*\}/g 贪婪正则会把从第一个 { 到最后一个 } 之间所有文字都包进来
+  // ✅ 新逻辑：每次遇到 { 或 [ 就从该位置开始追踪，depth==0 时结束，提取完整段
+  {
+    const candidates: string[] = [];
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
+    let structStart = -1;
+
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+
+      if (escapeNext) { escapeNext = false; continue; }
+      if (c === '\\' && inString) { escapeNext = true; continue; }
+      if (c === '"') { inString = !inString; continue; }
+      if (inString) continue;
+
+      if ((c === '{' || c === '[') && depth === 0) {
+        structStart = i;
+        depth = 1;
+      } else if (c === '{' || c === '[') {
+        depth++;
+      } else if ((c === '}' || c === ']') && depth > 0) {
+        depth--;
+        if (depth === 0 && structStart >= 0) {
+          candidates.push(text.slice(structStart, i + 1));
+          structStart = -1;
+        }
+      }
+    }
+
+    if (candidates.length > 0) {
+      // 优先选择包含目标字段的最大候选；否则直接取最长
+      if (preferredFields && preferredFields.length > 0) {
+        const withField = candidates.filter(c => preferredFields.some(f => c.includes(`"${f}"`)));
+        if (withField.length > 0) {
+          return withField.reduce((a, b) => a.length >= b.length ? a : b);
+        }
+      }
+      return candidates.reduce((a, b) => a.length >= b.length ? a : b);
+    }
   }
 
   throw new Error('无法从输出中提取JSON');
 }
+
 
 /**
  * 清理JSON字符串，处理常见问题

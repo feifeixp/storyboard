@@ -360,12 +360,15 @@ const App: React.FC = () => {
   }, [currentStep, loggedIn]);
 
   // Robust Parsing helper for partial JSON streams
+  // ⚠️ 此 effect 仅用于「生成分镜」和「精修-执行修改」流程，不处理「一键优化」
+  // 「一键优化」在流结束后自行解析，不依赖此 effect，避免中途写入不完整数据
   useEffect(() => {
     if (!streamText || (currentStep !== AppStep.GENERATE_LIST && currentStep !== AppStep.MANUAL_EDIT && !progressMsg.includes('重写'))) return;
 
     // Only try to parse as JSON if we are NOT in the "chatting" mode (which returns plain text)
     // We differentiate by checking if we are running 'Execute' action
-    if (progressMsg.includes('正在修改') || progressMsg.includes('构思') || progressMsg.includes('重写') || progressMsg.includes('正在应用')) {
+    // ⚠️ 排除「一键优化」场景，避免流式中途覆盖 shots
+    if (progressMsg.includes('正在修改') || progressMsg.includes('构思') || progressMsg.includes('重写')) {
       const parseAndSet = (jsonStr: string) => {
         try {
           const parsed = JSON.parse(jsonStr);
@@ -381,20 +384,13 @@ const App: React.FC = () => {
         }
       };
 
-      let cleanedText = streamText;
-      const arrStart = cleanedText.indexOf('[');
-      if (arrStart > -1) {
-        cleanedText = cleanedText.substring(arrStart);
-        cleanedText = cleanedText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-        if (cleanedText.endsWith(']')) {
-          parseAndSet(cleanedText);
-        } else {
-          const lastCloseBrace = cleanedText.lastIndexOf('}');
-          if (lastCloseBrace > -1) {
-            const candidate = cleanedText.substring(0, lastCloseBrace + 1) + ']';
-            parseAndSet(candidate);
-          }
+      if (streamText.trim().endsWith(']')) {
+        parseAndSet(streamText);
+      } else {
+        const lastCloseBrace = streamText.lastIndexOf('}');
+        if (lastCloseBrace > -1) {
+          const candidate = streamText.substring(0, lastCloseBrace + 1) + ']';
+          parseAndSet(candidate);
         }
       }
     }
@@ -2111,19 +2107,59 @@ const App: React.FC = () => {
     const currentShots = [...shots];
     setCurrentStep(AppStep.MANUAL_EDIT);
     setChatHistory([{ role: 'assistant', content: `一键优化：正在应用全部 ${allSuggestions.length} 条建议，请稍候...` }]);
-    setStreamText('');
     setIsLoading(true);
     setProgressMsg(`一键优化：正在应用全部 ${allSuggestions.length} 条建议...`);
     try {
+      // 🔑 关键修复：收集完整流文本后再解析，禁止 useEffect 中途覆盖 shots
+      let fullText = '';
       const stream = optimizeShotListStream(currentShots, allSuggestions);
       for await (const text of stream) {
-        setStreamText(text);
+        fullText = text; // optimizeShotListStream yield 的是累积全文
+        setProgressMsg(`一键优化中... (已接收 ${fullText.length} 字符)`);
+      }
+
+      // 流结束后一次性解析，避免中途写入不完整数据
+      let parseText = fullText.trim()
+        .replace(/```json/gi, '').replace(/```/g, '').trim();
+      const arrStart = parseText.indexOf('[');
+      if (arrStart > -1) parseText = parseText.substring(arrStart);
+      const arrEnd = parseText.lastIndexOf(']');
+      if (arrEnd > -1) parseText = parseText.substring(0, arrEnd + 1);
+
+      let parsed: any[] | null = null;
+      try {
+        parsed = JSON.parse(parseText);
+      } catch {
+        // 截断修复：找到最后一个完整的 JSON 对象
+        const lastBrace = parseText.lastIndexOf('}');
+        if (lastBrace > -1) {
+          let repaired = parseText.substring(0, lastBrace + 1).trimEnd();
+          if (repaired.endsWith(',')) repaired = repaired.slice(0, -1);
+          repaired += ']';
+          try { parsed = JSON.parse(repaired); } catch { /* 修复仍失败 */ }
+        }
+      }
+
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const updatedShots = parsed.map((s: any, idx: number) => ({
+          ...s,
+          id: s.id || (currentShots[idx]?.id) || `shot-stable-${idx}`,
+          status: s.status || 'pending',
+        }));
+        setShots(updatedShots);
+        setChatHistory(prev => [...prev, { role: 'assistant', content: `✅ 一键优化完成！共更新 ${updatedShots.length} 个镜头。` }]);
+        setSuggestions([]); // 清空建议列表
+      } else {
+        alert('⚠️ 一键优化：AI 返回格式异常，镜头数据未变动，请重试。');
+        setShots(currentShots); // 保险恢复
       }
     } catch (error) {
       console.error(error);
+      setShots(currentShots); // 出错时恢复原始数据
       alert("一键优化失败，请重试");
     } finally {
       setIsLoading(false);
+      setProgressMsg('');
     }
   };
 
