@@ -45,24 +45,14 @@ export interface VideoTaskResult {
   };
 }
 
-// 代理 URL 根据环境变量配置或默认相对路径
+// 直接调用后端业务 API（与图片生成服务保持一致）
 const getProxyBaseUrl = () => {
-    // 本地开发环境必须返回空字符串，以使用 vite.config.ts 中的代理
+    // 本地开发环境使用 Vite 代理
     if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
         return '';
     }
-    
-    // 生产环境读取配置
-    if (typeof import.meta !== 'undefined') {
-        if (import.meta.env?.VITE_WORKER_PROXY_URL) {
-            return import.meta.env.VITE_WORKER_PROXY_URL;
-        }
-        if (import.meta.env?.VITE_WORKER_URL) {
-            return import.meta.env.VITE_WORKER_URL;
-        }
-    }
-    // Fallback to production worker URL if env is missing
-    return 'https://storyboard-api.neodomain.ai';
+    // 生产环境直接访问后端（story.neodomain.cn 支持跨域）
+    return 'https://story.neodomain.cn';
 };
 
 /**
@@ -112,7 +102,10 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+          ...(accessToken ? {
+            'Authorization': `Bearer ${accessToken}`,
+            'accessToken': accessToken,  // 后端同时支持此 header
+          } : {}),
         },
         body: JSON.stringify(payload),
       });
@@ -170,7 +163,10 @@ export async function getVideoTaskResult(taskId: string): Promise<VideoTaskResul
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      ...(accessToken ? {
+        'Authorization': `Bearer ${accessToken}`,
+        'accessToken': accessToken,
+      } : {}),
     },
   });
 
