@@ -80,11 +80,13 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
   // ⚠️ API 规则：每次请求只能选择一种输入内容类型，不能混用。
   //
   //   优先级（从高到低）：
-  //   1. 有参考图（imageUrls）或视频参考（referenceVideoUrls）
-  //      → UNIVERSAL_TO_VIDEO，只发 imageUrls/referenceVideoUrls（不发 firstFrameImageUrl）
-  //   2. 只有首帧图（无参考图/视频）
+  //   1. 有参考视频（referenceVideoUrls）
+  //      → UNIVERSAL_TO_VIDEO，只发 referenceVideoUrls（视频参考优先，丢弃图片避免「不兼容」）
+  //   2. 有参考图（imageUrls）但无视频
+  //      → UNIVERSAL_TO_VIDEO，只发 imageUrls
+  //   3. 只有首帧图（无参考图/视频）
   //      → IMAGE_TO_VIDEO，只发 firstFrameImageUrl
-  //   3. 无图无视频
+  //   4. 无图无视频
   //      → TEXT_TO_VIDEO
   let generationType: string;
   let payloadFirstFrameUrl: string | undefined;
@@ -95,12 +97,18 @@ export async function createVideoTask(request: VideoGenerationRequest): Promise<
   const hasRefImages = imageUrls.length > 0;
   const hasRefVideos = referenceVideoUrls.length > 0;
 
-  if (hasRefImages || hasRefVideos) {
-    // UNIVERSAL_TO_VIDEO：只传参考图/参考视频，不传首帧（避免「内容类型不兼容」报错）
+  if (hasRefVideos) {
+    // 视频参考优先：只传 referenceVideoUrls，不混入 imageUrls（避免「内容类型不兼容」）
     generationType = 'UNIVERSAL_TO_VIDEO';
-    payloadImageUrls = hasRefImages ? imageUrls : undefined;
-    payloadRefVideoUrls = hasRefVideos ? referenceVideoUrls : undefined;
-    // firstFrameImageUrl 在此模式下不发送，改为在 prompt 中以文字描述
+    payloadRefVideoUrls = referenceVideoUrls;
+    payloadImageUrls = undefined;
+    payloadFirstFrameUrl = undefined;
+    payloadLastFrameUrl = undefined;
+  } else if (hasRefImages) {
+    // 无视频时降级为图片参考
+    generationType = 'UNIVERSAL_TO_VIDEO';
+    payloadImageUrls = imageUrls;
+    payloadRefVideoUrls = undefined;
     payloadFirstFrameUrl = undefined;
     payloadLastFrameUrl = undefined;
   } else if (firstFrameImageUrl) {
