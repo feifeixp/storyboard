@@ -444,14 +444,7 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
             disabled={isLoading || suggestions.length === 0}
             className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-all disabled:opacity-50"
           >
-            {isLoading ? '优化中...' : `⚡ 一键优化 (${suggestions.length})`}
-          </button>
-          <button
-            onClick={applyOptimizations}
-            disabled={isLoading || getSelectedSuggestionsCount() === 0}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-all disabled:opacity-50"
-          >
-            {isLoading ? '优化中...' : `应用所选 (${getSelectedSuggestionsCount()})`}
+            {isLoading ? '优化中...' : `一键优化`}
           </button>
           <button
             onClick={() => {
@@ -459,7 +452,7 @@ const ReviewTab: React.FC<ShotGenerationPageProps> = ({
             }}
             className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg font-medium text-sm hover:bg-gray-600 transition-all"
           >
-            跳过 → 精修
+            跳过精修
           </button>
         </div>
       </div>

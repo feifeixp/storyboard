@@ -365,7 +365,7 @@ const App: React.FC = () => {
 
     // Only try to parse as JSON if we are NOT in the "chatting" mode (which returns plain text)
     // We differentiate by checking if we are running 'Execute' action
-    if (progressMsg.includes('正在修改') || progressMsg.includes('构思') || progressMsg.includes('重写')) {
+    if (progressMsg.includes('正在修改') || progressMsg.includes('构思') || progressMsg.includes('重写') || progressMsg.includes('正在应用')) {
       const parseAndSet = (jsonStr: string) => {
         try {
           const parsed = JSON.parse(jsonStr);
