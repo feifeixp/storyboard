@@ -1664,7 +1664,28 @@ const App: React.FC = () => {
             });
           }
         }
-      }
+
+        // 台词/旁白时长校验：确保时长足够说完台词
+        if (shot.dialogue && shot.dialogue.trim() && shot.dialogue !== '无' && shot.dialogue !== '—') {
+          const chineseChars = shot.dialogue.replace(/[^\u4e00-\u9fa5]/g, '').length;
+          if (chineseChars > 0) {
+            const isNarration = /旁白|旁途|内心独白/.test(shot.dialogue);
+            const charsPerSec = isNarration ? 2.5 : 3.0;
+            const minNeeded = Math.ceil(chineseChars / charsPerSec);
+            const shotDurationSec = parseInt(shot.duration || '0') || 0;
+            if (shotDurationSec > 0 && shotDurationSec < minNeeded) {
+              ruleBasedSuggestions.push({
+                shotNumber: shot.shotNumber,
+                suggestion: `台词共${chineseChars}字，按正常语速需至少 ${minNeeded}s，当前时长仅 ${shotDurationSec}s，建议调整为 ${minNeeded}s 以上，否则语速过快或台词说不完。`,
+                reason: '台词时长不足',
+                selected: true
+              });
+            }
+          }
+        }
+
+
+      } // end for (const shot of shots)
 
       // 🆕 步骤1.5：角度分布验证（P0修复）
       console.log('\n[自检] 开始角度分布验证...');

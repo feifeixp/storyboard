@@ -106,6 +106,27 @@ export function useScriptAnalysis({
     });
   };
 
+  /**
+   * 根据台词字数计算该镜头所需的最短时长（秒）
+   * 中文语速标准：普通对白约3-3.5字/秒，这里取中间咁4字/秒留余量
+   * 若有旁白/旁途标识，语速稍慢，按 2.5 字/秒计算
+   */
+  const calcMinDurationFromDialogue = (dialogue: string, storyBeat: string): number => {
+    if (!dialogue || dialogue.trim() === '' || dialogue === '无' || dialogue === '—') return 0;
+
+    // 检测是否包含旁白/旁途标识
+    const isNarration = /［旁白］|［旁途］|内心独白|内心口迹/.test(dialogue + storyBeat);
+    const charsPerSec = isNarration ? 2.5 : 3.0; // 旁白慢一点
+
+    // 只压缩中文字数（标点符号、空格、英文不计入语速）
+    const chineseOnly = dialogue.replace(/[^一-龥]/g, '');
+    const charCount = chineseOnly.length;
+    if (charCount === 0) return 0;
+
+    const minSec = Math.ceil(charCount / charsPerSec);
+    return minSec;
+  };
+
   const convertDesignToShot = (rawDesign: any, idx: number, shotList: any[]): Shot => {
     const design = rawDesign.design || rawDesign;
     const comp = design.composition || {};
@@ -179,10 +200,18 @@ export function useScriptAnalysis({
       'zoom': '变焦(Zoom)'
     };
 
+    // 根据台词字数计算最短时长，防止语速过快
+    const rawDuration = rawDesign.duration || `${shotList[idx]?.duration || 4}s`;
+    const parsedDuration = parseInt(rawDuration) || 4;
+    const minDialogueDuration = calcMinDurationFromDialogue(dialogue, storyEvent);
+    const finalDuration = minDialogueDuration > parsedDuration
+      ? `${minDialogueDuration}s`  // 台词太长，自动抬升时长
+      : rawDuration;
+
     return {
       id: `shot-cot-${idx}`,
       shotNumber: rawDesign.shotNumber?.replace('#', '') || String(idx + 1).padStart(2, '0'),
-      duration: rawDesign.duration || `${shotList[idx]?.duration || 4}s`,
+      duration: finalDuration,
       shotType: isMoving ? '运动' : '静态',
       sceneId: rawDesign.sceneId || shotList[idx]?.sceneId || '',
       videoMode: videoMode,
