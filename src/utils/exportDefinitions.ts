@@ -24,11 +24,8 @@ export const exportToJSON = (shots: Shot[]) => {
       cameraMoveDetail: shot.cameraMoveDetail,
       motionPath: shot.motionPath,
       startFrame: shot.startFrame,
-      endFrame: shot.endFrame,
       promptCn: shot.promptCn,
       promptEn: shot.promptEn,
-      endFramePromptCn: shot.endFramePromptCn,
-      endFramePromptEn: shot.endFramePromptEn,
       videoPromptCn: shot.videoPromptCn,
       videoPrompt: shot.videoPrompt,
       theory: shot.theory
@@ -45,7 +42,7 @@ export const exportToJSON = (shots: Shot[]) => {
 };
 
 export const exportToExcel = (shots: Shot[]) => {
-  const headers = ['#', '故事', '视觉设计', '首帧', '尾帧'];
+  const headers = ['#', '故事', '视觉设计', '画面描述'];
 
   const escapeCSV = (str: string | undefined) => {
     if (!str) return '';
@@ -81,15 +78,13 @@ export const exportToExcel = (shots: Shot[]) => {
       isMotion && shot.motionPath ? `动线:${shot.motionPath}` : '',
     ];
     const col3 = col3Parts.filter(Boolean).join(' | ');
-    const col4 = shot.startFrame || (isMotion ? '—' : '');
-    const col5 = shot.endFrame || (isMotion ? '—' : '');
+    const col4 = shot.startFrame || '';
 
     return [
       escapeCSV(col1),
       escapeCSV(col2),
       escapeCSV(col3),
-      escapeCSV(col4),
-      escapeCSV(col5)
+      escapeCSV(col4)
     ];
   });
 
@@ -105,7 +100,7 @@ export const exportToExcel = (shots: Shot[]) => {
 };
 
 export const exportPromptsChineseCSV = (shots: Shot[]) => {
-  const headers = ['#', '类型', '首帧中文提示词', '尾帧中文提示词', '视频提示词'];
+  const headers = ['#', '类型', '中文提示词', '视频提示词'];
   const escapeCSV = (str: string | undefined) => {
     if (!str) return '';
     if (str.includes(',') || str.includes('\n') || str.includes('"')) {
@@ -117,7 +112,6 @@ export const exportPromptsChineseCSV = (shots: Shot[]) => {
     escapeCSV(`#${shot.shotNumber}`),
     escapeCSV(shot.shotType),
     escapeCSV(shot.imagePromptCn),
-    escapeCSV(shot.endImagePromptCn),
     escapeCSV(shot.videoGenPrompt || shot.videoPromptCn)
   ]);
   const BOM = '\uFEFF';
@@ -132,7 +126,7 @@ export const exportPromptsChineseCSV = (shots: Shot[]) => {
 };
 
 export const exportPromptsEnglishCSV = (shots: Shot[]) => {
-  const headers = ['#', 'Type', 'Start Frame Prompt', 'End Frame Prompt', 'Video Prompt'];
+  const headers = ['#', 'Type', 'Image Prompt', 'Video Prompt'];
   const escapeCSV = (str: string | undefined) => {
     if (!str) return '';
     if (str.includes(',') || str.includes('\n') || str.includes('"')) {
@@ -144,7 +138,6 @@ export const exportPromptsEnglishCSV = (shots: Shot[]) => {
     escapeCSV(`#${shot.shotNumber}`),
     escapeCSV(shot.shotType === '运动' ? 'Motion' : 'Static'),
     escapeCSV(shot.imagePromptEn),
-    escapeCSV(shot.endImagePromptEn),
     escapeCSV(shot.videoGenPrompt || shot.videoPrompt)
   ]);
   const BOM = '\uFEFF';
@@ -167,8 +160,6 @@ export const exportPromptsToJSON = (shots: Shot[]) => {
       shotType: shot.shotType,
       imagePromptCn: shot.imagePromptCn || '',
       imagePromptEn: shot.imagePromptEn || '',
-      endImagePromptCn: shot.endImagePromptCn || '',
-      endImagePromptEn: shot.endImagePromptEn || '',
       videoGenPrompt: shot.videoGenPrompt || shot.videoPrompt || ''
     }))
   };
@@ -258,8 +249,7 @@ export const downloadScriptText = (shots: Shot[], characterRefs: CharacterRef[])
       lines.push(
         ``,
         `───────────────────────────────────────────────────────────────────`,
-        `🟢 首帧: ${s.startFrame || '—'}`,
-        `🟠 尾帧: ${s.endFrame || '—'}`,
+        `🎬 画面: ${s.startFrame || '—'}`,
         `🏃 动线: ${s.motionPath || '—'}`
       );
     }

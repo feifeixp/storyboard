@@ -333,13 +333,13 @@ function optimizeShotsForTransfer(shots: any[]): any[] {
 
 		// 🔧 可选字段：仅在有值时保留
 		if (shot.startFrame) optimized.startFrame = shot.startFrame;
-		if (shot.endFrame) optimized.endFrame = shot.endFrame;
+
 		if (shot.theory) optimized.theory = shot.theory;
 		if (shot.directorNote) optimized.directorNote = shot.directorNote;
 		if (shot.technicalNote) optimized.technicalNote = shot.technicalNote;
 		if (shot.assignedCharacterIds) optimized.assignedCharacterIds = shot.assignedCharacterIds;
 		if (shot.startFrameUrl) optimized.startFrameUrl = shot.startFrameUrl;
-		if (shot.endFrameUrl) optimized.endFrameUrl = shot.endFrameUrl;
+
 
 		// 🔧 提示词字段：仅保留必要的（减少数据量）
 		// 注意：promptCn/promptEn 通常很长，如果不需要在云端查看，可以不保存

@@ -1713,6 +1713,50 @@ export async function* optimizeShotListStream(
 }
 
 /**
+ * 逐镜优化（流式）- 每次只优化一个镜头，解决两个核心问题：
+ * 1. 防止 AI 改变镜头数量（只返回单个镜头对象，不是数组）
+ * 2. 防止内容过多导致失败（单镜约 300 token，远小于全量 9000+）
+ */
+export async function* optimizeSingleShotStream(
+  shot: Shot,
+  suggestions: ReviewSuggestion[],
+  model: string = DEFAULT_MODEL
+): AsyncGenerator<string> {
+  const suggestionText = suggestions
+    .map((s, i) => `${i + 1}. ${s.suggestion}（原因：${s.reason}）`)
+    .join('\n');
+
+  const prompt = `Task: Update ONE storyboard shot based on the Director's suggestions below.
+
+Strict Rules:
+- ONLY update the fields mentioned in the suggestions.
+- Do NOT change shotNumber, id, or status fields.
+- Keep all other fields exactly as provided.
+- Return ONLY the updated shot as a single JSON object (not an array, no markdown code blocks).
+
+Shot to update:
+${JSON.stringify(shot)}
+
+Suggestions for this shot:
+${suggestionText}`;
+
+  const client = getOpenRouterDirectClient();
+  const stream = await client.chat.completions.create({
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    stream: true,
+    max_tokens: 2000, // 单个镜头足够，避免超限
+  });
+
+  let fullText = '';
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || '';
+    fullText += content;
+    yield fullText;
+  }
+}
+
+/**
  * 与导演对话（流式）- 兼容 gemini.ts 的 chatWithDirectorStream
  */
 export async function* chatWithDirectorStream(
@@ -1829,7 +1873,7 @@ ${JSON.stringify(
       midground: s.midground,
       background: s.background,
       startFrame: s.startFrame,
-      endFrame: s.endFrame,
+
       assignedCharacterIds: s.assignedCharacterIds,
     })),
     null,
@@ -2621,9 +2665,7 @@ export async function generateSingleShotImage(
      angleInstruction = [heightEn, directionEn].filter(Boolean).join('; ');
   }
   
-  const shotDesc = shot.shotType === '运动' 
-    ? `Left half (start frame): ${shot.imagePromptEn || shot.startFrame || 'scene start'}\nRight half (end frame): ${shot.endImagePromptEn || shot.endFrame || shot.imagePromptEn}`
-    : `Scene content: ${shot.imagePromptEn || shot.promptEn || shot.promptCn || 'empty scene'}`;
+  const shotDesc = `Scene content: ${shot.imagePromptEn || shot.promptEn || shot.promptCn || shot.startFrame || 'empty scene'}`;
 
   // 5. 构建角色描述文本
   const characterDescriptions = buildCharacterDescriptionsForEpisode(characterRefs, episodeNumber);
@@ -2991,21 +3033,12 @@ function buildNineGridPrompt(
       ? `[CAMERA ANGLE: ${angleLabel.preciseEn}] ← MUST draw from this EXACT angle!`
       : (angleLabel.en ? `[CAMERA: ${angleLabel.en}] ← MUST draw from this angle!` : '');
 
-    // 运动镜头：需要显示首帧和尾帧
+    // 运动镜头：使用画面描述
     if (isMotion) {
-      // 使用英文画面描述，但添加角度强调
-      const startFrame = shot.imagePromptEn || shot.promptEn || shot.startFrame || 'scene start';
-
-      // 🆕 修复尾帧默认值问题：如果尾帧为空，使用首帧而非 'scene end'
-      let endFrame = shot.endImagePromptEn || shot.endFramePromptEn || shot.endFrame;
-      if (!endFrame) {
-        console.warn(`⚠️ 镜头 #${shot.shotNumber} 是运动镜头，但缺少尾帧描述！使用首帧作为尾帧。`);
-        endFrame = startFrame;  // 使用首帧作为尾帧，保证画面一致性
-      }
+      const sceneDesc = shot.imagePromptEn || shot.promptEn || shot.startFrame || 'scene in motion';
 
       return `${panelPos} panel (motion):
-	${angleInstruction ? angleInstruction + '\n' : ''}Left half (start frame): ${startFrame}
-	Right half (end frame): ${endFrame}
+	${angleInstruction ? angleInstruction + '\n' : ''}Scene: ${sceneDesc}
 	IMPORTANT: Do NOT draw any text, labels, numbers, arrows, or captions inside the panel.`;
     } else {
       // 静态镜头：单帧

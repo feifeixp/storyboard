@@ -36,32 +36,61 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
     return groupShotsBySceneAndDuration(validShots, currentProject?.scenes || []);
   }, [validShots, currentProject?.scenes]);
 
-  // 从提示词提取引用角色并转换成 API 格式
-  const extractContentList = (prompt: string, charRefs: CharacterRef[]): VideoContentItem[] => {
+  // 从提示词 + 分组镜头中提取所有相关角色并转换成 API 格式
+  const extractContentList = (prompt: string, charRefs: CharacterRef[], group?: VideoGroup): VideoContentItem[] => {
     const content: VideoContentItem[] = [];
-    content.push({ type: 'text', text: prompt });
+    const addedUrls = new Set<string>();
 
-    const regex = /@([^(]+)(?:\(([^)]+)\))?/g;
-    const addedNames = new Set<string>();
-    
+    // 辅助：获取角色图片（优先选中形态）
+    const getCharUrl = (char: CharacterRef): string | null => {
+      if (group) {
+        const formId = group.shots[0]?.shot.selectedCharacterForms?.[char.id];
+        if (formId) {
+          const form = char.forms?.find(f => f.id === formId);
+          if (form?.imageSheetUrl) return form.imageSheetUrl;
+        }
+      }
+      return char.imageSheetUrl || char.referenceImageUrl ||
+             (char.imageUrls && char.imageUrls[0]) ||
+             (char.forms && char.forms[0]?.imageSheetUrl) ||
+             char.data || null;
+    };
+
+    // 1. 扫描提示词中的 @角色名 标记
+    const atRegex = /@([^\s，。、！@:：(]+)/g;
     let match;
-    while ((match = regex.exec(prompt)) !== null) {
+    while ((match = atRegex.exec(prompt)) !== null) {
       const roleName = match[1].trim();
-      if (addedNames.has(roleName)) continue;
-      addedNames.add(roleName);
-
       const char = charRefs.find(c => c.name === roleName);
       if (char) {
-        let url = char.imageSheetUrl || char.referenceImageUrl || (char.imageUrls && char.imageUrls[0]) || char.data;
-        if (url) {
-          content.push({
-            type: 'image_url',
-            role: 'reference_image',
-            image_url: { url }
-          });
+        const url = getCharUrl(char);
+        if (url && !addedUrls.has(url)) {
+          addedUrls.add(url);
+          content.push({ type: 'image_url', role: 'reference_image', image_url: { url } });
         }
       }
     }
+
+    // 2. 通过 assignedCharacterIds 补全所有参与本组镜头的角色
+    if (group) {
+      const seenCharIds = new Set<string>();
+      for (const shotRange of group.shots) {
+        for (const charId of (shotRange.shot.assignedCharacterIds || [])) {
+          if (seenCharIds.has(charId)) continue;
+          seenCharIds.add(charId);
+          const char = charRefs.find(c => c.id === charId);
+          if (!char) continue;
+          const url = getCharUrl(char);
+          if (url && !addedUrls.has(url)) {
+            addedUrls.add(url);
+            content.push({ type: 'image_url', role: 'reference_image', image_url: { url } });
+          }
+        }
+      }
+    }
+
+    // 文本置于首位
+    content.unshift({ type: 'text', text: prompt });
     return content;
   };
 
@@ -124,9 +153,45 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
     try {
       const model = 'neo-video-2-0';
       const promptData = generateVideoGroupPrompt(group, currentProject?.settings?.visualStyle);
-      const contentList = extractContentList(promptData.fullPromptCn, characterRefs);
+      let finalPromptText = promptData.fullPromptCn;
 
-      // 若分组第一个镜头已有生成图，作为首帧传入（IMAGE_TO_VIDEO / UNIVERSAL_TO_VIDEO）
+      // ── 上一段视频参考检测 ──
+      const groupIndex = videoGroups.findIndex(g => g.id === group.id);
+      if (groupIndex > 0) {
+        const prevGroup = videoGroups[groupIndex - 1];
+        const prevVideoUrl = prevGroup.shots[0]?.shot.videoUrl;
+        if (prevVideoUrl) {
+          // 用 assignedCharacterIds 判断是否有角色重叠或同场景
+          const prevCharIds = new Set(prevGroup.shots.flatMap(s => s.shot.assignedCharacterIds || []));
+          const currCharIds = group.shots.flatMap(s => s.shot.assignedCharacterIds || []);
+          const sameScene = !!(group.sceneId && group.sceneId === prevGroup.sceneId);
+          const hasOverlapChars = currCharIds.some(id => prevCharIds.has(id));
+
+          if (sameScene || hasOverlapChars) {
+            // 在提示词末尾加入参考说明
+            finalPromptText += '\n\n【参考上一段视频】参考视频中的场景环境和角色空间位置关系，保持空间连贯性。不要保留上一段视频的背景声音，只参考角色音色并自然融入当前台词。';
+          }
+        }
+      }
+
+      const contentList = extractContentList(finalPromptText, characterRefs, group);
+
+      // ── 注入上一段视频（放在角色图之后）──
+      if (groupIndex > 0) {
+        const prevGroup = videoGroups[groupIndex - 1];
+        const prevVideoUrl = prevGroup.shots[0]?.shot.videoUrl;
+        if (prevVideoUrl) {
+          const prevCharIds = new Set(prevGroup.shots.flatMap(s => s.shot.assignedCharacterIds || []));
+          const currCharIds = group.shots.flatMap(s => s.shot.assignedCharacterIds || []);
+          const sameScene = !!(group.sceneId && group.sceneId === prevGroup.sceneId);
+          const hasOverlapChars = currCharIds.some(id => prevCharIds.has(id));
+          if (sameScene || hasOverlapChars) {
+            contentList.push({ type: 'video_url', role: 'reference_video', video_url: { url: prevVideoUrl } } as any);
+          }
+        }
+      }
+
+      // 若分组第一个镜头已有生成图，作为首帧传入
       const firstShot = group.shots[0]?.shot;
       const firstFrameUrl = firstShot?.storyboardGridUrl || firstShot?.promptCn || undefined;
       if (firstFrameUrl && typeof firstFrameUrl === 'string' && firstFrameUrl.startsWith('http')) {
@@ -136,7 +201,7 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
           image_url: { url: firstFrameUrl },
         });
       }
-      
+
       const res = await createVideoTask({
         model,
         content: contentList,
@@ -255,7 +320,7 @@ export const VideoGenerationPage: React.FC<VideoGenerationPageProps> = ({
               {videoGroups.map(group => {
                   const isGenerating = generatingGroupIds.has(group.id);
                   const promptData = generateVideoGroupPrompt(group, currentProject?.settings?.visualStyle);
-                  const contentItems = extractContentList(promptData.fullPromptCn, characterRefs);
+                  const contentItems = extractContentList(promptData.fullPromptCn, characterRefs, group);
                   const refImages = contentItems.filter(i => i.type === 'image_url').length;
                   const groupVideoUrl = group.shots[0]?.shot?.videoUrl; // group.shots must have same URL after generation
 

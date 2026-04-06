@@ -14,7 +14,7 @@ export function buildChatEditShotListPrompt(shots: Shot[], userInstruction: stri
      - 如果用户说"减少镜头数量"、"简化"、"太多了"，你应该**合并镜头**，而不是删除镜头！
      - 合并镜头时，必须保留所有关键信息：
        * 故事详细描述（storyDescription）
-       * 首尾帧详细描述（firstFrameDescription, lastFrameDescription）
+       * 画面描述（startFrame）
        * 对话内容（dialogue）
        * 剧情内容
      - 例如：将镜头#1和#2合并为新镜头#1，新镜头的storyDescription应该包含原#1和#2的所有剧情内容
@@ -26,8 +26,7 @@ export function buildChatEditShotListPrompt(shots: Shot[], userInstruction: stri
 
   3. **内容合并规则**：
      - 合并镜头时，storyDescription = 原镜头1的storyDescription + " " + 原镜头2的storyDescription
-     - 合并镜头时，firstFrameDescription = 原镜头1的firstFrameDescription
-     - 合并镜头时，lastFrameDescription = 原镜头2的lastFrameDescription
+     - 合并镜头时，startFrame = 原镜头1的startFrame
      - 合并镜头时，dialogue = 原镜头1的dialogue + " " + 原镜头2的dialogue（如果有）
      - 合并镜头时，duration = 原镜头1的duration + 原镜头2的duration
 

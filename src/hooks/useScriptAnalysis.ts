@@ -149,20 +149,8 @@ export function useScriptAnalysis({
     const dialogue = storyBeatData.dialogue || '';
     const isMoving = cameraMovement && cameraMovement !== '固定' && cameraMovement !== 'static' && cameraMovement !== 'Static';
     
-    let videoMode: 'I2V' | 'Keyframe' | undefined;
-    const llmVideoMode = rawDesign.videoMode?.toLowerCase();
-    if (llmVideoMode === 'keyframe') {
-      videoMode = 'Keyframe';
-    } else if (llmVideoMode === 'i2v' || llmVideoMode === 'static') {
-      videoMode = 'I2V';
-    } else if (isMoving) {
-      const durationNum = parseInt(rawDesign.duration || '5', 10) || 5;
-      const hasSignificantChange = camera.startFrame && camera.endFrame && camera.startFrame !== '—' && camera.endFrame !== '—' && camera.startFrame !== camera.endFrame;
-      const decision = determineVideoMode(storyEvent, durationNum, !!hasSignificantChange, isMoving ? '运动' : '静态', cameraMovement);
-      videoMode = decision.mode === 'Keyframe' ? 'Keyframe' : 'I2V';
-    } else {
-      videoMode = 'I2V';
-    }
+    // 统一使用 I2V 模式（不再需要 Keyframe 模式）
+    const videoMode: 'I2V' | undefined = isMoving ? 'I2V' : undefined;
 
     const shotSizeMap: Record<string, string> = {
       'ELS': '大远景(ELS)', 'LS': '远景(LS)', 'MLS': '中全景(MLS)',
@@ -229,15 +217,13 @@ export function useScriptAnalysis({
       cameraMoveDetail: cameraSpeed || camera.description || '',
       motionPath: comp.blocking || characters.positions || '',
       startFrame: camera.startFrame || rawDesign.startFrame || '',
-      endFrame: camera.endFrame || rawDesign.endFrame || '',
       videoPromptCn: aiPrompt.videoPromptCn || '',
       videoPrompt: aiPrompt.videoPrompt || '',
       directorNote: rawDesign.directorNote || '',
       technicalNote: rawDesign.technicalNote || '',
       promptCn: '',
       promptEn: '',
-      endFramePromptCn: '',
-      endFramePromptEn: '',
+
       theory: rawDesign.theory || '',
       status: 'pending'
     };
@@ -351,7 +337,6 @@ export function useScriptAnalysis({
         angleDirection: shot.angleDirection?.replace(/\(\d+°\)/g, '').replace(/\(\d+-\d+°\)/g, '').trim() as any,
         angleHeight: shot.angleHeight?.replace(/\(\d+°\)/g, '').replace(/\(\d+-\d+°\)/g, '').trim() as any,
         imagePromptEn: shot.imagePromptEn?.replace(/\([^)]+:\d+\.\d+\)/g, ''),
-        endImagePromptEn: shot.endImagePromptEn?.replace(/\([^)]+:\d+\.\d+\)/g, ''),
         videoGenPrompt: shot.videoGenPrompt?.replace(/\([^)]+:\d+\.\d+\)/g, ''),
       }));
       setShots(finalShots);

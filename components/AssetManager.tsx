@@ -82,15 +82,7 @@ export function AssetManager({ project }: { project: Project }) {
             url: shot.startFrameUrl
           });
         }
-        if (shot.endFrameUrl) {
-          list.push({
-            id: `shot_img_${shot.id}_end`,
-            type: 'image',
-            category: 'shot',
-            label: `Ep${ep.episodeNumber}-镜头${index + 1} 尾帧`,
-            url: shot.endFrameUrl
-          });
-        }
+
         if (shot.storyboardGridUrl) {
           list.push({
             id: `shot_img_${shot.id}_grid`,

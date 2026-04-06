@@ -122,6 +122,41 @@ export function groupShotsBySceneAndDuration(
   return groups;
 }
 
+// ═══════════ 对白类型检测 ═══════════
+
+/**
+ * 根据对白内容检测类型，生成对应的提示词描述
+ * - 旁白：画外朗读，主角不开口
+ * - 画外音/VO/OS：来自画外的声音，主角不开口
+ * - 内心独白：内心声音，主角不开口
+ * - 普通对白：主角正常说话
+ */
+function buildDialoguePrompt(dialogue: string): string {
+  const t = dialogue.trim();
+  if (!t || t === '—' || t === '-' || t === '——') return '';
+
+  // 旁白（叙述者/解说，不是角色说话）
+  if (/^（?旁白[：:）]?/.test(t) || t.startsWith('旁白：') || t.startsWith('旁白:')) {
+    const content = t.replace(/^（?旁白[：:）]?\s*/, '').trim();
+    return `旁白（画外音，主角不开口）："${content}"。`;
+  }
+
+  // 画外音 / VO / OS
+  if (/^（?(?:画外音|VO|OS)[：:）]?/.test(t)) {
+    const content = t.replace(/^（?(?:画外音|VO|OS)[：:）]?\s*/, '').trim();
+    return `画外音（主角不开口）："${content}"。`;
+  }
+
+  // 内心独白
+  if (/^（?(?:内心|心里|内心独白|心声)[：:）]?/.test(t)) {
+    const content = t.replace(/^（?(?:内心|心里|内心独白|心声)[：:）]?\s*/, '').trim();
+    return `内心独白（主角不张嘴，仅内心声音）："${content}"。`;
+  }
+
+  // 普通对白 — 主角正常开口说话
+  return `台词（主角开口）："${t}"。`;
+}
+
 // ═══════════ Seedance 2.0 运镜翻译映射 ═══════════
 
 /** 运镜类型 → Seedance 2.0 专业运镜描述（核心规范三） */
@@ -256,8 +291,9 @@ export function generateVideoGroupPrompt(
     }
 
     // (c) 台词/对白 — 音画同步（核心规范四）
+    // 分清旁白/画外音/内心独白/普通对白，后三者主角不开口
     if (shot.dialogue) {
-      shotDesc += `说话"${shot.dialogue.trim()}"。`;
+      shotDesc += buildDialoguePrompt(shot.dialogue);
     }
 
     // (d) 音效（从 storyBeat 对象获取）
@@ -302,6 +338,9 @@ export function generateVideoGroupPrompt(
     cameraNotes = `全程${group.totalDuration.toFixed(0)}秒，注意镜头之间自然衔接，保持运动流畅性。`;
   }
   sections.push('\n\n' + cameraNotes);
+
+  // ───── 5. 全局硬性规范 ─────
+  sections.push('\n\n无背景音乐。不要字幕。');
 
   const timelineScript = sections.join('').trim();
   const fullPromptCn = timelineScript;

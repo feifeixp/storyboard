@@ -265,16 +265,14 @@ export interface Shot {
   // ═══════════ 基础信息 ═══════════
   shotNumber: string;       // "01", "02"...
   duration: string;         // "3s", "5s"
-  shotType: ShotType;       // 静态/运动，决定是否需要首尾帧
+  shotType: ShotType;       // 静态/运动
   sceneId?: string;         // 🆕 所属场景ID（如 "S1"），用于关联空间布局
   assignedSceneId?: string; // 🆕 关联或计算出的最终使用的场景ID
 
-  // ═══════════ 🆕 视频生成模式（优化版） ═══════════
-  // I2V: 图生视频（微动、跟拍运动、呼吸感、氛围）- ≤10秒，只需一张图+视频提示词
-  // Keyframe: 首尾帧模式（形态转变、定点位移、空间跳转）- 需要首帧图+尾帧图+过渡提示词
-  // 注：Static 已废弃，原静态场景改用 I2V + 呼吸感微动
-  videoMode?: 'I2V' | 'Keyframe';
-  videoModeReason?: string;  // 判断原因，便于用户理解为何选择该模式
+  // ═══════════ 视频生成模式 ═══════════
+  // I2V: 图生视频（单张图+视频提示词生成动态视频）
+  videoMode?: 'I2V';
+  videoModeReason?: string;  // 判断原因，便于用户理解
 
   // ═══════════ 叙事内容 ═══════════
   storyBeat: string | {     // 故事节拍：一句话说清这个镜头讲什么
@@ -308,24 +306,19 @@ export interface Shot {
   // ═══════════ 动线轨迹（运动镜头） ═══════════
   motionPath?: string;      // 角色动线：入画位置→路径→出画位置
 
-  // ═══════════ 首尾帧（运动镜头必填） ═══════════
-  startFrame?: string;      // 【首帧】完整画面描述 (Frozen Moment #1)
-  endFrame?: string;        // 【尾帧】完整画面描述 (Frozen Moment #2)
+  // ═══════════ 画面描述（运动镜头可填首帧作为起始参考） ═══════════
+  startFrame?: string;      // 画面描述：当前镜头的视觉参考（自然语言，用于分镜师和AI参考）
 
   // ═══════════ AI提示词（分镜生成阶段产出，包含镜头语言） ═══════════
-  promptCn: string;         // 中文提示词（首帧/静态帧，必须包含完整7要素）
-  promptEn?: string;        // 英文提示词（首帧/静态帧，可选）
-  endFramePromptCn?: string; // 中文提示词（尾帧，运动镜头必须包含完整7要素）
-  endFramePromptEn?: string; // 英文提示词（尾帧，可选）
-  videoPromptCn?: string;   // 视频生成提示词（必须使用中文）
+  promptCn: string;         // 中文提示词（必须包含完整7要素）
+  promptEn?: string;        // 英文提示词（可选）
+  videoPromptCn?: string;   // 视频生成提示词（中文）
   videoPrompt?: string;     // 视频生成提示词（兼容旧版，英文）
 
-  // ═══════════ 🆕 Nano Banana Pro 生图提示词（提取阶段产出，纯画面描述，不含风格） ═══════════
+  // ═══════════ 生图提示词（提取阶段产出，纯画面描述，不含风格） ═══════════
   // 公式：[主体描述] + [环境/背景] + [动作/状态] + [技术参数(景别/角度/光影)]
-  imagePromptCn?: string;   // 生图提示词-中文（首帧/静态帧）
-  imagePromptEn?: string;   // 生图提示词-英文（首帧/静态帧）⭐最终生图调用此字段
-  endImagePromptCn?: string; // 生图提示词-中文（尾帧，运动镜头用）
-  endImagePromptEn?: string; // 生图提示词-英文（尾帧，运动镜头用）
+  imagePromptCn?: string;   // 生图提示词-中文
+  imagePromptEn?: string;   // 生图提示词-英文⭐最终生图调用此字段
   videoGenPrompt?: string;  // 视频生成提示词（英文，用于Veo等视频模型）
 
   // ═══════════ 理论依据 ═══════════
@@ -338,8 +331,7 @@ export interface Shot {
   // ═══════════ 关联与状态 ═══════════
   assignedCharacterIds?: string[]; // 关联的角色ID
   selectedCharacterForms?: Record<string, string>; // 🆕 角色ID -> 子形态ID映射（用于视频生成参考图覆盖）
-  startFrameUrl?: string;   // 生成的首帧图片URL
-  endFrameUrl?: string;     // 生成的尾帧图片URL
+  startFrameUrl?: string;   // 生成的图片URL
 
   // ═══════════ 🆕 视频生成结果 ═══════════
   videoUrl?: string;        // 最终生成的视频URL

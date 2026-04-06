@@ -400,24 +400,12 @@ function generateAIPrompts(shots: Shot[]): string {
 
     const parts = [`镜头 #${shotNum} ${isMotion ? '（运动镜头）' : '（静态镜头）'}`];
 
-    if (isMotion) {
-      // 运动镜头：区分首帧和尾帧
-      if (shot.promptCn || shot.imagePromptCn) {
-        parts.push(`【首帧】中文提示词：\n${shot.imagePromptCn || shot.promptCn || '（未生成）'}`);
-      }
+    if (shot.promptCn || shot.imagePromptCn) {
+      parts.push(`中文提示词：\n${shot.imagePromptCn || shot.promptCn || '（未生成）'}`);
+    }
 
-      if (shot.endFramePromptCn || shot.endImagePromptCn) {
-        parts.push(`【尾帧】中文提示词：\n${shot.endImagePromptCn || shot.endFramePromptCn || '（未生成）'}`);
-      }
-
-      if (shot.videoGenPrompt) {
-        parts.push(`【视频提示词】：\n${shot.videoGenPrompt}`);
-      }
-    } else {
-      // 静态镜头：只有单一提示词
-      if (shot.promptCn || shot.imagePromptCn) {
-        parts.push(`中文提示词：\n${shot.imagePromptCn || shot.promptCn || '（未生成）'}`);
-      }
+    if (isMotion && shot.videoGenPrompt) {
+      parts.push(`【视频提示词】：\n${shot.videoGenPrompt}`);
     }
 
     return parts.join('\n\n');

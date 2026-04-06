@@ -317,7 +317,7 @@ export interface ShotDesign {
 
   // 其他字段
   duration: string;
-  frameType: '单镜头→[单帧生成]' | '需动画→[需首尾帧]';
+  frameType: '单镜头→[单帧生成]';
   theory: string; // Framed Ink 理论依据
 
   // 🆕 导演意图与技术备注

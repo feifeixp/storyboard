@@ -82,7 +82,7 @@ export const FORBIDDEN_TERMS: Array<{ term: string; reason: string; suggestion: 
 // 视频模式判断条件（基于《视频生成提示词规范.ini》第201-222行）
 // ═══════════════════════════════════════════════════════════════
 
-export type VideoMode = 'Static' | 'I2V' | 'Keyframe';
+export type VideoMode = 'Static' | 'I2V';
 
 export interface VideoModeDecision {
   mode: VideoMode;
@@ -90,55 +90,7 @@ export interface VideoModeDecision {
   confidence: 'high' | 'medium' | 'low';
 }
 
-/**
- * 需要首尾帧(Keyframe)模式的场景关键词
- * 来源：视频生成提示词规范.ini 第203-213行
- */
-export const KEYFRAME_REQUIRED_KEYWORDS = [
-  // 形态/材质转变
-  { keyword: '变身', category: '形态转变' },
-  { keyword: '转变', category: '形态转变' },
-  { keyword: '变化', category: '形态转变' },
-  { keyword: '转换', category: '形态转变' },
-  { keyword: '融合', category: '形态转变' },
-  { keyword: '分裂', category: '形态转变' },
-  { keyword: '消散', category: '形态转变' },
-  { keyword: '凝聚', category: '形态转变' },
-  // 空间跳转
-  { keyword: '跳转', category: '空间跳转' },
-  { keyword: '穿越', category: '空间跳转' },
-  { keyword: '进入', category: '空间跳转' },
-  { keyword: '离开', category: '空间跳转' },
-  { keyword: '室内到室外', category: '空间跳转' },
-  { keyword: '室外到室内', category: '空间跳转' },
-  // 时间流逝
-  { keyword: '流逝', category: '时间流逝' },
-  { keyword: '昼夜', category: '时间流逝' },
-  { keyword: '日出', category: '时间流逝' },
-  { keyword: '日落', category: '时间流逝' },
-  { keyword: '黎明', category: '时间流逝' },
-  { keyword: '黄昏', category: '时间流逝' },
-  // 多主体互动
-  { keyword: '拥抱', category: '多主体互动' },
-  { keyword: '握手', category: '多主体互动' },
-  { keyword: '互动', category: '多主体互动' },
-  { keyword: '对视', category: '多主体互动' },
-  { keyword: '交接', category: '多主体互动' },
-  // 明确叙事
-  { keyword: '出发', category: '明确叙事' },
-  { keyword: '抵达', category: '明确叙事' },
-  { keyword: '起身', category: '明确叙事' },
-  { keyword: '坐下', category: '明确叙事' },
-  { keyword: '倒下', category: '明确叙事' },
-  { keyword: '站起', category: '明确叙事' },
-  // 定点位移（需要首尾帧锚定起止位置）
-  { keyword: '从...到', category: '定点位移' },
-  { keyword: '抵达', category: '定点位移' },
-  { keyword: '到达', category: '定点位移' },
-  { keyword: '离开', category: '定点位移' },
-  { keyword: '进入', category: '定点位移' },
-  { keyword: '退出', category: '定点位移' },
-];
+
 
 /**
  * 跟拍大位移关键词（适合 I2V + 跟拍运镜）
@@ -280,64 +232,26 @@ export function detectForbiddenTerms(text: string): Array<{ term: string; reason
 }
 
 /**
- * 自动判断视频生成模式（优化版）
- *
- * 模式说明：
- * - I2V（图生视频）：适用于 ≤10秒 的微动、跟拍运动、氛围场景
- * - Keyframe（首尾帧）：适用于形态转变、定点位移、时间流逝等需要明确起止的场景
- * - Static：已废弃，原静态场景改用 I2V + 呼吸感微动
- *
- * @param storyBeat 故事节拍描述
- * @param duration 时长（秒）
- * @param hasSignificantChange 是否有显著变化（景别/位置/姿态等）
- * @param shotType 镜头类型（静态/运动）
- * @param cameraMove 运镜方式（可选，用于判断跟拍）
+ * 判断视频生成模式（统一 I2V）
+ * 所有镜头使用 I2V（图生视频）模式：一张图 + 视频提示词
  */
 export function determineVideoMode(
   storyBeat: string,
   duration: number,
-  hasSignificantChange: boolean,
+  _hasSignificantChange: boolean,
   shotType?: '静态' | '运动',
-  cameraMove?: string
+  _cameraMove?: string
 ): VideoModeDecision {
-  // 1. 检查是否包含需要 Keyframe 模式的关键词（形态转变、定点位移等）
-  for (const item of KEYFRAME_REQUIRED_KEYWORDS) {
-    if (storyBeat.includes(item.keyword)) {
-      return {
-        mode: 'Keyframe',
-        reason: `场景包含"${item.keyword}"(${item.category})，需要明确起止状态`,
-        confidence: 'high'
-      };
-    }
+  // 静态镜头：I2V + 呼吸感
+  if (shotType === '静态') {
+    return {
+      mode: 'I2V',
+      reason: '静态镜头使用 I2V 添加呼吸感微动',
+      confidence: 'high'
+    };
   }
 
-  // 2. 检查跟拍运动场景（大位移 + 跟拍 = I2V）
-  const isTrackingShot = cameraMove &&
-    (cameraMove.includes('跟') || cameraMove.includes('跟拍') ||
-     cameraMove.includes('跟随') || cameraMove.includes('track'));
-
-  for (const item of TRACKING_MOTION_KEYWORDS) {
-    if (storyBeat.includes(item.keyword)) {
-      // 跟拍运动：镜头跟随主体，不需要尾帧
-      if (isTrackingShot || shotType === '运动') {
-        return {
-          mode: 'I2V',
-          reason: `场景包含"${item.keyword}"且为跟拍运镜，镜头跟随主体无需尾帧`,
-          confidence: 'high'
-        };
-      }
-      // 非跟拍的大位移：可能需要首尾帧
-      if (hasSignificantChange) {
-        return {
-          mode: 'Keyframe',
-          reason: `场景包含"${item.keyword}"且有显著位移变化，建议使用首尾帧锚定`,
-          confidence: 'medium'
-        };
-      }
-    }
-  }
-
-  // 3. 检查是否适合 I2V 模式（微动、环境微动、氛围）
+  // 所有运动场景：I2V
   for (const item of I2V_SUITABLE_KEYWORDS) {
     if (storyBeat.includes(item.keyword)) {
       return {
@@ -348,36 +262,6 @@ export function determineVideoMode(
     }
   }
 
-  // 4. 检查呼吸感/微动场景（原 Static，现归入 I2V）
-  for (const keyword of BREATHING_MOTION_KEYWORDS) {
-    if (storyBeat.includes(keyword)) {
-      return {
-        mode: 'I2V',
-        reason: `场景包含"${keyword}"，使用 I2V 添加呼吸感微动`,
-        confidence: 'high'
-      };
-    }
-  }
-
-  // 5. 有显著变化需要 Keyframe
-  if (hasSignificantChange) {
-    return {
-      mode: 'Keyframe',
-      reason: '首尾帧存在显著差异，需要明确过渡过程',
-      confidence: 'high'
-    };
-  }
-
-  // 6. 基于时长判断（≤10秒 使用 I2V）
-  if (duration <= 10 && !hasSignificantChange) {
-    return {
-      mode: 'I2V',
-      reason: `${duration}秒内简单动态化，无需定义结束状态`,
-      confidence: 'medium'
-    };
-  }
-
-  // 7. 超长时长建议拆分，默认 I2V
   if (duration > 10) {
     return {
       mode: 'I2V',
@@ -386,7 +270,6 @@ export function determineVideoMode(
     };
   }
 
-  // 8. 默认使用 I2V（比 Keyframe 更灵活）
   return {
     mode: 'I2V',
     reason: '默认使用图生视频模式',
@@ -399,9 +282,7 @@ export function determineVideoMode(
  */
 export interface ShotPromptValidation {
   startFrame: ValidationResult;
-  endFrame: ValidationResult | null;
   promptCn: ValidationResult;
-  endFramePromptCn: ValidationResult | null;
   videoPromptCn: ValidationResult | null;
   forbiddenTerms: Array<{ field: string; terms: Array<{ term: string; reason: string; suggestion: string }> }>;
   videoMode: VideoModeDecision | null;
@@ -409,22 +290,15 @@ export interface ShotPromptValidation {
 
 export function validateShotPrompts(shot: {
   startFrame?: string;
-  endFrame?: string;
   promptCn: string;
-  endFramePromptCn?: string;
   videoPromptCn?: string;
   storyBeat?: string;
   duration?: string;
   shotType?: string;
 }): ShotPromptValidation {
-  const isMovingShot = shot.shotType === '运动镜头' || !!shot.endFrame;
-  const durationNum = parseInt(shot.duration || '5');
-
   const result: ShotPromptValidation = {
     startFrame: validateStateDescription(shot.startFrame || ''),
-    endFrame: isMovingShot && shot.endFrame ? validateStateDescription(shot.endFrame) : null,
     promptCn: validateImagePrompt(shot.promptCn || ''),
-    endFramePromptCn: isMovingShot && shot.endFramePromptCn ? validateImagePrompt(shot.endFramePromptCn) : null,
     videoPromptCn: shot.videoPromptCn ? validateVideoPrompt(shot.videoPromptCn) : null,
     forbiddenTerms: [],
     videoMode: null,
@@ -433,9 +307,7 @@ export function validateShotPrompts(shot: {
   // 检测各字段的违规词汇
   const fieldsToCheck = [
     { field: 'startFrame', text: shot.startFrame },
-    { field: 'endFrame', text: shot.endFrame },
     { field: 'promptCn', text: shot.promptCn },
-    { field: 'endFramePromptCn', text: shot.endFramePromptCn },
     { field: 'videoPromptCn', text: shot.videoPromptCn },
   ];
 
@@ -448,10 +320,10 @@ export function validateShotPrompts(shot: {
     }
   }
 
-  // 判断视频模式
+  // 判断视频模式（统一 I2V，不再依赖 endFrame）
   if (shot.storyBeat) {
-    const hasChange = !!shot.endFrame && shot.startFrame !== shot.endFrame;
-    result.videoMode = determineVideoMode(shot.storyBeat, durationNum, hasChange);
+    const durationNum = parseInt((shot as any).duration || '5');
+    result.videoMode = determineVideoMode(shot.storyBeat, durationNum, false);
   }
 
   return result;
@@ -467,14 +339,8 @@ export function generateValidationSummary(validation: ShotPromptValidation): str
   if (!validation.startFrame.valid || validation.startFrame.warnings.length > 0) {
     lines.push(...validation.startFrame.errors, ...validation.startFrame.warnings);
   }
-  if (validation.endFrame && (!validation.endFrame.valid || validation.endFrame.warnings.length > 0)) {
-    lines.push(...validation.endFrame.errors, ...validation.endFrame.warnings);
-  }
   if (!validation.promptCn.valid || validation.promptCn.warnings.length > 0) {
     lines.push(...validation.promptCn.errors, ...validation.promptCn.warnings);
-  }
-  if (validation.endFramePromptCn && (!validation.endFramePromptCn.valid || validation.endFramePromptCn.warnings.length > 0)) {
-    lines.push(...validation.endFramePromptCn.errors, ...validation.endFramePromptCn.warnings);
   }
   if (validation.videoPromptCn && (!validation.videoPromptCn.valid || validation.videoPromptCn.warnings.length > 0)) {
     lines.push(...validation.videoPromptCn.errors, ...validation.videoPromptCn.warnings);
@@ -496,219 +362,6 @@ export function generateValidationSummary(validation: ShotPromptValidation): str
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 首尾帧一致性校验（基于《视频生成提示词规范.ini》第215-222行）
-// ═══════════════════════════════════════════════════════════════
-
-/**
- * 景别等级映射（用于计算跨度）
- */
-const SHOT_SIZE_LEVELS: Record<string, number> = {
-  '大远景(ELS)': 1,
-  '远景(LS)': 2,
-  '中全景(MLS)': 3,
-  '中景(MS)': 4,
-  '中近景(MCU)': 5,
-  '近景(CU)': 6,
-  '特写(ECU)': 7,
-  '微距(Macro)': 8,
-};
-
-/**
- * 位置关键词（用于检测位置变化）
- */
-const POSITION_KEYWORDS = {
-  left: ['左侧', '左边', '左1/3', '画面左'],
-  center: ['中央', '中心', '正中', '画面中'],
-  right: ['右侧', '右边', '右1/3', '画面右'],
-};
-
-/**
- * 首尾帧一致性校验结果
- */
-export interface KeyframeConsistencyResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-  details: {
-    shotSizeChange?: { start: string; end: string; levels: number };
-    positionChange?: { start: string; end: string };
-    hasAnchorElement: boolean;
-    styleConsistent: boolean;
-  };
-}
-
-/**
- * 从提示词中提取景别
- */
-function extractShotSize(prompt: string): string | null {
-  for (const size of Object.keys(SHOT_SIZE_LEVELS)) {
-    if (prompt.includes(size)) {
-      return size;
-    }
-  }
-  // 尝试匹配英文缩写
-  const enMatch = prompt.match(/\b(ELS|LS|MLS|MS|MCU|CU|ECU|Macro)\b/i);
-  if (enMatch) {
-    const enToCn: Record<string, string> = {
-      'ELS': '大远景(ELS)',
-      'LS': '远景(LS)',
-      'MLS': '中全景(MLS)',
-      'MS': '中景(MS)',
-      'MCU': '中近景(MCU)',
-      'CU': '近景(CU)',
-      'ECU': '特写(ECU)',
-      'Macro': '微距(Macro)',
-    };
-    return enToCn[enMatch[1].toUpperCase()] || null;
-  }
-  return null;
-}
-
-/**
- * 从提示词中提取位置
- */
-function extractPosition(prompt: string): 'left' | 'center' | 'right' | null {
-  for (const [pos, keywords] of Object.entries(POSITION_KEYWORDS)) {
-    for (const kw of keywords) {
-      if (prompt.includes(kw)) {
-        return pos as 'left' | 'center' | 'right';
-      }
-    }
-  }
-  return null;
-}
-
-/**
- * 检测是否包含锚点元素声明
- */
-function hasAnchorElement(prompt: string): boolean {
-  const anchorKeywords = ['锚点', '不变', '保持', '始终', '贯穿'];
-  return anchorKeywords.some(kw => prompt.includes(kw));
-}
-
-/**
- * 校验首尾帧一致性
- * 基于《视频生成提示词规范.ini》第215-222行的五要素规则
- */
-export function validateKeyframeConsistency(
-  startFramePrompt: string,
-  endFramePrompt: string,
-  videoPrompt?: string
-): KeyframeConsistencyResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  // 1. 景别跨度校验（规则：≤2级安全，3级需快速推进，>3级风险）
-  const startSize = extractShotSize(startFramePrompt);
-  const endSize = extractShotSize(endFramePrompt);
-  let shotSizeChange: { start: string; end: string; levels: number } | undefined;
-
-  if (startSize && endSize) {
-    const startLevel = SHOT_SIZE_LEVELS[startSize];
-    const endLevel = SHOT_SIZE_LEVELS[endSize];
-    const levelDiff = Math.abs(startLevel - endLevel);
-    shotSizeChange = { start: startSize, end: endSize, levels: levelDiff };
-
-    // 景别跨度判断：
-    // 1-2级：安全，常规推进/拉远
-    // 3级：可以，需配合快速推进运镜
-    // 4级以上：高风险，AI难以补全
-    if (levelDiff > 3) {
-      errors.push(`景别跨度过大：${startSize}→${endSize}（跨${levelDiff}级），AI难以补全中间过程，建议拆分为多段`);
-    } else if (levelDiff === 3) {
-      warnings.push(`景别跨度较大：${startSize}→${endSize}（跨${levelDiff}级），需配合快速推进运镜，确保视频提示词中描述明确`);
-    }
-    // 1-2级不警告，属于正常范围
-  }
-
-  // 2. 位置变化校验
-  const startPos = extractPosition(startFramePrompt);
-  const endPos = extractPosition(endFramePrompt);
-  let positionChange: { start: string; end: string } | undefined;
-
-  if (startPos && endPos && startPos !== endPos) {
-    positionChange = {
-      start: startPos === 'left' ? '左侧' : startPos === 'right' ? '右侧' : '中央',
-      end: endPos === 'left' ? '左侧' : endPos === 'right' ? '右侧' : '中央'
-    };
-    // 从左到右或从右到左（大位移）
-    if ((startPos === 'left' && endPos === 'right') || (startPos === 'right' && endPos === 'left')) {
-      warnings.push(`人物位置变化较大：${positionChange.start}→${positionChange.end}，确保视频提示词中有明确的运动轨迹描述`);
-    }
-  }
-
-  // 3. 锚点元素检测
-  const combinedPrompt = `${startFramePrompt} ${endFramePrompt} ${videoPrompt || ''}`;
-  const hasAnchor = hasAnchorElement(combinedPrompt);
-  if (!hasAnchor && (shotSizeChange?.levels || 0) > 0) {
-    warnings.push('建议在提示词中声明锚点元素（如"背景管道结构保持不变"），确保首尾帧空间连贯');
-  }
-
-  // 4. 风格一致性检测（检查是否有明显的风格词冲突）
-  const styleKeywords = ['赛博朋克', '古风', '水墨', '油画', '写实', '卡通', '日漫', '欧美漫画'];
-  const startStyles = styleKeywords.filter(s => startFramePrompt.includes(s));
-  const endStyles = styleKeywords.filter(s => endFramePrompt.includes(s));
-  const styleConsistent = startStyles.length === 0 || endStyles.length === 0 ||
-    startStyles.some(s => endStyles.includes(s));
-
-  if (!styleConsistent) {
-    errors.push(`风格不一致：首帧[${startStyles.join(',')}] vs 尾帧[${endStyles.join(',')}]，会导致视频风格断层`);
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings,
-    details: {
-      shotSizeChange,
-      positionChange,
-      hasAnchorElement: hasAnchor,
-      styleConsistent,
-    }
-  };
-}
-
-/**
- * 综合首尾帧设计建议
- */
-export function generateKeyframeDesignSuggestions(
-  startFramePrompt: string,
-  endFramePrompt: string,
-  cameraMove?: string
-): string[] {
-  const suggestions: string[] = [];
-  const consistency = validateKeyframeConsistency(startFramePrompt, endFramePrompt);
-
-  // 基于运镜类型的建议
-  if (cameraMove) {
-    const camLower = cameraMove.toLowerCase();
-    if (camLower.includes('推') || camLower.includes('dolly in') || camLower.includes('push')) {
-      if (!consistency.details.shotSizeChange || consistency.details.shotSizeChange.levels === 0) {
-        suggestions.push('推镜运镜建议：尾帧景别应比首帧更近（如远景→中景）');
-      }
-    }
-    if (camLower.includes('拉') || camLower.includes('dolly out') || camLower.includes('pull')) {
-      if (!consistency.details.shotSizeChange || consistency.details.shotSizeChange.levels === 0) {
-        suggestions.push('拉镜运镜建议：尾帧景别应比首帧更远（如中景→远景）');
-      }
-    }
-    if (camLower.includes('跟') || camLower.includes('track')) {
-      if (!consistency.details.positionChange) {
-        suggestions.push('跟拍运镜建议：应体现人物位置变化（如从画面左侧→右侧）');
-      }
-    }
-    if (camLower.includes('环绕') || camLower.includes('arc')) {
-      suggestions.push('环绕运镜建议：首尾帧的角色朝向应有变化（如正侧面→3/4正面）');
-    }
-  }
-
-  // 添加校验产生的建议
-  suggestions.push(...consistency.warnings);
-
-  return suggestions;
-}
-
-// ═══════════════════════════════════════════════════════════════
 // 🆕 视频提示词七要素校验
 // ═══════════════════════════════════════════════════════════════
 
@@ -717,7 +370,7 @@ export function generateKeyframeDesignSuggestions(
  * required: true 表示必须包含，false 表示建议包含
  */
 export const VIDEO_PROMPT_SEVEN_ELEMENTS = [
-  { name: '过渡方式', keywords: ['从首帧到尾帧', '镜头固定', '镜头', '形态渐变', '空间平移', '时间流逝'], required: true },
+  { name: '运动描述', keywords: ['镜头固定', '镜头', '形态渐变', '空间平移', '时间流逝', '推进', '拉远', '跟拍'], required: true },
   { name: '运镜方式', keywords: ['固定', '推进', '拉远', '跟拍', '环绕', '横摇', '竖摇', '升降'], required: true },
   { name: '主体动作', keywords: ['保持', '站姿', '奔跑', '行走', '转身', '抬手', '蹲下', '跳跃', '挥动', '静止', '双手', '手'], required: true },
   { name: '运动轨迹', keywords: ['从', '向', '移动', '位置', '左侧', '右侧', '中央', '前倾', '起伏', '眼神', '胸口', '披风'], required: false }, // 静态镜头可能没有明显轨迹
@@ -748,12 +401,6 @@ export function validateVideoPromptSevenElements(videoPrompt: string): {
   const suggestions: string[] = [];
   let foundCount = 0;
   let requiredCount = 0;
-
-  // 检查是否以"从首帧到尾帧"开头
-  const hasCorrectStart = videoPrompt.startsWith('从首帧到尾帧');
-  if (!hasCorrectStart) {
-    suggestions.push('⚠️ 必须以"从首帧到尾帧"开头！这是强制规范');
-  }
 
   // 检查每个要素
   for (const element of VIDEO_PROMPT_SEVEN_ELEMENTS) {
@@ -789,8 +436,8 @@ export function validateVideoPromptSevenElements(videoPrompt: string): {
 
   const score = Math.round((foundCount / VIDEO_PROMPT_SEVEN_ELEMENTS.length) * 100);
 
-  // 只有缺少必需要素或没有正确开头才算无效
-  const valid = missingElements.length === 0 && hasCorrectStart && length >= PROMPT_LENGTH_LIMITS.VIDEO_PROMPT.min;
+  // 只有缺少必需要素才算无效
+  const valid = missingElements.length === 0 && length >= PROMPT_LENGTH_LIMITS.VIDEO_PROMPT.min;
 
   return {
     valid,

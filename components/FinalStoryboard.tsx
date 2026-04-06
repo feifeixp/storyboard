@@ -89,6 +89,8 @@ export function FinalStoryboard({
   const [customDurations, setCustomDurations] = useState<Record<string, number>>({});
   // 🆕 自定义提示词映射记录 (groupId -> prompt)
   const [customPrompts, setCustomPrompts] = useState<Record<string, string>>({});
+  // 🆕 用户主动关闭的自动视频参考（groupId Set）
+  const [disabledAutoRefGroups, setDisabledAutoRefGroups] = useState<Set<string>>(new Set());
 
   // 🆕 使用 useRef 追踪最新的 shots，防止异步回调中出现 stale closure 导致数据覆盖
   const latestShotsRef = useRef(shots);
@@ -123,6 +125,40 @@ export function FinalStoryboard({
       }
     }
     return { status: 'ready' };
+  };
+
+  /**
+   * 智能判断是否把上一组视频作为参考
+   * 排除情况：
+   *   1. 当前组多角色(≥2)，上一组仅单角色或全是近景/特写镜头（无法提供多人场景空间关系）
+   *   2. 场景切换 且 没有共同角色（完全无关联）
+   */
+  const computeAutoVideoRef = (group: VideoGroup, groupIdx: number): { url: string; prevGroupName: string } | null => {
+    if (groupIdx === 0) return null;
+    const prevGroup = videoGroups[groupIdx - 1];
+    const prevVideoUrl = prevGroup.shots[0]?.shot.videoUrl;
+    if (!prevVideoUrl) return null;
+
+    const prevCharIds = new Set(prevGroup.shots.flatMap(s => s.shot.assignedCharacterIds || []));
+    const currCharIds = new Set(group.shots.flatMap(s => s.shot.assignedCharacterIds || []));
+    const sameScene = !!(group.sceneId && group.sceneId === prevGroup.sceneId);
+    const hasOverlapChars = [...currCharIds].some(id => prevCharIds.has(id));
+
+    // 完全无关联 → 不参考
+    if (!sameScene && !hasOverlapChars) return null;
+
+    // 排除情况 1：当前多角色，上一组单角色 OR 全是近景/特写（无多人空间感）
+    const currCharCount = currCharIds.size;
+    const prevCharCount = prevCharIds.size;
+    const CLOSE_UP_SIZES = ['特写(ECU)', '近景(CU)', '微距(Macro)', '极端特写'];
+    const prevHasOnlyCloseUps = prevGroup.shots.length > 0 && prevGroup.shots.every(s =>
+      CLOSE_UP_SIZES.some(sz => (s.shot.shotSize || '').includes(sz))
+    );
+    if (currCharCount > 1 && (prevCharCount <= 1 || prevHasOnlyCloseUps)) {
+      return null; // 上一段不具备多角色空间参考价值
+    }
+
+    return { url: prevVideoUrl, prevGroupName: prevGroup.groupName || `第${groupIdx}组` };
   };
 
   const CONCURRENCY_LIMIT = 3; // 🚀 最大并发数
@@ -184,43 +220,50 @@ export function FinalStoryboard({
     let textSupplements = '\n\n【视觉设定参考】\n';
     let hasSupplements = false;
 
-    // 提取角色
+    // 辅助：获取角色图片（优先当前组选中的形态）
+    const resolveCharUrl = (char: CharacterRef): string | null => {
+      if (group && group.shots[0]?.shot.selectedCharacterForms?.[char.id]) {
+        const formId = group.shots[0].shot.selectedCharacterForms[char.id];
+        const form = char.forms?.find(f => f.id === formId);
+        if (form?.imageSheetUrl) return form.imageSheetUrl;
+      }
+      return getCharacterImageUrl(char);
+    };
+
+    const addChar = (char: CharacterRef) => {
+      const url = resolveCharUrl(char);
+      if (url && !addedImageUrls.has(url)) {
+        addedImageUrls.add(url);
+        content.push({ type: 'image_url', role: 'reference_image', image_url: { url } });
+      }
+      if (char.appearance && !textSupplements.includes(`角色[${char.name}]`)) {
+        textSupplements += `- 角色[${char.name}]: ${char.appearance.substring(0, 150)}\n`;
+        hasSupplements = true;
+      }
+    };
+
+    // 提取角色：① @角色名 语法 ② assignedCharacterIds（补全漏掉的角色）
     if (characterRefs && characterRefs.length > 0) {
-      // 匹配 @角色名 语法，例如 @林溪
+      // ① 扫描 @角色名
       const matchRegex = /@([^\s，。、！@:：]+)/g;
       const matches = [...promptText.matchAll(matchRegex)].map(m => m[1].trim());
-      const activeCharNames = new Set(matches);
-
-      activeCharNames.forEach(charName => {
+      new Set(matches).forEach(charName => {
         const char = characterRefs.find(c => c.name === charName);
-        if (char) {
-          let url = getCharacterImageUrl(char);
-          
-          // 如果在当前组手动指定了形态，则用其覆盖
-          if (group && group.shots[0]?.shot.selectedCharacterForms?.[char.id]) {
-            const formId = group.shots[0].shot.selectedCharacterForms[char.id];
-            const form = char.forms?.find(f => f.id === formId);
-            if (form && form.imageSheetUrl) {
-              url = form.imageSheetUrl;
-            }
-          }
-
-          if (url && !addedImageUrls.has(url)) {
-            addedImageUrls.add(url);
-            content.push({
-              type: 'image_url',
-              role: 'reference_image',
-              image_url: { url }
-            });
-          }
-          
-          // 补充角色文本描述（无论是否有图都补充，帮助 AI 更好理解）
-          if (char.appearance) {
-             textSupplements += `- 角色[${char.name}]: ${char.appearance.substring(0, 150)}\n`;
-             hasSupplements = true;
-          }
-        }
+        if (char) addChar(char);
       });
+
+      // ② 通过 assignedCharacterIds 补全（不依赖提示词中的 @ 标注）
+      if (group) {
+        const seenCharIds = new Set<string>();
+        group.shots.forEach(shotRange => {
+          (shotRange.shot.assignedCharacterIds || []).forEach(charId => {
+            if (seenCharIds.has(charId)) return;
+            seenCharIds.add(charId);
+            const char = characterRefs.find(c => c.id === charId);
+            if (char) addChar(char);
+          });
+        });
+      }
     }
 
     // 提取场景
@@ -391,6 +434,26 @@ export function FinalStoryboard({
     }
   };
 
+  /** 直接通过 URL 添加自定义参考（无需 OSS 上传，适用于粘贴外部视频/图片链接） */
+  const handleAddRefByUrl = async (groupId: string, url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    const group = videoGroups.find(g => g.id === groupId);
+    if (!group) return;
+    const firstShotId = group.shots[0].shot.id;
+    const nextShots = latestShotsRef.current.map(s => {
+      if (s.id === firstShotId) {
+        if (s.customVideoReferences?.includes(trimmed)) return s; // 去重
+        return { ...s, customVideoReferences: [...(s.customVideoReferences || []), trimmed] };
+      }
+      return s;
+    });
+    latestShotsRef.current = nextShots;
+    setShots(nextShots);
+    const myWrite = writeChainRef.current.then(() => handleSaveEpisodes(latestShotsRef.current));
+    writeChainRef.current = myWrite.catch(() => {});
+  };
+
   const handleRemoveCustomRef = async (groupId: string, urlToRemove: string) => {
     const group = videoGroups.find(g => g.id === groupId);
     if (!group) return;
@@ -456,7 +519,21 @@ export function FinalStoryboard({
 
     try {
       const model = videoModel;
-      const contentList = extractContentList(promptText, group);
+
+      // ── 智能上一段视频参考（排除不适合情况 + 尊重用户禁用偏好）──
+      const groupIndex = videoGroups.findIndex(g => g.id === group.id);
+      let finalPromptText = promptText;
+      let prevVideoToInject: string | null = null;
+
+      if (!disabledAutoRefGroups.has(group.id)) {
+        const autoRef = computeAutoVideoRef(group, groupIndex);
+        if (autoRef) {
+          prevVideoToInject = autoRef.url;
+          finalPromptText += '\n\n【参考上一段视频】参考视频中的场景环境和角色空间位置关系，保持空间连贯性。不要保留上一段视频的背景声音，只参考角色音色并自然融入当前台词。';
+        }
+      }
+
+      const contentList = extractContentList(finalPromptText, group);
 
       // 0. 注入分镜草图参考（九宫格）
       const storyboardUrl = group.shots[0]?.shot.storyboardGridUrl;
@@ -468,35 +545,13 @@ export function FinalStoryboard({
           });
       }
 
-      // 1. 注入上一组生成的视频作为参考（如果紧密衔接）
-      const groupIndex = videoGroups.findIndex(g => g.id === group.id);
-      if (groupIndex > 0) {
-        const prevGroup = videoGroups[groupIndex - 1];
-        const prevVideoUrl = prevGroup.shots[0]?.shot.videoUrl;
-        
-        if (prevVideoUrl) {
-          let isConnected = false;
-          if (group.sceneId && group.sceneId === prevGroup.sceneId) {
-            isConnected = true;
-          } else {
-            const charRegex = /@([^\s，。、！@:：]+)/g;
-            const currentChars = new Set([...promptText.matchAll(charRegex)].map(m => m[1].trim()));
-            const prevPrompt = videoGroupPrompts.find(p => p.groupId === prevGroup.id)?.fullPromptCn || '';
-            const prevChars = new Set([...prevPrompt.matchAll(charRegex)].map(m => m[1].trim()));
-            for (const char of currentChars) {
-              if (prevChars.has(char)) {
-                isConnected = true; break;
-              }
-            }
-          }
-          if (isConnected) {
-            contentList.push({
-              type: 'video_url',
-              role: 'reference_video',
-              video_url: { url: prevVideoUrl }
-            });
-          }
-        }
+      // 1. 注入上一组视频（已在上方检测，直接使用 prevVideoToInject）
+      if (prevVideoToInject) {
+        contentList.push({
+          type: 'video_url',
+          role: 'reference_video',
+          video_url: { url: prevVideoToInject }
+        });
       }
 
       // 2. 注入手动上传的自定义参考
@@ -692,7 +747,7 @@ export function FinalStoryboard({
 
       // 该分组的镜头详情
       csvContent.push('镜头详情');
-      csvContent.push('编号,起始秒,结束秒,剧情描述,对话,景别,角度朝向,角度高度,运镜,时长,图片提示词,尾帧提示词');
+      csvContent.push('编号,起始秒,结束秒,剧情描述,对话,景别,角度朝向,角度高度,运镜,时长,图片提示词');
       for (const shotRange of group.shots) {
         const shot = shotRange.shot;
         const storyBeat = getShotStoryBeat(shot);
@@ -708,7 +763,6 @@ export function FinalStoryboard({
           shot.cameraMove,
           shot.duration,
           shot.imagePromptCn || '',
-          shot.endImagePromptCn || '',
         ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','));
       }
       csvContent.push('');
@@ -717,7 +771,7 @@ export function FinalStoryboard({
     // 第三部分：原始镜头列表（完整视图）
     csvContent.push('===== 原始镜头列表（完整视图）=====');
     csvContent.push('');
-    csvContent.push('编号,分组ID,剧情描述,对话,景别,角度朝向,角度高度,运镜,时长,图片提示词,尾帧提示词,视频提示词');
+    csvContent.push('编号,分组ID,剧情描述,对话,景别,角度朝向,角度高度,运镜,时长,图片提示词,视频提示词');
     for (const shot of shots) {
       const storyBeat = getShotStoryBeat(shot);
       const group = videoGroups.find(g => g.shots.some(s => s.shot.id === shot.id));
@@ -732,7 +786,6 @@ export function FinalStoryboard({
         shot.cameraMove,
         shot.duration,
         shot.imagePromptCn || '',
-        shot.endImagePromptCn || '',
         shot.videoGenPrompt || '',
       ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','));
     }
@@ -818,7 +871,7 @@ export function FinalStoryboard({
         groupedSection += `- **角度**: ${shot.angleDirection} ${shot.angleHeight}\n`;
         groupedSection += `- **运镜**: ${shot.cameraMove}\n`;
         if (shot.imagePromptCn) groupedSection += `- **图片提示词**: ${shot.imagePromptCn}\n`;
-        if (shot.endImagePromptCn) groupedSection += `- **尾帧提示词**: ${shot.endImagePromptCn}\n`;
+
         groupedSection += '\n';
       }
       groupedSection += `---\n\n`;
@@ -834,9 +887,7 @@ export function FinalStoryboard({
       if (shot.imagePromptCn) {
         promptSection += `- **图片提示词**: ${shot.imagePromptCn}\n`;
       }
-      if (shot.endImagePromptCn) {
-        promptSection += `- **尾帧提示词**: ${shot.endImagePromptCn}\n`;
-      }
+
       if (shot.videoGenPrompt) {
         promptSection += `- **视频提示词**: ${shot.videoGenPrompt}\n`;
       }
@@ -1095,6 +1146,15 @@ export function FinalStoryboard({
                     isGenerating={generatingGroupIds.has(group.id)}
                     isUploadingRef={uploadingRefGroupId === group.id}
                     dependencyInfo={dependencyInfo}
+                    autoVideoRef={computeAutoVideoRef(group, groupIdx)}
+                    isAutoRefDisabled={disabledAutoRefGroups.has(group.id)}
+                    onToggleAutoRef={() => setDisabledAutoRefGroups(prev => {
+                      const next = new Set(prev);
+                      if (next.has(group.id)) next.delete(group.id);
+                      else next.add(group.id);
+                      return next;
+                    })}
+                    onAddRefByUrl={(url) => handleAddRefByUrl(group.id, url)}
                     onGenerateVideo={() => prompt && handleGenerateGroup(group, prompt.fullPromptCn)}
                     onUploadCustomReference={(file) => handleUploadCustomRef(group.id, file)}
                     onRemoveCustomReference={(url) => handleRemoveCustomRef(group.id, url)}
@@ -1328,6 +1388,10 @@ function VideoGroupCard({
   isGenerating = false,
   isUploadingRef = false,
   dependencyInfo,
+  autoVideoRef,
+  isAutoRefDisabled,
+  onToggleAutoRef,
+  onAddRefByUrl,
   onGenerateVideo,
   onUploadCustomReference,
   onRemoveCustomReference,
@@ -1347,6 +1411,13 @@ function VideoGroupCard({
   isGenerating?: boolean;
   isUploadingRef?: boolean;
   dependencyInfo?: { status: 'ready' | 'pending'; waitGroupName?: string };
+  /** 自动检测到的上一段视频参考 */
+  autoVideoRef?: { url: string; prevGroupName: string } | null;
+  /** 用户是否主动关闭了自动参考 */
+  isAutoRefDisabled?: boolean;
+  onToggleAutoRef?: () => void;
+  /** 通过 URL 粘贴添加自定义参考 */
+  onAddRefByUrl?: (url: string) => Promise<void>;
   onGenerateVideo?: () => void;
   onUploadCustomReference?: (file: File) => Promise<void>;
   onRemoveCustomReference?: (url: string) => Promise<void>;
@@ -1358,6 +1429,8 @@ function VideoGroupCard({
   onShotChange?: (shotId: string, updates: Partial<Shot>) => void;
 }) {
   const [showPrompt, setShowPrompt] = useState(true);
+  const [showPasteUrl, setShowPasteUrl] = useState(false);
+  const [pasteUrlValue, setPasteUrlValue] = useState('');
 
   return (
     <div className="rounded-2xl overflow-hidden bg-[#161824] border border-white/5 shadow-xl relative ring-1 ring-purple-500/20">
@@ -1416,29 +1489,129 @@ function VideoGroupCard({
               </div>
             )}
 
-            {/* 🆕 渲染自定义参考 */}
-            {group.shots[0]?.shot?.customVideoReferences && group.shots[0].shot.customVideoReferences.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2 items-center">
-                <span className="text-xs text-indigo-300 flex items-center gap-1 font-medium bg-indigo-900/30 px-2 py-1 rounded border border-indigo-500/20">
-                  📎 附加参考:
-                </span>
-                {group.shots[0].shot.customVideoReferences.map((url, i) => {
-                   const isVid = url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.mov') || url.toLowerCase().includes('.webm');
-                   return (
-                     <div key={i} className="relative h-10 aspect-video rounded-md overflow-hidden border border-indigo-400/40 group/ref shadow-sm hover:border-indigo-400 transition-colors">
-                       {isVid ? (
-                         <video src={url} className="w-full h-full object-cover opacity-80" />
-                       ) : (
-                         <img src={url} className="w-full h-full object-cover" />
-                       )}
-                       <button
-                         onClick={() => onRemoveCustomReference?.(url)}
-                         className="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white w-5 h-5 text-[12px] flex items-center justify-center opacity-0 group-hover/ref:opacity-100 transition-opacity rounded-bl-sm"
-                         title="移除参考"
-                       >×</button>
-                     </div>
-                   );
-                })}
+            {/* ── 参考素材管理面板 ── */}
+            {(autoVideoRef || (group.shots[0]?.shot?.customVideoReferences?.length ?? 0) > 0 || onUploadCustomReference || onAddRefByUrl) && (
+              <div className="mt-4 bg-black/20 border border-white/8 rounded-xl p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-1.5">
+                    🎞 参考素材
+                  </span>
+                  <div className="flex gap-1.5">
+                    {/* 上传本地文件 */}
+                    {onUploadCustomReference && (
+                      <label
+                        htmlFor={isUploadingRef ? undefined : `upload-ref-${group.id}`}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer border
+                          bg-indigo-600/15 hover:bg-indigo-600/30 border-indigo-500/25 text-indigo-300 hover:text-indigo-200
+                          ${isUploadingRef ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title="上传本地图片或视频作为参考"
+                      >
+                        {isUploadingRef
+                          ? <><div className="w-3 h-3 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin" />上传中</>
+                          : <>📁 上传</>}
+                        <input
+                          type="file"
+                          accept="image/*,video/mp4,video/quicktime,video/webm"
+                          className="hidden"
+                          id={`upload-ref-${group.id}`}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) { e.target.value = ''; await onUploadCustomReference(file); }
+                          }}
+                        />
+                      </label>
+                    )}
+                    {/* 粘贴 URL */}
+                    {onAddRefByUrl && (
+                      <button
+                        onClick={() => setShowPasteUrl(v => !v)}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 bg-teal-600/15 hover:bg-teal-600/30 border border-teal-500/25 text-teal-300 hover:text-teal-200 transition-all"
+                        title="粘贴视频或图片 URL 作为参考"
+                      >🔗 粘贴URL</button>
+                    )}
+                  </div>
+                </div>
+
+                {/* URL 粘贴输入框 */}
+                {showPasteUrl && onAddRefByUrl && (
+                  <div className="flex gap-2 items-center">
+                    <input
+                      className="flex-1 bg-black/40 border border-white/15 rounded-lg px-3 py-1.5 text-[12px] text-white placeholder-gray-500 outline-none focus:border-teal-400/60 transition-colors"
+                      placeholder="粘贴视频或图片 URL…"
+                      value={pasteUrlValue}
+                      onChange={e => setPasteUrlValue(e.target.value)}
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter' && pasteUrlValue.trim()) {
+                          await onAddRefByUrl(pasteUrlValue);
+                          setPasteUrlValue('');
+                          setShowPasteUrl(false);
+                        }
+                      }}
+                    />
+                    <button
+                      className="px-3 py-1.5 bg-teal-600/30 hover:bg-teal-600/50 border border-teal-500/40 text-teal-200 rounded-lg text-[12px] font-medium transition-all"
+                      onClick={async () => {
+                        if (pasteUrlValue.trim()) {
+                          await onAddRefByUrl(pasteUrlValue);
+                          setPasteUrlValue('');
+                          setShowPasteUrl(false);
+                        }
+                      }}
+                    >添加</button>
+                    <button className="text-gray-500 hover:text-gray-300 text-lg leading-none" onClick={() => setShowPasteUrl(false)}>×</button>
+                  </div>
+                )}
+
+                {/* 参考缩略图列表 */}
+                <div className="flex flex-wrap gap-2 items-start">
+                  {/* 自动参考（上一段视频） */}
+                  {autoVideoRef && (
+                    <div className={`relative group/ref flex flex-col rounded-lg overflow-hidden border shadow-sm transition-all ${isAutoRefDisabled ? 'opacity-40 border-white/10 grayscale' : 'border-violet-500/50 hover:border-violet-400'}`} style={{ height: 52, aspectRatio: '16/9' }}>
+                      <video src={autoVideoRef.url} className="w-full h-full object-cover" muted />
+                      {/* 标签 */}
+                      <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] text-violet-300 font-bold px-1 py-0.5 text-center truncate leading-tight">
+                        {isAutoRefDisabled ? '⛔ 已关闭' : '🤖 自动'}
+                      </div>
+                      {/* 悬浮工具栏 */}
+                      <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-1 p-0.5 opacity-0 group-hover/ref:opacity-100 transition-opacity bg-black/60">
+                        <button
+                          onClick={onToggleAutoRef}
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-bold transition-colors ${isAutoRefDisabled ? 'bg-violet-600 text-white' : 'bg-red-600/80 text-white'}`}
+                          title={isAutoRefDisabled ? '重新启用自动参考' : '关闭此自动参考'}
+                        >{isAutoRefDisabled ? '启用' : '关闭'}</button>
+                      </div>
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 whitespace-nowrap bg-black/90 text-[10px] text-violet-200 px-2 py-1 rounded opacity-0 group-hover/ref:opacity-100 pointer-events-none z-50 border border-violet-500/20">
+                        自动参考：{autoVideoRef.prevGroupName}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 用户自定义参考 */}
+                  {(group.shots[0]?.shot?.customVideoReferences || []).map((url, i) => {
+                    const isVid = /\.(mp4|mov|webm)/i.test(url);
+                    return (
+                      <div key={i} className="relative group/ref rounded-lg overflow-hidden border border-indigo-400/40 hover:border-indigo-400 shadow-sm transition-all" style={{ height: 52, aspectRatio: '16/9' }}>
+                        {isVid
+                          ? <video src={url} className="w-full h-full object-cover opacity-85" muted />
+                          : <img src={url} className="w-full h-full object-cover" />}
+                        <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] text-indigo-300 font-bold px-1 py-0.5 text-center leading-tight">
+                          {isVid ? '🎬' : '🖼'} 自定义
+                        </div>
+                        <button
+                          onClick={() => onRemoveCustomReference?.(url)}
+                          className="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white w-5 h-5 text-[12px] flex items-center justify-center opacity-0 group-hover/ref:opacity-100 transition-opacity rounded-bl-sm"
+                          title="移除参考"
+                        >×</button>
+                      </div>
+                    );
+                  })}
+
+                  {/* 空状态提示 */}
+                  {!autoVideoRef && (group.shots[0]?.shot?.customVideoReferences?.length ?? 0) === 0 && (
+                    <span className="text-[11px] text-gray-600 italic py-1">暂无参考，点击"上传"或"粘贴URL"添加</span>
+                  )}
+                </div>
               </div>
             )}
             
@@ -1451,31 +1624,6 @@ function VideoGroupCard({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 justify-end shrink-0">
-            {/* 🆕 增加参考文件查传入口 */}
-            {onUploadCustomReference && (
-              <div className="relative">
-                <input
-                  type="file"
-                  accept="image/*,video/mp4,video/quicktime,video/webm"
-                  className="hidden"
-                  id={`upload-ref-${group.id}`}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      e.target.value = ''; // clear
-                      await onUploadCustomReference(file);
-                    }
-                  }}
-                />
-                <label
-                  htmlFor={isUploadingRef ? undefined : `upload-ref-${group.id}`}
-                  className={`px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/30 rounded-lg text-indigo-300 hover:text-indigo-200 transition-all text-sm font-medium flex items-center gap-2 ${isUploadingRef ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} whitespace-nowrap`}
-                  title="上传本地图片或视频作为额外的生成参考"
-                >
-                  {isUploadingRef ? <><div className="w-3.5 h-3.5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin"></div> 上传中</> : '📎 附加参考'}
-                </label>
-              </div>
-            )}
 
             {group.shots.some(s => s.shot.storyboardGridUrl) && (
               <button
@@ -1710,8 +1858,14 @@ function VideoGroupCard({
             {/* 顶部的参考图图标陈列区 */}
             {(() => {
               // 提取这组脚本里提及的所有角色和场景
+              // ① @角色名 标注 ② assignedCharacterIds（补全漏掉的角色）
               const scriptText = prompt.timelineScript || '';
-              const matchedChars = characterRefs.filter(c => c.name && scriptText.includes(`@${c.name}`));
+              const assignedCharIdSet = new Set(
+                group.shots.flatMap(s => s.shot.assignedCharacterIds || [])
+              );
+              const matchedChars = characterRefs.filter(c =>
+                c.name && (scriptText.includes(`@${c.name}`) || assignedCharIdSet.has(c.id))
+              );
               const matchedScenes = (scenes || []).filter(s => s.name && scriptText.includes(s.name));
               
               if (matchedChars.length === 0 && matchedScenes.length === 0) return null;

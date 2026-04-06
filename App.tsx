@@ -39,6 +39,7 @@ import {
   generateShotListStream,
   reviewStoryboardOpenRouter as reviewStoryboard,
   optimizeShotListStream,
+  optimizeSingleShotStream,
   chatEditShotListStream,
   chatWithDirectorStream,
   generateMergedStoryboardSheet,
@@ -66,7 +67,6 @@ import {
 import {
   detectForbiddenTerms,
   validateImagePrompt,
-  validateKeyframeConsistency,
   determineVideoMode,
   generateValidationSummary,
   type ShotPromptValidation,
@@ -1652,19 +1652,6 @@ const App: React.FC = () => {
           });
         }
 
-        // Keyframe 模式尾帧缺失校验
-        if (shot.videoMode === 'Keyframe') {
-          const endFrameMissing = !shot.endFrame || shot.endFrame === '—' || shot.endFrame.trim() === '';
-          if (endFrameMissing) {
-            ruleBasedSuggestions.push({
-              shotNumber: shot.shotNumber,
-              suggestion: '尾帧描述缺失！Keyframe模式必须包含尾帧画面描述，用于AI生成首尾帧两张图像。',
-              reason: '尾帧描述缺失',
-              selected: true
-            });
-          }
-        }
-
         // 台词/旁白时长校验：确保时长足够说完台词
         if (shot.dialogue && shot.dialogue.trim() && shot.dialogue !== '无' && shot.dialogue !== '—') {
           const chineseChars = shot.dialogue.replace(/[^\u4e00-\u9fa5]/g, '').length;
@@ -1751,9 +1738,9 @@ const App: React.FC = () => {
     }
   };
 
-  // 🆕 提示词自检函数（在生成提示词后调用）
-  // ⚠️ 只校验 imagePromptCn / endImagePromptCn（生图提示词），
-  //    不校验 startFrame / endFrame / promptCn（分镜自然语言描述，合法包含"镜头""画面"等词汇）
+  // 提示词自检函数（在生成提示词后调用）
+  // ⚠️ 只校验 imagePromptCn（生图提示词），
+  //    不校验 startFrame / promptCn（分镜自然语言描述，合法包含"镜头""画面"等词汇）
   const validatePrompts = () => {
     setIsValidatingPrompts(true);
     setOptimizedChanges([]); // 重新自检时清空上次的优化对比记录
@@ -1763,47 +1750,20 @@ const App: React.FC = () => {
       // 只有已提取生图提示词的镜头才进行校验
       if (!shot.imagePromptCn && !shot.imagePromptEn) continue;
 
-      // 1. 违规词汇检测：仅对 imagePromptCn / endImagePromptCn 执行
-      const fieldsToCheck: Array<{ field: string; text: string }> = [];
-      if (shot.imagePromptCn) fieldsToCheck.push({ field: 'imagePromptCn', text: shot.imagePromptCn });
-      if (shot.endImagePromptCn) fieldsToCheck.push({ field: 'endImagePromptCn', text: shot.endImagePromptCn });
-
-      for (const { field, text } of fieldsToCheck) {
-        const terms = detectForbiddenTerms(text);
+      // 1. 违规词汇检测：仅对 imagePromptCn 执行
+      if (shot.imagePromptCn) {
+        const terms = detectForbiddenTerms(shot.imagePromptCn);
         for (const t of terms) {
           results.push({
             shotNumber: shot.shotNumber,
-            suggestion: `[${field}] 包含违规词汇"${t.term}"，建议改为：${t.suggestion}`,
+            suggestion: `[imagePromptCn] 包含违规词汇"${t.term}"，建议改为：${t.suggestion}`,
             reason: `规则校验：${t.reason}`,
             selected: true
           });
         }
       }
 
-      // 2. 如果是 Keyframe 模式，校验首尾帧一致性
-      if (shot.videoMode === 'Keyframe' && shot.imagePromptCn && shot.endImagePromptCn) {
-        const consistency = validateKeyframeConsistency(shot.imagePromptCn, shot.endImagePromptCn, shot.videoGenPrompt);
-        if (!consistency.valid) {
-          for (const error of consistency.errors) {
-            results.push({
-              shotNumber: shot.shotNumber,
-              suggestion: error,
-              reason: '首尾帧一致性校验失败',
-              selected: true
-            });
-          }
-        }
-        for (const warning of consistency.warnings) {
-          results.push({
-            shotNumber: shot.shotNumber,
-            suggestion: warning,
-            reason: '首尾帧一致性建议',
-            selected: true
-          });
-        }
-      }
-
-      // 3. 字数校验：仅对 imagePromptCn 执行
+      // 2. 字数校验：仅对 imagePromptCn 执行
       if (shot.imagePromptCn) {
         const lengthResult = validateImagePrompt(shot.imagePromptCn);
         const issues = [...lengthResult.errors, ...lengthResult.warnings];
@@ -2094,19 +2054,21 @@ const App: React.FC = () => {
   };
 
   /**
-   * 一键优化：全选所有建议 → 立即应用
-   * 直接使用当前 suggestions（不依赖 setState 异步更新）
+   * 一键优化：逐镜处理，解决两个核心问题：
+   * 1. 不改变镜头数量（只原地更新有建议的镜头，不让 AI 返回全量数组）
+   * 2. 避免内容过多失败（每次只发 1 个镜头 + 该镜头的建议）
    */
   const oneClickOptimize = async () => {
     if (suggestions.length === 0) {
       alert('暂无建议，请先点击"专家自检"');
       return;
     }
+
     // 全选所有建议（更新UI状态）
     selectAllSuggestions();
-    // 直接用全量 suggestions 执行优化，不等待 setState 生效
     const allSuggestions = suggestions.map(s => ({ ...s, selected: true }));
 
+    // 角度分布问题走专用自动修复逻辑
     const hasAngleDistributionIssue = allSuggestions.some(s =>
       s.reason?.includes('角度分布规则违反') || s.reason?.includes('角度分布建议')
     );
@@ -2125,63 +2087,89 @@ const App: React.FC = () => {
       return;
     }
 
-    const currentShots = [...shots];
-    setCurrentStep(AppStep.MANUAL_EDIT);
-    setChatHistory([{ role: 'assistant', content: `一键优化：正在应用全部 ${allSuggestions.length} 条建议，请稍候...` }]);
-    setIsLoading(true);
-    setProgressMsg(`一键优化：正在应用全部 ${allSuggestions.length} 条建议...`);
-    try {
-      // 🔑 关键修复：收集完整流文本后再解析，禁止 useEffect 中途覆盖 shots
-      let fullText = '';
-      const stream = optimizeShotListStream(currentShots, allSuggestions);
-      for await (const text of stream) {
-        fullText = text; // optimizeShotListStream yield 的是累积全文
-        setProgressMsg(`一键优化中... (已接收 ${fullText.length} 字符)`);
-      }
-
-      // 流结束后一次性解析，避免中途写入不完整数据
-      let parseText = fullText.trim()
-        .replace(/```json/gi, '').replace(/```/g, '').trim();
-      const arrStart = parseText.indexOf('[');
-      if (arrStart > -1) parseText = parseText.substring(arrStart);
-      const arrEnd = parseText.lastIndexOf(']');
-      if (arrEnd > -1) parseText = parseText.substring(0, arrEnd + 1);
-
-      let parsed: any[] | null = null;
-      try {
-        parsed = JSON.parse(parseText);
-      } catch {
-        // 截断修复：找到最后一个完整的 JSON 对象
-        const lastBrace = parseText.lastIndexOf('}');
-        if (lastBrace > -1) {
-          let repaired = parseText.substring(0, lastBrace + 1).trimEnd();
-          if (repaired.endsWith(',')) repaired = repaired.slice(0, -1);
-          repaired += ']';
-          try { parsed = JSON.parse(repaired); } catch { /* 修复仍失败 */ }
-        }
-      }
-
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const updatedShots = parsed.map((s: any, idx: number) => ({
-          ...s,
-          id: s.id || (currentShots[idx]?.id) || `shot-stable-${idx}`,
-          status: s.status || 'pending',
-        }));
-        setShots(updatedShots);
-        setChatHistory(prev => [...prev, { role: 'assistant', content: `✅ 一键优化完成！共更新 ${updatedShots.length} 个镜头。` }]);
-        setSuggestions([]); // 清空建议列表
-      } else {
-        alert('⚠️ 一键优化：AI 返回格式异常，镜头数据未变动，请重试。');
-        setShots(currentShots); // 保险恢复
-      }
-    } catch (error) {
-      console.error(error);
-      setShots(currentShots); // 出错时恢复原始数据
-      alert("一键优化失败，请重试");
-    } finally {
-      setIsLoading(false);
-      setProgressMsg('');
+    // 过滤掉 GLOBAL 建议（无对应具体镜头），按 shotNumber 分组
+    const shotSuggestions = allSuggestions.filter(s => s.shotNumber !== 'GLOBAL');
+    const suggestionsByShot = new Map<string, ReviewSuggestion[]>();
+    for (const s of shotSuggestions) {
+      const key = String(s.shotNumber);
+      if (!suggestionsByShot.has(key)) suggestionsByShot.set(key, []);
+      suggestionsByShot.get(key)!.push(s);
     }
+
+    if (suggestionsByShot.size === 0) {
+      alert('所有建议均为全局建议（GLOBAL），无法自动应用到具体镜头，请手动处理。');
+      return;
+    }
+
+    // 工作数组：用 spread 拷贝，避免直接 mutate state
+    const workingShots = [...shots];
+    const shotNumberList = Array.from(suggestionsByShot.keys());
+    let successCount = 0;
+    let failCount = 0;
+
+    setCurrentStep(AppStep.MANUAL_EDIT);
+    setIsLoading(true);
+    setChatHistory([{
+      role: 'assistant',
+      content: `一键优化：共 ${shotNumberList.length} 个镜头需要修改，逐镜处理中，总镜头数 ${workingShots.length} 保持不变...`
+    }]);
+
+    for (let i = 0; i < shotNumberList.length; i++) {
+      const shotNumber = shotNumberList[i];
+      const shotSuggestionList = suggestionsByShot.get(shotNumber)!;
+      const shotIndex = workingShots.findIndex(s => String(s.shotNumber) === shotNumber);
+
+      if (shotIndex === -1) {
+        // 找不到对应镜头，跳过
+        failCount++;
+        continue;
+      }
+
+      setProgressMsg(`一键优化：正在处理镜头 ${shotNumber}（${i + 1}/${shotNumberList.length}）...`);
+
+      try {
+        let fullText = '';
+        const stream = optimizeSingleShotStream(workingShots[shotIndex], shotSuggestionList);
+        for await (const text of stream) {
+          fullText = text;
+        }
+
+        // 提取 JSON 对象（{ ... }）
+        let parseText = fullText.trim().replace(/```json/gi, '').replace(/```/g, '').trim();
+        const objStart = parseText.indexOf('{');
+        const objEnd = parseText.lastIndexOf('}');
+        if (objStart > -1 && objEnd > -1) {
+          parseText = parseText.substring(objStart, objEnd + 1);
+        }
+
+        const updatedShotData = JSON.parse(parseText);
+
+        // 合并：保留原始 id / shotNumber / status，仅更新 AI 修改的字段
+        workingShots[shotIndex] = {
+          ...workingShots[shotIndex],
+          ...updatedShotData,
+          id: workingShots[shotIndex].id,
+          shotNumber: workingShots[shotIndex].shotNumber,
+          status: workingShots[shotIndex].status,
+        };
+
+        // 实时刷新 UI，让用户看到进度
+        setShots([...workingShots]);
+        successCount++;
+      } catch (err) {
+        console.error(`[一键优化] 镜头 ${shotNumber} 失败:`, err);
+        failCount++;
+      }
+    }
+
+    setIsLoading(false);
+    setProgressMsg('');
+    setSuggestions([]); // 清空建议列表
+
+    const resultMsg = failCount > 0
+      ? `✅ 一键优化完成！成功 ${successCount} 个，失败 ${failCount} 个（已跳过）。镜头总数保持 ${workingShots.length} 个不变。`
+      : `✅ 一键优化完成！成功更新 ${successCount} 个镜头，镜头总数 ${workingShots.length} 个不变。`;
+    setChatHistory(prev => [...prev, { role: 'assistant', content: resultMsg }]);
   };
 
   const handleConsultDirector = async () => {
@@ -2460,10 +2448,9 @@ const App: React.FC = () => {
           <thead className="bg-[var(--color-surface)] text-[var(--color-text-primary)] font-bold text-[10px] sticky top-0 z-10">
             <tr>
               <th className="px-2 py-2 border-r border-[var(--color-border)] w-[60px] text-center">#</th>
-              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[18%]">故事</th>
-              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[32%]">视觉设计</th>
-              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[25%]">首帧</th>
-              <th className="px-2 py-2 w-[25%]">尾帧</th>
+              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[20%]">故事</th>
+              <th className="px-2 py-2 border-r border-[var(--color-border)] w-[35%]">视觉设计</th>
+              <th className="px-2 py-2 w-[45%]">画面描述</th>
             </tr>
           </thead>
           <tbody className="bg-[var(--color-bg)]">
@@ -2484,24 +2471,19 @@ const App: React.FC = () => {
                     <span className={`mt-1 inline-block px-1.5 py-0.5 rounded-md text-[9px] font-bold ${isMotion ? 'bg-amber-900/30 text-amber-300 border border-amber-600/50' : 'bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]'}`}>
                       {isMotion ? '运动' : '静态'}
                     </span>
-                    {/* 🆕 显示视频生成模式 */}
+                    {/* 显示视频生成模式（仅 I2V） */}
                     {shot.videoMode && (
-                      <span className={`mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold ${shot.videoMode === 'Keyframe'
-                        ? 'bg-purple-900/30 text-purple-300 border border-purple-600/50'
-                        : 'bg-cyan-900/30 text-cyan-300 border border-cyan-600/50'
-                        }`}>
-                        {shot.videoMode === 'Keyframe' ? '首尾帧' : '图生视频'}
+                      <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-cyan-900/30 text-cyan-300 border border-cyan-600/50">
+                        图生视频
                       </span>
                     )}
-                    {/* 🆕 校验警告指示器（只检测生图提示词 imagePromptCn） */}
+                    {/* 校验警告指示器（只检测生图提示词 imagePromptCn） */}
                     {(() => {
                       if (!shot.imagePromptCn) return null;
                       const hasForbidden = detectForbiddenTerms(shot.imagePromptCn).length > 0;
                       const lengthResult = validateImagePrompt(shot.imagePromptCn);
                       const hasLengthIssue = !lengthResult.valid || lengthResult.warnings.length > 0;
-                      const hasConsistencyIssue = shot.videoMode === 'Keyframe' && shot.imagePromptCn && shot.endImagePromptCn &&
-                        !validateKeyframeConsistency(shot.imagePromptCn, shot.endImagePromptCn).valid;
-                      const hasIssues = hasForbidden || hasLengthIssue || hasConsistencyIssue;
+                      const hasIssues = hasForbidden || hasLengthIssue;
                       return hasIssues ? (
                         <span className="mt-1 inline-block px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-red-900/30 text-red-300 border border-red-600/50" title="存在校验问题">
                           ⚠️
@@ -2591,27 +2573,13 @@ const App: React.FC = () => {
 
 
 
-                  {/* 尾帧列 - 运动镜头显示尾帧描述，静态镜头留空 */}
-                  <td className="px-2 py-2">
-                    {isMotion ? (
-                      editable ? (
-                        <textarea className="w-full h-20 p-1.5 bg-orange-900/20 border border-orange-700/50 rounded text-[10px] text-orange-200 resize-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                          placeholder="【尾帧】画面描述..." value={shot.endFrame || ''} onChange={(e) => updateShotField(shot.id, 'endFrame', e.target.value)} />
-                      ) : (
-                        <div className="bg-orange-900/30 p-2 rounded-md border-l-2 border-orange-500 text-[10px] text-orange-100 leading-relaxed">
-                          {shot.endFrame || <span className="text-[var(--color-text-tertiary)] italic">未填写</span>}
-                        </div>
-                      )
-                    ) : (
-                      <div className="text-[var(--color-text-tertiary)] text-center py-4 italic text-[10px]">静态镜头</div>
-                    )}
-                  </td>
+
                 </tr>
               );
             })}
             {isLoading && progressMsg.includes('修改') && (
               <tr className="bg-blue-900/20">
-                <td colSpan={6} className="p-4 text-center text-blue-400 font-medium animate-pulse text-sm">
+                <td colSpan={4} className="p-4 text-center text-blue-400 font-medium animate-pulse text-sm">
                   正在重写分镜表...
                 </td>
               </tr>

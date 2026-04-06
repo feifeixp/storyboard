@@ -253,25 +253,12 @@ export const generateMergedStoryboardSheet = async (
 
     let cleanAiPrompt = s.promptEn || s.imagePromptEn || '';
 
-    // 判断是否需要首尾帧（运动镜头）
-    if (s.shotType === '运动' && s.startFrame && s.endFrame) {
-      renderPanels.push({
-        id: `${s.shotNumber}a`,
-        caption: `${s.shotNumber}a (首) ${shortVisual} ${shotType}${dialogueClean}`,
-        prompt: `Panel ${s.shotNumber}a (Start): ${cleanAiPrompt}`
-      });
-      renderPanels.push({
-        id: `${s.shotNumber}b`,
-        caption: `${s.shotNumber}b (尾) ${shortVisual} ${shotType}${dialogueClean}`,
-        prompt: `Panel ${s.shotNumber}b (End): ${cleanAiPrompt}`
-      });
-    } else {
-      renderPanels.push({
-        id: s.shotNumber,
-        caption: `${s.shotNumber} (单) ${shortVisual} ${shotType}${dialogueClean}`,
-        prompt: `Panel ${s.shotNumber}: ${cleanAiPrompt}`
-      });
-    }
+    // 每个镜头生成单帧（统一 I2V 模式，不再区分首尾帧）
+    renderPanels.push({
+      id: s.shotNumber,
+      caption: `${s.shotNumber} ${shortVisual} ${shotType}${dialogueClean}`,
+      prompt: `Panel ${s.shotNumber}: ${cleanAiPrompt}`
+    });
   });
 
   // 2. SINGLE SHEET LOGIC
