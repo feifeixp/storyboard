@@ -123,32 +123,7 @@ ${!isShotCountSufficient ? `
   - ✅ 必须在 issues 数组中指出具体位置（示例格式）：
     { shotNumber: "#05-#07", category: "angleContinuity", severity: "medium", problem: "连续3个3/4正面镜头，缺少角度变化", suggestion: "将#06改为正侧面或1/3侧面" }
 
-### 2.2 提示词规范检查（🆕 必须检查！）
-
-**参考文档**：\`.augment/rules/提示词规范标准.ini\`
-
-你必须检查所有提示词是否符合新规范：
-
-1. **格式检查**
-   - ❌ **禁止使用权重参数格式**：如 (medium shot:1.2), (low angle:1.3)
-   - ✅ **必须使用自然语言描述**：如 "A medium shot of...", "captured from below"
-   - 如果发现权重参数格式：必须在 issues 数组中指出，severity 设为 "critical"
-
-2. **术语检查**
-   - ❌ **禁止使用电影分镜术语**：如 3/4 front view, low angle, high angle
-   - ✅ **必须使用摄影术语**：如 "looking slightly to the right", "from below", "from above"
-   - 如果发现电影分镜术语：必须在 issues 数组中指出，severity 设为 "high"
-
-3. **字数检查**
-   - 中文提示词：80-200字
-   - 英文提示词：50-150词
-   - 如果超出范围：必须在 issues 数组中指出，severity 设为 "medium"
-
-4. **完整性检查**
-   - 必须包含：景别 + 角度 + 主体 + 环境 + 光影
-   - 如果缺失任何要素：必须在 issues 数组中指出，severity 设为 "high"
-
-### 2.3 连续性规则检查（🆕 必须检查！）
+### 2.2 连续性规则检查（🆕 必须检查！）
 
 **参考文档**：\`.augment/rules/分镜设计连续性三原则.txt\`
 
@@ -241,14 +216,6 @@ ${allShots.map(s => `
       "message": "极端角度占比符合规则（≥15%）"
     },
     "consecutiveViolations": []
-  },
-  "promptFormatCheck": {
-    "weightParameterViolations": [],
-    "cinematicTermViolations": [],
-    "lengthViolations": [],
-    "completenessViolations": [],
-    "passed": true,
-    "message": "所有提示词符合新规范"
   },
   "continuityCheck": {
     "shotSizeContinuity": {
