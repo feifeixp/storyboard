@@ -125,10 +125,30 @@ export function groupShotsBySceneAndDuration(
 // ═══════════ 对白类型检测 ═══════════
 
 /**
+ * 非角色音源前缀列表（系统音/广播/电话/环境声等）
+ * 这些前缀出现时，画面中角色不应开口说话
+ */
+const NON_CHARACTER_AUDIO_PREFIXES: string[] = [
+  // 系统/AI 提示音
+  '系统提示音', '系统音效', '系统声音', '系统广播', '系统播报', '系统',
+  // 广播/播报
+  '广播', '大喇叭', '喇叭', '播报', '播音员', '广播员', '广播声', '电台',
+  // 通讯设备
+  '电话里', '电话声', '电话中', '电话', '对讲机', '通讯器', '耳机',
+  // 媒体设备
+  '收音机里', '收音机中', '收音机', '电视里', '电视中', '电视', '音响', '喇叭里',
+  // 提示音/警报
+  '提示音', '警报声', '警报', '报警声', '蜂鸣', '叮', '嘀',
+  // 画外环境声源
+  '画外', '镜头外', '屏幕外', '门外', '窗外', '楼道', '隔壁',
+];
+
+/**
  * 根据对白内容检测类型，生成对应的提示词描述
- * - 旁白：画外朗读，主角不开口
- * - 画外音/VO/OS：来自画外的声音，主角不开口
+ * - 旁白：叙述者朗读，主角不开口
+ * - 画外音/VO/OS：画外声音，主角不开口
  * - 内心独白：内心声音，主角不开口
+ * - 系统提示音/广播/电话等非角色音源：主角不开口
  * - 普通对白：主角正常说话
  */
 function buildDialoguePrompt(dialogue: string): string {
@@ -151,6 +171,19 @@ function buildDialoguePrompt(dialogue: string): string {
   if (/^（?(?:内心|心里|内心独白|心声)[：:）]?/.test(t)) {
     const content = t.replace(/^（?(?:内心|心里|内心独白|心声)[：:）]?\s*/, '').trim();
     return `内心独白（主角不张嘴，仅内心声音）："${content}"。`;
+  }
+
+  // 非角色音源（系统提示音、广播、电话声等）— 角色不开口
+  // 按前缀长度降序匹配，优先匹配最精确的（如"系统提示音"优先于"系统"）
+  const sortedPrefixes = [...NON_CHARACTER_AUDIO_PREFIXES].sort((a, b) => b.length - a.length);
+  for (const prefix of sortedPrefixes) {
+    // 匹配 "[前缀]："  或  "（[前缀]）："  形式
+    const re = new RegExp(`^（?${prefix}[：:）]`);
+    if (re.test(t)) {
+      // 提取冒号之后的实际内容
+      const content = t.replace(new RegExp(`^（?${prefix}[：:）]\\s*`), '').trim();
+      return `${prefix}："${content}"（画外声音，角色不开口）。`;
+    }
   }
 
   // 普通对白 — 主角正常开口说话
