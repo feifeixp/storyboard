@@ -6,7 +6,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { Project, Episode, StoryVolume, Antagonist, EpisodeSummary, SceneRef, PROJECT_MEDIA_TYPES, ScriptFile, createEmptyEpisode } from '../types/project';
-import { CharacterRef, CharacterForm, STORYBOARD_STYLES, type StoryboardStyle } from '../types';
+import { CharacterRef, CharacterForm, STORYBOARD_STYLES, type StoryboardStyle, AppStep } from '../types';
 import { EditModal } from './EditModal';
 import { calculateAllCharactersCompleteness, getCompletenessLevel } from '../services/characterCompleteness';
 import { supplementCharacterDetails } from '../services/characterSupplement/index';
