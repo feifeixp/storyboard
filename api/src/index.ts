@@ -8,6 +8,7 @@ import promptRoutes from './routes/prompts'
 
 import authRoutes from './routes/auth'
 import storyboardRoutes from './routes/storyboard'
+import neodomainRoutes from './routes/neodomain'
 
 export type Env = {
     Bindings: {
@@ -122,5 +123,6 @@ app.route('/api/v1/characters', characterRoutes)
 app.route('/api/v1/script', scriptRoutes)
 app.route('/api/v1/prompts', promptRoutes)
 app.route('/api/v1/storyboard', storyboardRoutes)
+app.route('/api/v1/neodomain', neodomainRoutes)
 
 export default app

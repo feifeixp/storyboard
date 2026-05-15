@@ -391,14 +391,47 @@ export function ProjectWizard({ onComplete, onCancel, onAnalyze }: ProjectWizard
               >
                 取消
               </button>
-              <button
-                onClick={() => setStep('upload-scripts')}
-                disabled={!projectName.trim()}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium
-                          hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                下一步 →
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    if (!projectName.trim()) {
+                      alert('请填写项目名称');
+                      return;
+                    }
+
+                    const project = createEmptyProject(projectName);
+
+                    project.settings = {
+                      mediaType,
+                      genre: genre === '混合' ? customGenre : genre,
+                      worldView: '',
+                      visualStyle: PROJECT_MEDIA_TYPES[mediaType].visualStyle,
+                      keyTerms: [],
+                    };
+                    
+                    // 空白项目，默认带有一个空白的第1集
+                    project.episodes = [createEmptyEpisode(1, '')];
+                    // 初始化角色和场景数组
+                    project.characters = [];
+                    project.scenes = [];
+
+                    onComplete(project);
+                  }}
+                  disabled={!projectName.trim()}
+                  className="px-6 py-2.5 bg-gray-700 text-white rounded-lg font-medium
+                            hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-600 transition-colors"
+                >
+                  直接创建空白项目
+                </button>
+                <button
+                  onClick={() => setStep('upload-scripts')}
+                  disabled={!projectName.trim()}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium
+                            hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  下一步(上传剧本) →
+                </button>
+              </div>
             </div>
           </div>
         )}

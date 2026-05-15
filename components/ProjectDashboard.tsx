@@ -18,6 +18,7 @@ import AIImageModelSelector from './AIImageModelSelector';
 import { ScenarioType, generateAndUploadImage, pollAndUploadFromTask } from '../services/aiImageGeneration';
 import { patchProject, saveProject } from '../services/d1Storage';
 import { uploadToOSS, generateOSSPath } from '../services/oss';
+import { submitArkAssetReview } from '../services/arkReview';
 import { analyzeCharacterImage, mergeAnalysisToCharacter } from '../services/characterImageAnalysis';
 import mammoth from 'mammoth';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
@@ -291,9 +292,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     let updatedProject = { ...project };
 
     if (editType === 'character') {
-      updatedProject.characters = (project.characters || []).map(c =>
-        c.id === updatedData.id ? updatedData : c
-      );
+      const exists = (project.characters || []).some(c => c.id === updatedData.id);
+      if (exists) {
+        updatedProject.characters = (project.characters || []).map(c =>
+          c.id === updatedData.id ? updatedData : c
+        );
+      } else {
+        updatedProject.characters = [...(project.characters || []), updatedData];
+      }
     } else if (editType === 'form' && editParentCharacter) {
       updatedProject.characters = (project.characters || []).map(c => {
         if (c.id === editParentCharacter.id) {
@@ -305,9 +311,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         return c;
       });
     } else if (editType === 'scene') {
-      updatedProject.scenes = (project.scenes || []).map(s =>
-        s.id === updatedData.id ? updatedData : s
-      );
+      const exists = (project.scenes || []).some(s => s.id === updatedData.id);
+      if (exists) {
+        updatedProject.scenes = (project.scenes || []).map(s =>
+          s.id === updatedData.id ? updatedData : s
+        );
+      } else {
+        updatedProject.scenes = [...(project.scenes || []), updatedData];
+      }
     } else if (editType === 'episode') {
       updatedProject.storyOutline = project.storyOutline.map(e =>
         e.episodeNumber === updatedData.episodeNumber ? updatedData : e
@@ -883,6 +894,73 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       alert(`❌ 上传失败: ${error?.message || '未知错误'}\n\n请检查网络连接或稍后重试。`);
     } finally {
       setIsAnalyzingImage(false);
+    }
+  };
+
+  // =============================
+  // 🆕 提交真人审核
+  // =============================
+  const handleReviewCharacter = async (character: CharacterRef) => {
+    if (!character.data && !character.referenceImageUrl) {
+      alert('该角色尚未上传或生成图片，无法提交审核');
+      return;
+    }
+    
+    const latestProject = projectRef.current;
+    const optimisticProject = {
+      ...latestProject,
+      characters: (latestProject.characters || []).map(c => 
+        c.id === character.id ? { ...c, reviewStatus: 1, reviewStatusDesc: '审核中' } : c
+      )
+    };
+    await Promise.resolve(onUpdateProject(optimisticProject, { persist: false }));
+
+    try {
+      const imageUrl = character.data || character.referenceImageUrl!;
+      const result = await submitArkAssetReview({ imageUrl });
+      
+      const updatedProject = {
+        ...projectRef.current,
+        updatedAt: new Date().toISOString(),
+        characters: (projectRef.current.characters || []).map(c => 
+          c.id === character.id ? { 
+            ...c, 
+            reviewStatus: result.reviewStatus, 
+            reviewStatusDesc: result.reviewStatusDesc,
+            reviewErrorMessage: result.errorMessage
+          } : c
+        )
+      };
+      
+      try {
+        await patchProject(updatedProject.id, { characters: updatedProject.characters });
+      } catch (err) {
+        await saveProject(updatedProject);
+      }
+      await Promise.resolve(onUpdateProject(updatedProject, { persist: false }));
+      
+      if (result.reviewStatus === 2) {
+        alert('✅ 真人审核通过！');
+      } else if (result.reviewStatus === 3) {
+        alert(`❌ 审核失败: ${result.errorMessage || '未知原因'}`);
+      } else {
+        alert(`提交成功，当前状态: ${result.reviewStatusDesc}`);
+      }
+    } catch (err: any) {
+      console.error('提交真人审核失败:', err);
+      alert(`❌ 提交失败: ${err.message}`);
+      
+      const rollBackProject = {
+        ...projectRef.current,
+        characters: (projectRef.current.characters || []).map(c => 
+          c.id === character.id ? { 
+            ...c, 
+            reviewStatus: character.reviewStatus, 
+            reviewStatusDesc: character.reviewStatusDesc 
+          } : c
+        )
+      };
+      await Promise.resolve(onUpdateProject(rollBackProject, { persist: false }));
     }
   };
 
@@ -1934,7 +2012,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           <h3 className="text-[15px] font-semibold text-[var(--color-text)]">👥 角色库 ({project.characters?.length || 0})</h3>
-          <button className="btn-primary px-4 py-2 rounded-lg text-[14px]">+ 添加</button>
+          <button 
+            onClick={() => openEditModal('character', { id: `c_${Date.now()}`, name: '', gender: '未知' })} 
+            className="btn-primary px-4 py-2 rounded-lg text-[14px]"
+          >
+            + 添加
+          </button>
         </div>
 
         {/* 顶部控制栏：模型 + 风格 - Neodomain 设计 */}
@@ -2002,6 +2085,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               onSupplement={() => handleSupplementCharacter(char.id)}
               isSupplementing={isSupplementing && supplementingCharacterId === char.id}
               onUploadImage={() => handleUploadCharacterImage(char.id)}
+              onReview={() => handleReviewCharacter(char)}
               onGenerateImage={() => handleGenerateCharacterImageSheet(char.id)}
               isGenerating={generatingIds.has(char.id) || [...generatingIds].some((id: string) => id.startsWith(char.id + '_'))}
               generationProgress={genProgressMap.get(char.id) || null}
@@ -2355,6 +2439,8 @@ const CharacterCard: React.FC<{
   formGenProgressMap?: Record<string, { stage: string; percent: number }>;
   // 🆕 上传角色图片
   onUploadImage?: () => void;
+  // 🆕 真人审核
+  onReview?: () => void;
 }> = ({
   character,
   isExpanded,
@@ -2372,6 +2458,7 @@ const CharacterCard: React.FC<{
   generatingFormIds = [],
   formGenProgressMap = {},
   onUploadImage,
+  onReview,
 }) => {
     const completenessInfo = completeness !== undefined ? getCompletenessLevel(completeness) : null;
 
@@ -2504,6 +2591,29 @@ const CharacterCard: React.FC<{
                   title="上传角色图片并AI分析"
                 >
                   📤 上传图片
+                </button>
+              )}
+
+              {/* 真人审核按钮 */}
+              {onReview && (character.data || character.referenceImageUrl) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReview();
+                  }}
+                  disabled={character.reviewStatus === 1}
+                  className={`flex-1 px-2 py-1.5 rounded-lg text-[12px] font-medium transition-colors whitespace-nowrap ${
+                    character.reviewStatus === 2 
+                      ? 'bg-green-600/20 text-green-400 border border-green-500/30' 
+                      : character.reviewStatus === 3
+                        ? 'bg-red-600/20 text-red-400 border border-red-500/30'
+                        : 'bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-500/30'
+                  }`}
+                  title={character.reviewErrorMessage || '提交Ark平台进行真人审核'}
+                >
+                  {character.reviewStatus === 1 ? '⏳ 审核中' : 
+                   character.reviewStatus === 2 ? '✅ 已认证' : 
+                   character.reviewStatus === 3 ? '❌ 审核失败' : '🛡️ 真人认证'}
                 </button>
               )}
 
@@ -2861,7 +2971,12 @@ const ScenesTab: React.FC<{
                 )}
               </button>
             )}
-            <button className="btn-primary px-4 py-2 rounded-lg text-[14px]">+ 添加</button>
+            <button 
+              onClick={() => openEditModal('scene', { id: `s_${Date.now()}`, name: '', description: '' })} 
+              className="btn-primary px-4 py-2 rounded-lg text-[14px]"
+            >
+              + 添加
+            </button>
           </div>
         </div>
 

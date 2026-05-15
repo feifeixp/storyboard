@@ -5,7 +5,7 @@
 
 // 🆕 使用 Neodomain API
 const NEODOMAIN_API_BASE = 'https://story.neodomain.cn';
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://storyboard-api.feifeixp.workers.dev';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://storyboard-api.feifeixp.workers.dev';
 
 // 用户信息接口
 export interface UserInfo {
@@ -57,84 +57,61 @@ interface ApiResponse<T> {
   errMessage: string | null;
 }
 
-/**
- * 发送验证码（统一接口，支持手机号和邮箱）
- * 🆕 调用 Neodomain API
- */
-export async function sendVerificationCode(contact: string): Promise<void> {
-  const response = await fetch(`${NEODOMAIN_API_BASE}/user/login/send-unified-code`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ contact }),
-  });
+export const OAUTH_CLIENT_ID = 'neowpw_community';
+export const OAUTH_CLIENT_SECRET = 'sk_neowpw_c1576dcd043c4362beec9a22a5b0e963';
 
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(result.errMessage || '发送验证码失败');
-  }
-}
-
-export interface LoginIdentityVO {
-  userId: string;
-  userType: 'PERSONAL' | 'ENTERPRISE';
-  enterpriseId?: string;
-  enterpriseName?: string;
-  enterpriseCode?: string;
-  nickname: string;
-  avatar: string;
-  role?: string;
-}
-
-export interface LoginIdentityListRes {
-  needSelectIdentity: boolean;
-  identities: LoginIdentityVO[];
-}
+export const WORKER_API_BASE = 'https://visionary-storyboard-skill-api.feifeixp.workers.dev';
 
 /**
- * 验证联系方式和验证码，返回可用身份列表
- * 🆕 调用 Neodomain API
+ * 获取 OAuth2 登录授权URL
  */
-export async function verifyLogin(
-  contact: string,
-  code: string,
-  invitationCode?: string
-): Promise<LoginIdentityListRes> {
-  const body: any = { contact, code };
-  if (invitationCode) body.invitationCode = invitationCode;
-
-  const response = await fetch(`${NEODOMAIN_API_BASE}/user/login/unified-login/identity`, {
+export async function getOAuthLoginUrl(redirectUri: string, state: string): Promise<string> {
+  const response = await fetch(`${WORKER_API_BASE}/api/v1/auth/oauth/authorize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ clientId: OAUTH_CLIENT_ID, redirectUri, state })
   });
-
   const result = await response.json();
+
   if (!result.success) {
-    throw new Error(result.errMessage || '验证失败');
+    throw new Error(result.errMessage || '获取登录地址失败');
   }
 
-  return result.data as LoginIdentityListRes;
+  return result.data;
 }
 
 /**
- * 选择具体身份完成最终登录
+ * 用授权码换取 Token 并保存用户信息
  */
-export async function selectIdentityLogin(userId: string, contact: string): Promise<UserInfo> {
-  const response = await fetch(`${NEODOMAIN_API_BASE}/user/login/select-identity`, {
+export async function exchangeOAuthToken(code: string, redirectUri: string): Promise<UserInfo> {
+  const response = await fetch(`${WORKER_API_BASE}/api/v1/auth/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, contact }),
+    body: JSON.stringify({
+      grantType: 'authorization_code',
+      code,
+      redirectUri,
+      clientId: OAUTH_CLIENT_ID,
+      clientSecret: OAUTH_CLIENT_SECRET
+    })
   });
 
   const result = await response.json();
   if (!result.success) {
-    throw new Error(result.errMessage || '身份选择失败');
+    throw new Error(result.errMessage || '登录验证失败');
   }
 
-  const userInfo: UserInfo = result.data;
+  const tokenData = result.data;
+  const userInfo: UserInfo = {
+    authorization: tokenData.accessToken,
+    userId: tokenData.userId,
+    email: tokenData.email || '',
+    mobile: tokenData.mobile || '',
+    nickname: tokenData.nickname || '',
+    avatar: tokenData.avatar || '',
+    status: tokenData.status || 1
+  };
+  
   saveUserInfo(userInfo);
   return userInfo;
 }
@@ -188,57 +165,7 @@ export function logout(): void {
   window.location.reload();
 }
 
-/**
- * 验证联系方式格式（手机号或邮箱）
- */
-export function validateContact(contact: string): {
-  isValid: boolean;
-  type: 'mobile' | 'email' | null;
-  error?: string;
-} {
-  // 手机号格式: 以1开头,第二位为3-9,共11位数字
-  const mobileRegex = /^1[3-9]\d{9}$/;
-  // 邮箱格式
-  const emailRegex = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/;
 
-  if (mobileRegex.test(contact)) {
-    return { isValid: true, type: 'mobile' };
-  }
-
-  if (emailRegex.test(contact)) {
-    return { isValid: true, type: 'email' };
-  }
-
-  return {
-    isValid: false,
-    type: null,
-    error: '请输入有效的手机号或邮箱地址',
-  };
-}
-
-/**
- * 验证验证码格式
- */
-export function validateCode(code: string): {
-  isValid: boolean;
-  error?: string;
-} {
-  if (!code || code.length !== 6) {
-    return {
-      isValid: false,
-      error: '验证码必须为6位数字',
-    };
-  }
-
-  if (!/^\d{6}$/.test(code)) {
-    return {
-      isValid: false,
-      error: '验证码只能包含数字',
-    };
-  }
-
-  return { isValid: true };
-}
 
 /**
  * 获取用户积分信息
@@ -250,7 +177,7 @@ export async function getUserPoints(): Promise<PointsInfo> {
     throw new Error('未登录，无法获取积分信息');
   }
 
-  const response = await fetch(`${NEODOMAIN_API_BASE}/agent/user/points/info`, {
+  const response = await fetch(`${WORKER_API_BASE}/api/v1/auth/user/points/info`, {
     method: 'GET',
     headers: {
       'accessToken': accessToken,

@@ -3,11 +3,11 @@
  * 基于接口文档: AI图片生成接口文档.md
  */
 
-import { getAccessToken, getUserInfo } from './auth';
+import { getAccessToken, getUserInfo, WORKER_API_BASE } from './auth';
 import { uploadToOSS, generateOSSPath } from './oss';
 
-// 🔧 尝试使用与登录 API 相同的域名
-const API_BASE_URL = 'https://story.neodomain.cn';
+// 🔧 使用 Cloudflare Worker 代理解决跨域
+const API_BASE_URL = `${WORKER_API_BASE}/api/v1/neodomain`;
 
 // ============================================
 // 类型定义

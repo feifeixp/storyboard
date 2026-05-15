@@ -3,9 +3,10 @@
  * 基于接口文档: OSS-STS令牌接口文档.md
  */
 
-import { getAccessToken } from './auth';
+import { getAccessToken, WORKER_API_BASE } from './auth';
 
-const API_BASE_URL = 'https://story.neodomain.cn';
+// 🔧 使用 Cloudflare Worker 代理解决跨域
+const API_BASE_URL = `${WORKER_API_BASE}/api/v1/neodomain`;
 
 // STS令牌响应接口
 export interface STSToken {

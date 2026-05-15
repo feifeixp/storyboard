@@ -67,6 +67,11 @@ export interface CharacterRef {
     taskCreatedAt?: string; // ISO 时间字符串
   };
 
+  // 🆕 Ark 平台真人审核相关字段
+  reviewStatus?: number; // 0-待审核, 1-审核中, 2-审核通过, 3-审核失败
+  reviewStatusDesc?: string;
+  reviewErrorMessage?: string | null;
+
   // 🆕 角色经典台词/座右铭
   quote?: string;
 
