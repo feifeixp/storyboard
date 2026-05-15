@@ -647,15 +647,49 @@ export function FinalStoryboard({
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 p-8">
         <div className="max-w-4xl mx-auto">
-          <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-6 text-center">
-            <h2 className="text-2xl font-bold text-yellow-400 mb-4">⚠️ 暂无故事板数据</h2>
-            <p className="text-gray-300 mb-6">请先生成九宫格图片并应用到分镜表</p>
-            <button
-              onClick={onBack}
-              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all"
-            >
-              返回
-            </button>
+          <div className="bg-[#1a1d2d]/80 backdrop-blur-md border border-purple-500/30 rounded-2xl p-8 text-center shadow-2xl">
+            <h2 className="text-2xl font-bold text-white mb-4">🎬 暂无视频生成片段</h2>
+            <p className="text-gray-300 mb-8 max-w-lg mx-auto leading-relaxed">
+              您目前没有通过 AI 自动提取的视频提示词片段。您可以返回使用自动生成功能，或者直接在此处创建一个空白片段，体验纯手工打磨的 Seedance 视频生成。
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button
+                onClick={onBack}
+                className="px-6 py-3 min-w-[140px] bg-gray-700/80 text-white rounded-xl font-medium hover:bg-gray-600 transition-all border border-white/10"
+              >
+                ← 返回
+              </button>
+              <button
+                onClick={() => {
+                  const newShotNumber = shots.length > 0 ? Math.max(...shots.map(s => s.shotNumber)) + 1 : 1;
+                  const newShot: Shot = {
+                    id: `shot_${Date.now()}`,
+                    shotNumber: newShotNumber,
+                    storyBeat: '【纯手动填写的片段】',
+                    shotSize: '中景(MS)',
+                    duration: 5,
+                    dialogue: '',
+                    angleDirection: '平视',
+                    angleHeight: '平视',
+                    cameraMove: '固定',
+                    foreground: '',
+                    midground: '',
+                    background: '',
+                    lighting: '',
+                    videoPromptCn: '在这里输入 Seedance 视频提示词...'
+                  };
+                  const nextShots = [...shots, newShot];
+                  setShots(nextShots);
+                  handleSaveEpisodes(nextShots);
+                }}
+                className="px-8 py-3 min-w-[200px] bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl hover:from-purple-500 hover:to-indigo-500 transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_rgba(168,85,247,0.6)] flex items-center justify-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                手动创建首个片段
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1167,6 +1201,44 @@ export function FinalStoryboard({
                   />
                 );
               })}
+            </div>
+          )}
+
+          {/* 🆕 手动添加新片段按钮 */}
+          {!isExporting && (
+            <div className="mt-8 mb-4 flex justify-center">
+              <button
+                onClick={() => {
+                  const newShotNumber = shots.length > 0 ? Math.max(...shots.map(s => s.shotNumber)) + 1 : 1;
+                  const newShot: Shot = {
+                    id: `shot_${Date.now()}`,
+                    shotNumber: newShotNumber,
+                    storyBeat: `【手动视频片段 ${newShotNumber}】`,
+                    shotSize: '中景(MS)',
+                    duration: 5,
+                    dialogue: '',
+                    angleDirection: '平视',
+                    angleHeight: '平视',
+                    cameraMove: '固定',
+                    foreground: '',
+                    midground: '',
+                    background: '',
+                    lighting: '',
+                    videoPromptCn: '在这里输入 Seedance 视频提示词...'
+                  };
+                  const nextShots = [...shots, newShot];
+                  setShots(nextShots);
+                  handleSaveEpisodes(nextShots);
+                }}
+                className="px-6 py-3 bg-[#1a1d2d]/60 backdrop-blur-md border border-dashed border-purple-500/50 text-purple-400 font-bold rounded-xl hover:bg-purple-900/30 hover:border-purple-400 hover:text-purple-300 transition-all shadow-[0_0_15px_rgba(168,85,247,0.1)] flex items-center gap-2 group"
+              >
+                <div className="bg-purple-500/20 p-1 rounded-md group-hover:bg-purple-500/40 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                添加新视频片段
+              </button>
             </div>
           )}
         </div>

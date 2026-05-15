@@ -1145,7 +1145,7 @@ const App: React.FC = () => {
   };
 
   // 🔧 从项目主界面选择剧集进入编辑（异步获取完整数据）
-  const handleSelectEpisode = async (episode: Episode) => {
+  const handleSelectEpisode = async (episode: Episode, targetStepOverride?: AppStep) => {
     try {
       console.log(`[handleSelectEpisode] 加载第${episode.episodeNumber}集完整数据, id=${episode.id}`);
       selectedEpisodeIdRef.current = episode.id || null;
@@ -1239,11 +1239,14 @@ const App: React.FC = () => {
         hasShots &&
         fullEpisode.shots!.some(s => typeof s.videoPromptCn === 'string' && s.videoPromptCn.trim());
 
-      const targetStep = !hasShots
-        ? AppStep.INPUT_SCRIPT
-        : (hasStoryboard || hasVideoPrompts)
-          ? AppStep.FINAL_STORYBOARD
-          : AppStep.MANUAL_EDIT;
+      let targetStep = targetStepOverride;
+      if (targetStep === undefined) {
+        targetStep = !hasShots
+          ? AppStep.INPUT_SCRIPT
+          : (hasStoryboard || hasVideoPrompts)
+            ? AppStep.FINAL_STORYBOARD
+            : AppStep.MANUAL_EDIT;
+      }
 
       setCurrentStep(targetStep);
       console.log(`[handleSelectEpisode] ✅ 跳转到步骤: ${targetStep} (${AppStep[targetStep]})`);

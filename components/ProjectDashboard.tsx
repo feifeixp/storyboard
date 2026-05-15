@@ -27,7 +27,7 @@ import { AssetManager } from './AssetManager';
 
 interface ProjectDashboardProps {
   project: Project;
-  onSelectEpisode: (episode: Episode) => void;
+  onSelectEpisode: (episode: Episode, targetStep?: AppStep) => void;
   onUpdateProject: (project: Project, options?: { persist?: boolean }) => void | Promise<void>;
   onBack: () => void;
   initialTab?: TabType;
@@ -1993,6 +1993,20 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                           title="查看最终故事板"
                         >
                           📋 故事板
+                        </button>
+                      )}
+                      
+                      {/* 🆕 纯手动直接跳转按钮 */}
+                      {!hasStoryboard && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectEpisode(ep, AppStep.FINAL_STORYBOARD); // 直接进入 Seedance 视频预览
+                          }}
+                          className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-md text-[11px] font-medium shadow-[0_0_8px_rgba(168,85,247,0.5)] transition-all"
+                          title="跳过剧本，直接写视频提示词生成"
+                        >
+                          🎬 直接写分镜
                         </button>
                       )}
                     </div>
