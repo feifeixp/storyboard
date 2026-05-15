@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { Project, Episode, StoryVolume, Antagonist, EpisodeSummary, SceneRef, PROJECT_MEDIA_TYPES, ScriptFile } from '../types/project';
+import { Project, Episode, StoryVolume, Antagonist, EpisodeSummary, SceneRef, PROJECT_MEDIA_TYPES, ScriptFile, createEmptyEpisode } from '../types/project';
 import { CharacterRef, CharacterForm, STORYBOARD_STYLES, type StoryboardStyle } from '../types';
 import { EditModal } from './EditModal';
 import { calculateAllCharactersCompleteness, getCompletenessLevel } from '../services/characterCompleteness';
@@ -1741,6 +1741,32 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
   };
 
+  const handleAddEpisode = async () => {
+    const currentEpisodes = project.episodes || [];
+    const newEpisodeNumber = currentEpisodes.length > 0 
+      ? Math.max(...currentEpisodes.map(ep => ep.episodeNumber)) + 1 
+      : 1;
+      
+    const newEpisode = createEmptyEpisode(newEpisodeNumber, '');
+    
+    const newStoryOutlineItem: EpisodeSummary = {
+      episodeNumber: newEpisodeNumber,
+      summary: '【手动创建的空剧集】',
+      characters: [],
+      characterStates: [],
+      emotionCurve: '平稳',
+      visualStyle: project.settings?.visualStyle || ''
+    };
+
+    const updatedProject = {
+      ...project,
+      episodes: [...currentEpisodes, newEpisode],
+      storyOutline: [...(project.storyOutline || []), newStoryOutlineItem]
+    };
+
+    await onUpdateProject(updatedProject, { persist: true });
+  };
+
   // 🆕 处理剧集文件上传
   const handleEpisodeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -1916,13 +1942,21 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       <div className="glass-card rounded-xl p-5">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
           <h3 className="text-[15px] font-semibold text-[var(--color-text)]">📺 剧集列表 ({project.episodes?.length || 0})</h3>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploadingEpisodes}
-            className="btn-primary px-4 py-2 rounded-lg text-[14px] disabled:opacity-50"
-          >
-            {isUploadingEpisodes ? '⏳ 上传中...' : '📤 上传剧集'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddEpisode}
+              className="px-4 py-2 bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 border border-purple-500/30 rounded-lg text-[14px] font-medium transition-all"
+            >
+              + 添加空剧集
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingEpisodes}
+              className="btn-primary px-4 py-2 rounded-lg text-[14px] disabled:opacity-50"
+            >
+              {isUploadingEpisodes ? '⏳ 上传中...' : '📤 上传剧集'}
+            </button>
+          </div>
           {/* 隐藏的文件输入 */}
           <input
             ref={fileInputRef}
@@ -1947,8 +1981,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             return (
               <div
                 key={ep.id}
-                className="glass-card rounded-xl overflow-hidden transition-all hover:border-[var(--color-border-hover)] group cursor-pointer"
-                onClick={() => onSelectEpisode(ep)}
+                className="glass-card rounded-xl overflow-hidden transition-all hover:border-[var(--color-border-hover)] group"
               >
                 {/* 书本式布局：左侧色块（集数）+ 右侧内容 */}
                 <div className="flex items-stretch">
@@ -1975,40 +2008,54 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     </p>
 
                     {/* 底部元信息 + 操作按钮 */}
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col gap-3 mt-1">
                       <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]">
                         <span>{ep.shots?.length || 0} 个分镜</span>
                         <span>·</span>
                         <span>{new Date(ep.updatedAt).toLocaleDateString()}</span>
                       </div>
 
-                      {/* 查看故事板按钮 */}
-                      {hasStoryboard && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectEpisode(ep);
-                          }}
-                          className="px-2.5 py-1 btn-primary rounded-md text-[11px] font-medium"
-                          title="查看最终故事板"
-                        >
-                          📋 故事板
-                        </button>
-                      )}
-                      
-                      {/* 🆕 纯手动直接跳转按钮 */}
-                      {!hasStoryboard && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectEpisode(ep, AppStep.FINAL_STORYBOARD); // 直接进入 Seedance 视频预览
-                          }}
-                          className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-md text-[11px] font-medium shadow-[0_0_8px_rgba(168,85,247,0.5)] transition-all"
-                          title="跳过剧本，直接写视频提示词生成"
-                        >
-                          🎬 直接写分镜
-                        </button>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* 查看故事板按钮 (已生成) */}
+                        {hasStoryboard && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectEpisode(ep);
+                            }}
+                            className="px-4 py-1.5 btn-primary rounded-md text-[12px] font-medium w-full sm:w-auto text-center"
+                            title="查看最终故事板"
+                          >
+                            📋 查看故事板
+                          </button>
+                        )}
+                        
+                        {/* 🆕 明确的生成选项 (未生成) */}
+                        {!hasStoryboard && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectEpisode(ep); // 默认走 AI 剧本自动生成流程
+                              }}
+                              className="flex-1 px-2 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 rounded-md text-[11px] font-medium transition-all text-center"
+                              title="导入剧本，使用 AI 自动生成分镜"
+                            >
+                              🤖 自动生成
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectEpisode(ep, AppStep.FINAL_STORYBOARD); // 直接进入 Seedance 视频预览
+                              }}
+                              className="flex-1 px-2 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-md text-[11px] font-medium shadow-[0_0_8px_rgba(168,85,247,0.5)] transition-all text-center"
+                              title="跳过剧本，手动编写 Seedance 视频提示词"
+                            >
+                              ✍️ 手动生成
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
