@@ -60,7 +60,8 @@ interface ApiResponse<T> {
 export const OAUTH_CLIENT_ID = 'neowpw_community';
 export const OAUTH_CLIENT_SECRET = 'sk_neowpw_c1576dcd043c4362beec9a22a5b0e963';
 
-export const WORKER_API_BASE = 'https://visionary-storyboard-skill-api.feifeixp.workers.dev';
+// 优先使用环境变量中配置的国内可访问域名，避免 *.workers.dev 在部分地区被封锁
+export const WORKER_API_BASE = import.meta.env.VITE_API_URL || 'https://visionary-storyboard-skill-api.feifeixp.workers.dev';
 
 /**
  * 获取 OAuth2 登录授权URL

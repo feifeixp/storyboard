@@ -1503,6 +1503,7 @@ function VideoGroupCard({
   const [showPrompt, setShowPrompt] = useState(true);
   const [showPasteUrl, setShowPasteUrl] = useState(false);
   const [pasteUrlValue, setPasteUrlValue] = useState('');
+  const [promptEditMode, setPromptEditMode] = useState<'edit' | 'highlight'>('edit'); // 默认为直接编辑模式
 
   return (
     <div className="rounded-2xl overflow-hidden bg-[#161824] border border-white/5 shadow-xl relative ring-1 ring-purple-500/20">
@@ -2035,17 +2036,54 @@ function VideoGroupCard({
                   <div className="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
                   <span className="ml-2 text-xs font-semibold text-gray-400 tracking-wider">SEEDANCE SCRIPT</span>
                 </div>
-                <button
-                  onClick={() => navigator.clipboard.writeText(prompt.fullPromptCn)}
-                  className="text-xs text-indigo-300 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-1 rounded transition-colors"
-                >
-                  📋 复制
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {/* 模式切换 */}
+                  <div className="flex rounded-md overflow-hidden border border-white/10 text-[11px]">
+                    <button
+                      onClick={() => setPromptEditMode('edit')}
+                      className={`px-2.5 py-1 font-medium transition-colors ${
+                        promptEditMode === 'edit'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                      }`}
+                      title="直接编辑提示词"
+                    >
+                      ✏️ 编辑
+                    </button>
+                    <button
+                      onClick={() => setPromptEditMode('highlight')}
+                      className={`px-2.5 py-1 font-medium transition-colors ${
+                        promptEditMode === 'highlight'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                      }`}
+                      title="语法高亮预览"
+                    >
+                      🎨 高亮
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(customPrompt ?? prompt.timelineScript)}
+                    className="text-xs text-indigo-300 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-1 rounded transition-colors"
+                  >
+                    📋 复制
+                  </button>
+                </div>
               </div>
               <div className={`p-5 ${isExporting ? 'whitespace-pre-wrap break-words' : 'overflow-y-auto custom-scrollbar flex-1'} relative`}>
-                <pre className={`text-[13px] font-mono leading-loose text-indigo-100 ${isExporting ? 'whitespace-pre-wrap break-words' : 'whitespace-pre-wrap'}`}>
-                  <InteractivePromptText text={prompt.timelineScript} characterRefs={characterRefs} scenes={scenes} />
-                </pre>
+                {promptEditMode === 'edit' && !isExporting ? (
+                  <textarea
+                    className="w-full h-full min-h-[320px] bg-transparent text-[13px] font-mono leading-loose text-indigo-100 resize-none outline-none placeholder-gray-600 custom-scrollbar"
+                    value={customPrompt ?? prompt.timelineScript}
+                    onChange={(e) => onCustomPromptChange?.(group.id, e.target.value)}
+                    placeholder="在此输入完整的 Seedance 提示词..."
+                    spellCheck={false}
+                  />
+                ) : (
+                  <pre className={`text-[13px] font-mono leading-loose text-indigo-100 ${isExporting ? 'whitespace-pre-wrap break-words' : 'whitespace-pre-wrap'}`}>
+                    <InteractivePromptText text={customPrompt ?? prompt.timelineScript} characterRefs={characterRefs} scenes={scenes} />
+                  </pre>
+                )}
               </div>
             </div>
           </div>
